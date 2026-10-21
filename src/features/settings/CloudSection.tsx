@@ -125,7 +125,8 @@ export function CloudSection() {
               <p className="small muted">{sync.message}</p>
               {sync.refused ? (
                 <Callout tone="warn" title={`${sync.refused} change${sync.refused === 1 ? '' : 's'} the cloud refused`}>
-                  They’re kept on this device and tried again on the next sync. Usually the security rules need publishing again: copy them below and publish them in Firebase → Firestore → Rules.
+                  {sync.refusedTables.length ? <>Not uploaded yet: {sync.refusedTables.join(', ')}. </> : null}
+                  They’re kept on this device and tried again every couple of minutes. Usually the security rules need publishing again: copy them below and publish them in Firebase → Firestore → Rules. New rules can take a minute to apply; then press Sync now.
                 </Callout>
               ) : null}
               <div className="actions">

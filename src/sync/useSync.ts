@@ -19,6 +19,8 @@ export interface SyncStatus {
   ws: string | null;
   /** Changes the cloud refused (usually: the security rules need republishing). They stay on the device and are retried. */
   refused: number;
+  /** Which kinds of records were refused, e.g. "jobs (20)". */
+  refusedTables: string[];
 }
 
 let status: SyncStatus = {
@@ -31,6 +33,7 @@ let status: SyncStatus = {
   access: null,
   ws: null,
   refused: 0,
+  refusedTables: [],
 };
 const listeners = new Set<() => void>();
 

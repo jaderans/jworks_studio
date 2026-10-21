@@ -458,14 +458,28 @@ async function markSynced(table: SyncedTableName, rows: Syncable[]) {
   });
 }
 
-/** Refused uploads this round (kept on the device and retried). */
+/** Refused uploads (kept on the device). They're tried again every couple of minutes, and on Sync now. */
 let refusedIds = new Set<string>();
+let refusedAt = 0;
+const RETRY_REFUSED_MS = 120_000;
+
+/** "jobs (20), payments (9)": which kinds of records the cloud refused. */
+function refusedSummary(): string[] {
+  const by = new Map<string, number>();
+  for (const k of refusedIds) {
+    const t = k.split('/')[0];
+    by.set(t, (by.get(t) ?? 0) + 1);
+  }
+  return [...by.entries()].sort((a, b) => b[1] - a[1]).map(([t, n]) => `${t} (${n})`);
+}
 
 async function pushOnce(): Promise<number> {
   const { fs, cfg, auth } = need();
   const a = access;
   const uid = auth.currentUser?.uid;
   if (!a || !uid) return 0;
+  // Newly published rules can take a minute to apply: give refused changes another try now and then.
+  if (refusedIds.size && Date.now() - refusedAt > RETRY_REFUSED_MS) refusedIds = new Set();
   const writable = new Set(WRITE[a.role] ?? []);
   let pushed = 0;
   for (const t of SYNCED_TABLES) {
@@ -501,12 +515,14 @@ async function pushOnce(): Promise<number> {
             await markSynced(t, [r]);
           } else {
             refusedIds.add(`${t}/${r.id}`);
+            refusedAt = Date.now();
+            console.warn(`Cloud refused ${t}/${r.id}`, (e2 as { code?: string })?.code ?? e2);
           }
         }
       }
     }
   }
-  setSyncStatus({ refused: refusedIds.size });
+  setSyncStatus({ refused: refusedIds.size, refusedTables: refusedSummary() });
   return pushed;
 }
 
@@ -547,6 +563,7 @@ async function push() {
 export async function syncNow(): Promise<void> {
   // Try refused changes again (e.g. after the owner republished the rules).
   refusedIds = new Set();
+  setSyncStatus({ refused: 0, refusedTables: [] });
   if (auth?.currentUser && !access) await onUser(auth.currentUser);
   else await push();
 }
