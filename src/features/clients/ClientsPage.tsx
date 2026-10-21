@@ -754,7 +754,7 @@ function ClientContent({ client }: { client: Client }) {
                   app.toast(`No posts for ${client.name} in ${fmtMonth(month)} yet.`, { tone: 'bad' });
                   return;
                 }
-                await deliverPdf(await buildApprovalPdf({ business, client, month, posts: list }), `${safeFileName(client.name)} content plan ${month}.pdf`, true);
+                await deliverPdf(await buildApprovalPdf({ business, client, month, posts: list }), `${safeFileName(client.name)} content plan ${month}.pdf`);
               } finally {
                 setBusy(false);
               }
@@ -857,7 +857,7 @@ function ClientReport({ client }: { client: Client }) {
         <Button
           variant="primary"
           disabled={!mine.length}
-          onClick={async () => deliverPdf(await buildReportPdf({ business, clientName: client.name, month, metrics: mine, posts: monthPosts, worked, next }), `${safeFileName(client.name)} report ${month}.pdf`, true)}
+          onClick={async () => deliverPdf(await buildReportPdf({ business, clientName: client.name, month, metrics: mine, posts: monthPosts, worked, next }), `${safeFileName(client.name)} report ${month}.pdf`)}
         >
           <FileDown size={16} /> Report PDF
         </Button>

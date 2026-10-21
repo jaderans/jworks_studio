@@ -272,7 +272,7 @@ function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: (
               <Trash2 size={16} /> Delete
             </Button>
             <span className="grow" />
-            <Button disabled={!!busy} onClick={() => run('pdf', async () => deliverPdf(await buildTemplateContractPdf(c, tpl, { business, packages, payMethods, payments }), `${safeFileName(`${c.number} ${c.fields['client.name'] || ''} ${tpl.name}`)}.pdf`, true))}>
+            <Button disabled={!!busy} onClick={() => run('pdf', async () => deliverPdf(await buildTemplateContractPdf(c, tpl, { business, packages, payMethods, payments }), `${safeFileName(`${c.number} ${c.fields['client.name'] || ''} ${tpl.name}`)}.pdf`))}>
               <FileDown size={16} /> {busy === 'pdf' ? 'Making…' : 'PDF'}
             </Button>
             <Button

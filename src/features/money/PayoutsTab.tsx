@@ -46,7 +46,6 @@ export function PayoutsTab() {
     await deliverPdf(
       await buildPayoutStatementPdf(m, { business, earnings: earnings.filter((e) => e.memberId === m.id), payouts: payouts.filter((p) => p.memberId === m.id), jobsById, account: account(m.id) }),
       `${safeFileName(`Payout statement ${m.name} ${todayISO()}`)}.pdf`,
-      true,
     );
   };
   return (

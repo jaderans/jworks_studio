@@ -417,7 +417,7 @@ function ProposalDialog({ id, onClose }: { id: string | null; onClose: () => voi
           <Button
             onClick={async () => {
               await saveProposal(p);
-              await deliverPdf(await buildProposalPdf(p, business, rates, packages), `${safeFileName(`${p.number} ${p.clientName}`)}.pdf`, true);
+              await deliverPdf(await buildProposalPdf(p, business, rates, packages), `${safeFileName(`${p.number} ${p.clientName}`)}.pdf`);
             }}
           >
             <FileDown size={16} /> PDF

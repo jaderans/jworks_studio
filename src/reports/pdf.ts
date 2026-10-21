@@ -9,7 +9,7 @@ import frameMerch from '../assets/brand/frames/merch.png?url';
 import frameWeb from '../assets/brand/frames/web.png?url';
 import frameLogo from '../assets/brand/frames/logo.png?url';
 import type { FrameKey } from '../db/types';
-import { downloadBlob, shareBlob } from '../lib/files';
+import { downloadBlob } from '../lib/files';
 import { fmtDateTime } from '../lib/time';
 
 /**
@@ -208,11 +208,9 @@ export async function renderPdf(doc: TDocumentDefinitions): Promise<Blob> {
   return pdfMake.createPdf(doc).getBlob();
 }
 
-/** Save a PDF; on phones, try the share sheet first when asked. */
-export async function deliverPdf(doc: TDocumentDefinitions, filename: string, share = false): Promise<void> {
-  const blob = await renderPdf(doc);
-  if (share && (await shareBlob(blob, filename, filename))) return;
-  downloadBlob(blob, filename);
+/** Save a PDF straight to the browser's downloads (no share sheet). */
+export async function deliverPdf(doc: TDocumentDefinitions, filename: string): Promise<void> {
+  downloadBlob(await renderPdf(doc), filename);
 }
 
 // ----- building blocks -----

@@ -169,7 +169,7 @@ function QuoteDialog({ id, onClose }: { id: string | null; onClose: () => void }
             <Trash2 size={16} /> Delete
           </Button>
           <span className="grow" />
-          <Button disabled={!!busy} onClick={() => run('pdf', async () => deliverPdf(await buildQuotePdf(p, { business, rates, packages, payMethods, money }), `${safeFileName(`${p.number} ${p.clientName}`)}.pdf`, true))}>
+          <Button disabled={!!busy} onClick={() => run('pdf', async () => deliverPdf(await buildQuotePdf(p, { business, rates, packages, payMethods, money }), `${safeFileName(`${p.number} ${p.clientName}`)}.pdf`))}>
             <FileDown size={16} /> PDF
           </Button>
           <Button

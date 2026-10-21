@@ -86,7 +86,7 @@ export function ReportsTab() {
             >
               <FileSpreadsheet size={16} /> Spreadsheet
             </Button>
-            <Button variant="primary" onClick={async () => deliverPdf(await buildIncomeReportPdf(data, { business, members, top, title }), `${title}.pdf`, true)}>
+            <Button variant="primary" onClick={async () => deliverPdf(await buildIncomeReportPdf(data, { business, members, top, title }), `${title}.pdf`)}>
               <FileDown size={16} /> PDF
             </Button>
           </>

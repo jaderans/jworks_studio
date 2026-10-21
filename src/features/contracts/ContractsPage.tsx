@@ -212,7 +212,7 @@ export function ContractEditor({ id, onClose }: { id: string | null; onClose: ()
           <Button
             onClick={async () => {
               await saveContract(c);
-              await deliverPdf(await buildContractPdf(c, business), `${safeFileName(`${c.number} ${c.fields['client.name'] ?? ''}`)}.pdf`, true);
+              await deliverPdf(await buildContractPdf(c, business), `${safeFileName(`${c.number} ${c.fields['client.name'] ?? ''}`)}.pdf`);
             }}
           >
             <FileDown size={16} /> PDF

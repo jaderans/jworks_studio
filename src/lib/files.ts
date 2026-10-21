@@ -1,5 +1,6 @@
-/** Saving and sharing files from the app, with fallbacks for phones. */
+/** Saving and reading files in the app. */
 
+/** Saves to the user's downloads folder. */
 export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -10,27 +11,6 @@ export function downloadBlob(blob: Blob, filename: string): void {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
-}
-
-export function canShareFiles(): boolean {
-  try {
-    const probe = new File(['x'], 'x.txt', { type: 'text/plain' });
-    return typeof navigator !== 'undefined' && !!navigator.canShare && navigator.canShare({ files: [probe] });
-  } catch {
-    return false;
-  }
-}
-
-/** Opens the phone's share sheet (Messenger, Drive, Nearby Share...). Returns false if unavailable or cancelled. */
-export async function shareBlob(blob: Blob, filename: string, title?: string): Promise<boolean> {
-  try {
-    const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
-    if (!navigator.canShare || !navigator.canShare({ files: [file] })) return false;
-    await navigator.share({ files: [file], title: title ?? filename });
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export function readFileAsText(file: File): Promise<string> {

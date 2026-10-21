@@ -43,7 +43,6 @@ export default function MyPayPage() {
               deliverPdf(
                 await buildPayoutStatementPdf(me, { business, earnings: mine, payouts: paid, jobsById: new Map(jobs.map((j) => [j.id, { number: j.number, title: j.title }])), account }),
                 `${safeFileName(`Payout statement ${me.name} ${todayISO()}`)}.pdf`,
-                true,
               )
             }
           >

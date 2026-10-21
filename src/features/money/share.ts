@@ -41,7 +41,7 @@ const emailData = (inv: Invoice, t: ReturnType<typeof invoiceTotals>): InvoiceEm
 
 export async function shareInvoice(id: string): Promise<void> {
   const b = await invoiceBundle(id);
-  await deliverPdf(await buildInvoicePdf(b.inv, { business: b.business, payMethods: b.payMethods, jobPayments: b.jobPayments, today: b.today }), `${safeFileName(`${b.inv.number} ${b.inv.billTo.name}`)}.pdf`, true);
+  await deliverPdf(await buildInvoicePdf(b.inv, { business: b.business, payMethods: b.payMethods, jobPayments: b.jobPayments, today: b.today }), `${safeFileName(`${b.inv.number} ${b.inv.billTo.name}`)}.pdf`);
 }
 
 /** Email the invoice (or a reminder). Returns the address it went to. */
@@ -78,7 +78,7 @@ async function receiptBundle(paymentId: string) {
 
 export async function shareReceipt(paymentId: string): Promise<void> {
   const r = await receiptBundle(paymentId);
-  await deliverPdf(await buildReceiptPdf(r.p, { business: r.business, payer: r.payer, forWhat: r.forWhat, balanceAfter: r.balanceAfter, payMethods: r.payMethods }), `${safeFileName(`${r.p.receiptNo} ${r.payer}`)}.pdf`, true);
+  await deliverPdf(await buildReceiptPdf(r.p, { business: r.business, payer: r.payer, forWhat: r.forWhat, balanceAfter: r.balanceAfter, payMethods: r.payMethods }), `${safeFileName(`${r.p.receiptNo} ${r.payer}`)}.pdf`);
 }
 
 export async function emailReceipt(paymentId: string, to?: string): Promise<string> {
