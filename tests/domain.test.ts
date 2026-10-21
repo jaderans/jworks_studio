@@ -145,7 +145,7 @@ describe('pricing', () => {
 
 describe('contracts', () => {
   it('fills the template from the business, client and package', () => {
-    const pkg = { ...(SEED_PACKAGES[0] as unknown as Package), id: 'p1' };
+    const pkg = { ...(SEED_PACKAGES.find((x) => x.kind === 'smm' && x.name === 'Starter') as unknown as Package), id: 'p1' };
     const fields = fieldsFor({ ...DEFAULT_BUSINESS, paymentDetails: 'GCash 0917' }, null, pkg, { start: '2026-11-02' });
     expect(fields.fee).toBe('₱4,500 a month');
     expect(fields.paymentSplit).toContain('₱2,250');

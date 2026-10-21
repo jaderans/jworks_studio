@@ -37,7 +37,8 @@ describe('setup', () => {
     expect(members[0]).toMatchObject({ name: 'Joshua', appRole: 'owner' });
     expect(members[0].skills).toEqual(expect.arrayContaining(['branding', 'merch']));
     const pkgs = alive(await db.packages.toArray());
-    expect(pkgs.filter((p) => p.kind === 'smm').map((p) => p.name)).toEqual(['Starter', 'Growth', 'Plus']);
+    expect(pkgs.filter((p) => p.kind === 'smm').sort((a, b) => a.sort - b.sort).map((p) => p.name)).toEqual(['Starter', 'Growth', 'Plus']);
+    expect(alive(await db.contractTemplates.toArray()).length).toBeGreaterThanOrEqual(13);
     expect((await db.snippets.count()) > 0).toBe(true);
     expect((await getSetting('business')).name).toBe('JoshWorks');
   });
@@ -140,7 +141,7 @@ describe('backups', () => {
 const REAL = 'Jworks Previous Campaigns/JoshWorks_Content_Planner_Jun15-Nov_2026 (1).xlsx';
 
 describe.skipIf(!existsSync(REAL))('importing the real planner', () => {
-  const opts: PlannerOptions = { skipThroughRow: 19, restartOn: '2026-11-02', team: true, themes: true, scripts: true, ideas: true, concepts: true, metrics: true, snippets: true };
+  const opts: PlannerOptions = { skipThroughRow: 19, restartOn: '2026-11-02', team: true, themes: true, scripts: true, ideas: true, concepts: true, metrics: true, snippets: true, breaks: false, replaceOld: true };
 
   it('brings in the team, the rescheduled posts, scripts, ideas and results — once', async () => {
     await setup();

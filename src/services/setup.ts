@@ -2,11 +2,11 @@ import { db } from '../db/db';
 import { audit, build, setActor } from '../db/write';
 import { getLocal, setLocal, updateDevice } from '../db/local';
 import { DEFAULT_BUSINESS, DEFAULT_VOICE, setSetting } from '../db/settings';
-import { SEED_PACKAGES } from '../domain/packages';
 import { hashPin, newSalt } from '../lib/hash';
 import { mergeBackup, type BackupFile } from './backup';
 import { skillsFromRole } from './team';
-import type { Member, Package, Snippet } from '../db/types';
+import { loadCatalog } from './catalog';
+import type { Member, Snippet } from '../db/types';
 
 export const isSetupDone = () => getLocal<boolean>('setupDone', false);
 
@@ -41,18 +41,18 @@ export async function runSetup(input: SetupInput): Promise<string> {
     active: 1,
     notes: '',
   });
-  await db.transaction('rw', [db.settings, db.members, db.packages, db.snippets, db.audit, db.local], async () => {
+  await db.transaction('rw', [db.settings, db.members, db.packages, db.contractTemplates, db.snippets, db.audit, db.local], async () => {
     await setSetting('business', { ...DEFAULT_BUSINESS, name: input.businessName.trim() || 'JoshWorks' });
     await setSetting('voice', DEFAULT_VOICE);
     await setSetting('security', input.pin ? { pinHash: hashPin(input.pin, salt), pinSalt: salt } : { pinHash: null, pinSalt: null });
     await db.members.put(owner);
-    if (input.seedPackages && (await db.packages.count()) === 0) await db.packages.bulkPut(SEED_PACKAGES.map((p, i) => build<Package>({ ...p, id: `seed-pkg-${i + 1}` })));
+    if (input.seedPackages) await loadCatalog({ archiveOld: false });
     if ((await db.snippets.count()) === 0) await db.snippets.bulkPut(SEED_SNIPPETS.map((s, i) => build<Snippet>({ ...s, id: `seed-snip-${i + 1}` })));
     await updateDevice({ name: input.deviceName || 'Main device' });
     await setLocal('currentMemberId', owner.id);
     await setLocal('setupDone', true);
     setActor(owner.id);
-    await audit('setup', 'app', null, `Set up JoshWorks Campaigns for ${input.businessName || 'JoshWorks'}`);
+    await audit('setup', 'app', null, `Set up JoshWorks Studio for ${input.businessName || 'JoshWorks'}`);
   });
   return owner.id;
 }

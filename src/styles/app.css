@@ -1,5 +1,6 @@
-/* JoshWorks POS — colors sampled from the logo. Light: soft grey-teal, never pure white.
-   Dark: warm charcoal from the logo. Teal and yellow are accents, never large areas. */
+/* JoshWorks Studio — colors from the JoshWorks brand kit (teal #167D88 / #4FC0D0, yellow #FEC756,
+   ink #231F20). Light: soft grey-teal, never pure white. Dark: the kit's warm ink.
+   Teal and yellow are accents, never large areas. */
 :root {
   color-scheme: light;
   --bg: #F2F5F5;
@@ -8,18 +9,18 @@
   --sunk: #E6EDED;
   --line: #DAE3E3;
   --line-strong: #BCCBCB;
-  --ink: #152122;
+  --ink: #231F20;
   --ink-2: #394748;
   --muted: #5D6C6D;
-  --teal: #087A86;
-  --teal-brand: #1FA3A8;
-  --teal-soft: #DCEFEF;
-  --teal-track: #C9E5E6;
+  --teal: #167D88;
+  --teal-brand: #41ACBA;
+  --teal-soft: #DCEFF1;
+  --teal-track: #C2E5EA;
   --on-teal: #FFFFFF;
-  --yellow: #F7D820;
-  --yellow-hover: #EFCD0C;
-  --yellow-soft: #FFF4BF;
-  --on-yellow: #241D08;
+  --yellow: #FEC756;
+  --yellow-hover: #F5B93C;
+  --yellow-soft: #FFF1D1;
+  --on-yellow: #231F20;
   --warn: #A35E00;
   --warn-soft: #FCEBD2;
   --good: #1E7B45;
@@ -36,6 +37,9 @@
   --f-display: 'Sora', 'Manrope', 'Segoe UI', system-ui, sans-serif;
   --f-ui: 'Manrope', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
   --f-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  /* The letterhead's side bar: teal into gold. */
+  --brand-bar: linear-gradient(180deg, #187A85 0%, #9ADCE4 60.5%, #FCE19B 60.5%, #EBBF3D 80%, #B48D33 100%);
+  --brand-glow: radial-gradient(120% 90% at 0% 0%, rgba(65, 172, 186, 0.55), transparent 60%), radial-gradient(90% 80% at 100% 100%, rgba(236, 192, 57, 0.4), transparent 60%);
   --rail-w: 84px;
   --top-h: 60px;
   --bottom-h: 66px;
@@ -44,24 +48,24 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
-    --bg: #161312;
-    --surface: #201C1B;
-    --surface-2: #1B1817;
-    --sunk: #2A2523;
+    --bg: #181516;
+    --surface: #231F20;
+    --surface-2: #1E1A1B;
+    --sunk: #2C2728;
     --line: #332D2B;
     --line-strong: #4D4542;
     --ink: #EFEAE5;
     --ink-2: #D2CAC3;
     --muted: #A39990;
-    --teal: #3EC1C5;
-    --teal-brand: #1FA3A8;
-    --teal-soft: #15302F;
-    --teal-track: #1F4443;
+    --teal: #4FC0D0;
+    --teal-brand: #41ACBA;
+    --teal-soft: #14313A;
+    --teal-track: #1E4650;
     --on-teal: #0A1B1C;
-    --yellow: #F5D52A;
-    --yellow-hover: #FFE14A;
-    --yellow-soft: #39310F;
-    --on-yellow: #231C07;
+    --yellow: #FEC756;
+    --yellow-hover: #FFD27A;
+    --yellow-soft: #3A2F14;
+    --on-yellow: #231F20;
     --warn: #F2A948;
     --warn-soft: #3A2A12;
     --good: #62CE91;
@@ -76,24 +80,24 @@
 }
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #161312;
-  --surface: #201C1B;
-  --surface-2: #1B1817;
-  --sunk: #2A2523;
+  --bg: #181516;
+  --surface: #231F20;
+  --surface-2: #1E1A1B;
+  --sunk: #2C2728;
   --line: #332D2B;
   --line-strong: #4D4542;
   --ink: #EFEAE5;
   --ink-2: #D2CAC3;
   --muted: #A39990;
-  --teal: #3EC1C5;
-  --teal-brand: #1FA3A8;
-  --teal-soft: #15302F;
-  --teal-track: #1F4443;
+  --teal: #4FC0D0;
+  --teal-brand: #41ACBA;
+  --teal-soft: #14313A;
+  --teal-track: #1E4650;
   --on-teal: #0A1B1C;
-  --yellow: #F5D52A;
-  --yellow-hover: #FFE14A;
-  --yellow-soft: #39310F;
-  --on-yellow: #231C07;
+  --yellow: #FEC756;
+  --yellow-hover: #FFD27A;
+  --yellow-soft: #3A2F14;
+  --on-yellow: #231F20;
   --warn: #F2A948;
   --warn-soft: #3A2A12;
   --good: #62CE91;
@@ -171,20 +175,34 @@ img { max-width: 100%; display: block; }
   height: 100%;
 }
 .sidebar {
+  position: relative;
   grid-column: 1; grid-row: 1 / -1; display: flex; flex-direction: column; min-height: 0; overflow: hidden;
   background: var(--surface); border-right: 1px solid var(--line);
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+/* The letterhead's teal-to-gold side bar, as a thin edge. */
+.sidebar::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--brand-bar); }
 .side-brand {
   display: flex; align-items: center; justify-content: center; gap: 10px; flex: none;
   min-height: var(--top-h); padding: calc(8px + env(safe-area-inset-top, 0px)) 10px 8px;
   text-decoration: none; color: var(--ink);
 }
-.side-brand img { width: 36px; height: 36px; border-radius: 10px; }
-.brand-text { display: none; min-width: 0; }
-.brand-text b { display: block; font-family: var(--f-display); font-size: 1.02rem; letter-spacing: -0.01em; line-height: 1.15; }
-.brand-text span { display: block; font-size: 0.72rem; color: var(--muted); font-weight: 700; }
-.side-nav { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; padding: 6px 10px; }
+.brand-lockup { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand-mark { width: 36px; height: 36px; object-fit: contain; flex: none; }
+.brand-words { display: none; min-width: 0; }
+.brand-words .lockup { display: block; height: 30px; width: auto; max-width: 150px; object-fit: contain; object-position: left center; }
+.brand-words .brand-sub { display: block; margin-top: 2px; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.22em; text-transform: uppercase; color: var(--teal); }
+/* The full lockup already carries the mark. */
+.brand-lockup:has(.brand-words) .brand-mark { display: none; }
+.only-dark { display: none !important; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .only-light { display: none !important; }
+  :root:not([data-theme='light']) .only-dark { display: block !important; }
+}
+:root[data-theme='dark'] .only-light { display: none !important; }
+:root[data-theme='dark'] .only-dark { display: block !important; }
+/* The menu scrolls when the window is short, so it never runs under the Collapse button. */
+.side-nav { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin; display: flex; flex-direction: column; gap: 6px; padding: 6px 10px; }
 .nav-group { display: grid; gap: 2px; }
 .nav-group + .nav-group { border-top: 1px solid var(--line); padding-top: 6px; }
 .nav-group-label { display: none; }
@@ -205,7 +223,8 @@ img { max-width: 100%; display: block; }
 @media (min-width: 1280px) {
   .shell[data-nav='full'] { --nav-w: 236px; }
   .shell[data-nav='full'] .side-brand { justify-content: flex-start; padding-inline: 22px; }
-  .shell[data-nav='full'] .brand-text { display: block; }
+  .shell[data-nav='full'] .brand-words { display: block; }
+  .shell[data-nav='full'] .brand-lockup:has(.brand-words) .brand-mark { display: none; }
   .shell[data-nav='full'] .side-nav { padding: 8px 12px; gap: 14px; }
   .shell[data-nav='full'] .nav-group + .nav-group { border-top: 0; padding-top: 0; }
   .shell[data-nav='full'] .nav-group-label {
@@ -260,6 +279,16 @@ img { max-width: 100%; display: block; }
 .event-switch:hover { border-color: var(--line-strong); }
 .event-switch .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topbar .spacer { flex: 1; }
+.topbar-title { font-family: var(--f-display); font-weight: 700; font-size: 1.05rem; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+/* A section's pages as tabs (Money: Invoices · Payments · …). Scrolls sideways on phones. */
+.section-tabs { position: sticky; top: 0; z-index: 15; background: var(--bg); border-bottom: 1px solid var(--line); }
+.section-tabs-inner { max-width: 1240px; margin: 0 auto; padding: 8px 20px; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; scroll-padding-inline: 20px; }
+.section-tabs-inner::-webkit-scrollbar { display: none; }
+.section-tab { flex: none; display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border-radius: 999px; color: var(--ink-2); text-decoration: none; font-weight: 700; font-size: 0.88rem; white-space: nowrap; border: 1px solid transparent; }
+.section-tab:hover { background: var(--sunk); color: var(--ink); }
+.section-tab.active { background: var(--teal-soft); color: var(--teal); border-color: var(--teal-track); }
+.more-item { border: 0; background: none; text-align: left; width: 100%; border-bottom: 1px solid var(--line); }
 .status-pill {
   display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
   font-size: 0.8rem; font-weight: 700; padding: 6px 11px; border-radius: 999px;
@@ -328,6 +357,7 @@ img { max-width: 100%; display: block; }
   .topbar { padding-inline: 12px; gap: 8px; }
   .topbar-brand { display: flex; flex: none; }
   .event-switch { max-width: none; flex: 1; }
+  .section-tabs-inner { padding: 8px 12px; scroll-padding-inline: 12px; }
   .topbar:has(.event-switch) .spacer { display: none; }
   .bottomnav {
     grid-column: 1; grid-row: 3; display: grid;
@@ -526,7 +556,9 @@ img { max-width: 100%; display: block; }
 .dialog.sm { width: min(420px, 100%); }
 .dialog-head { display: flex; align-items: center; gap: 10px; padding: 16px 18px 12px; border-bottom: 1px solid var(--line); }
 .dialog-head h2 { flex: 1; font-size: 1.1rem; }
-.dialog-body { padding: 16px 18px; overflow-y: auto; display: grid; gap: 14px; align-content: start; }
+/* A column that scrolls. Not a grid: a height-limited grid squeezes its rows and the fields paint over each other. */
+.dialog-body { padding: 16px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.dialog-body > * { flex-shrink: 0; min-width: 0; }
 .dialog-foot { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; padding: 12px 18px calc(12px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); background: var(--surface-2); }
 @media (max-width: 620px) {
   .overlay { place-items: end center; padding: 0; }

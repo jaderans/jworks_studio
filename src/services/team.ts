@@ -11,9 +11,9 @@ export const ROLE_LABEL: Record<AppRole, string> = {
 };
 
 export const ROLE_HINT: Record<AppRole, string> = {
-  owner: 'Everything: content, clients, prices, contracts, team and settings.',
-  manager: 'Runs content and clients, makes proposals and contracts. No team or settings changes.',
-  designer: 'Works on posts: calendar, board, ideas, trends and results. No prices or contracts.',
+  owner: 'Everything: jobs, clients, money, documents, marketing, team and settings.',
+  manager: 'Runs jobs, clients and money: quotes, contracts, invoices, payouts and reports. No team or settings changes.',
+  designer: 'Their jobs and deadlines, the content calendar and board, and their own pay. No prices, invoices or contracts.',
 };
 
 /** Guess what someone leads from how their role is written ("Brand, Logo & Shirt Design"). */

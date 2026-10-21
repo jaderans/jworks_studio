@@ -1,49 +1,49 @@
-# JoshWorks Campaigns
+# JoshWorks Studio
 
-Plan, make and track JoshWorks' own marketing, and run social media for SMM clients. It uses the same look, dashboard and team model as JoshWorks POS.
+The operating app of JoshWorks, a graphic design studio in Iloilo City: jobs and deadlines, clients, quotes, contracts and invoices on the JoshWorks letterhead, client payments, designer payouts, BIR, and the studio's own marketing.
 
-It is a web app that installs like a phone app (PWA). It works offline, keeps data on each device and can sync the team through your own free Firebase project.
+It is a web app that installs like a phone app (PWA). It works offline, keeps data on each device, and can sync the team through your own free Firebase project.
 
-**Live app:** https://jaderans.github.io/jworks_camp/ (once GitHub Pages is on; see [Deploy](#deploy)).
+**Live app:** https://jaderans.github.io/jworks_studio/
 
 ## What's inside
 
-**Content**
-- **Calendar**: month, week and list views with drag and drop. It knows the weekly themes (Mon educational, Tue portfolio, Wed flex, Thu designer, Fri behind the scenes), the break week (the week of each month's last Monday), Philippine holidays and seasons (Dinagyang, Paskua, intramurals, double-day sales).
-- **Board**: idea → to do → in progress → for review → ready → scheduled → posted.
-- **Post editor**: platform captions with hashtag and length checks (Instagram allows 5 hashtags), a styled first line, the 16-point premium design check, approvals, comments and results.
-- **Ideas**: the idea bank, WHAT IF concepts, carousel scripts slide by slide, and a caption bank.
+**Jobs**
+- **Job board**: inquiry → not started → in progress → for review → revisions → completed, with drag and drop on a computer.
+- **All jobs, Deadlines and Workload**: what's late, what's due this week, and each designer's open jobs.
+- **Each job**: client, dates, team, brief, a revision counter (extra rounds add +15% to the next invoice), a delivery checklist, links, and the money (price lines, team split, payments, invoices).
+- **Inquiry intake**: a quick form for a Messenger message or a walk-in. It adds the client and the job in one step.
 
-**Grow**
-- **Campaigns**: 15 templates (rebrand, merch drop, sticker pack, Dinagyang, Paskua, graduation, SMM launch and more). Each one builds a funnel, dates the posts on themed days around breaks and holidays, and can move posts off days that already have one.
-- **Trends**: the weekly report, a trend board, outliers (posts that did 2× the usual), daily hook practice with a streak, and a playbook with sources.
-- **Results**: log numbers 48–72 hours after posting, then compare by designer, theme, format and weekday.
-- **Assistant**: Claude with web search, set up with JoshWorks' voice, themes and calendar. Ready-made recipes cover captions, hooks, carousel scripts, reels, campaigns, proposals and client reports.
+**Clients**: every kind (business, student org, school, individual, LGU), from inquiry to completed, with each client's jobs, quotes, contracts, invoices and payments, and a "Repeat" badge. Student orgs get student prices.
 
-**SMM clients**
-- **Clients**: a pipeline from lead to active, onboarding checklists, the monthly cycle, an approval PDF and a monthly report PDF.
-- **Packages**: Starter ₱4,500, Growth ₱7,500 and Plus ₱12,000 a month, plus add-ons and design services. Every price shows its margin against the team's hourly rates.
-- **Proposals and contracts**: the founding-client offer (10% off the first 3 months), optional VAT and 2% withholding, a contract generator with the clauses SMM contracts should never skip, and PDFs for both.
+**Money**
+- **Invoices** in the studio's own layout (JW-0032-2026 onward), on the letterhead, with payment details and QR codes. Paid, partly paid and overdue update themselves from the payments. Reminders go out by email in one click.
+- **Payments**: each one gets an acknowledgment receipt (AR-0001-2026).
+- **Payouts**: each client payment releases every designer's share after the 5% deduction, so the team can be paid as the money comes in. Designers add where they want to be paid (GCash, bank, QR code) under **My pay**.
+- **Expenses, Reports and BIR**: the commission tracker's monthly and yearly summary, targets, top clients, and the 8% income tax estimate with the 1701Q/1701A schedule.
 
-**People**: owner, manager and designer roles, invite links, an activity log, backups and an owner PIN for shared computers.
+**Documents**: quotes from the price list (business and student prices, add-ons, ownership buy-outs, the REPYOURORG15 code), the 13 v1.0 contract templates, and the team's rates. Quote → contract → job → invoice carries everything forward, so nothing is typed twice.
 
-**Import**: bring in the old content planner (.xlsx). Posts already published are skipped, the rest get new dates from the restart day, and seasonal posts stay in season. Unsafe links, like a wallet address pasted in place of a Drive link, are dropped.
+**Marketing**: the content calendar (weekly themes, break weeks, Philippine holidays), the board, ideas and carousel scripts, campaigns, trends, results, and the assistant.
 
-## Posting to Facebook, Instagram and TikTok
+**People**: owner, manager and designer roles, sign-in with Google or email, invites by email, an activity log, backups and an owner PIN.
 
-The app writes and checks the caption, then copies it and opens the right composer (Meta Business Suite, TikTok Studio, Threads or X). After posting, paste the post link back and log results later. Direct posting needs a Meta developer app with App Review and a small server for tokens. See [docs/SOCIAL_MEDIA.md](docs/SOCIAL_MEDIA.md).
+**Import**: the commission tracker (jobs, payments, splits, targets, BIR settings) and the content planner (.xlsx), read on the device.
 
 ## Data and privacy
 
 - **Local first.** Everything lives in the browser on each device (IndexedDB) and works offline. Export a backup from Settings any time.
-- **Team sync is optional.** It runs on your own Firebase project: [docs/CLOUD_SETUP.md](docs/CLOUD_SETUP.md). Designers never see packages, proposals, contracts or rates.
-- **The Claude API key never leaves the device** where it was entered. It is not synced and not in this repository. Assistant chats stay on the device too.
+- **Team sync is optional.** It runs on your own Firebase project: [docs/CLOUD_SETUP.md](docs/CLOUD_SETUP.md). Designers never receive prices, quotes, contracts, invoices, client payments or other people's pay; the security rules enforce it.
+- **Branded email** goes out from the studio Gmail through EmailJS: [docs/EMAIL_SETUP.md](docs/EMAIL_SETUP.md).
+- **The Claude API key never leaves the device** where it was entered. Without one, the assistant works through Claude.ai: the app writes the prompt, you paste the answer back.
 - **Never store client passwords.** Ask clients for partner access in Meta Business Suite and TikTok Business Center instead.
-- **This repository is public.** The old planner, its Drive links and numbers, and the reference screenshots (`Jworks Previous Campaigns/`, `*.xlsx`) are git-ignored. Keep client data out of commits.
+- **This repository is public.** The commission tracker, planners, client documents, brand fonts and payment QR codes are git-ignored or stay in the app's own database. Keep client data out of commits.
+
+How the money works, step by step: [docs/MONEY.md](docs/MONEY.md).
 
 ## Weekly trend report
 
-`public/trends/latest.json` is the report everyone sees on the dashboard and the Trends page. Nobody needs an API key to read it. A scheduled Claude routine can rewrite it every Monday, or the owner can run "Research trends now" in the app. See [docs/TREND_REPORT.md](docs/TREND_REPORT.md).
+`public/trends/latest.json` is the report everyone sees under Marketing → Trends. Run `/trend-report` in Claude Code each Monday to research and publish it. See [docs/TREND_REPORT.md](docs/TREND_REPORT.md).
 
 ## Development
 
@@ -51,25 +51,26 @@ Requires Node 22.
 
 ```sh
 npm ci
-npm run dev        # http://localhost:5173
-npm run check      # type check + unit tests (Vitest)
-npm run e2e        # production build + the full owner journey in Chrome (Playwright)
-npm run build      # dist/
+npm run dev          # http://localhost:5173
+npm run check        # type check + unit tests (Vitest)
+npm run e2e          # production build + the owner journeys and layout checks in Chrome (Playwright)
+npm run test:rules   # the Firestore security rules, in the emulator (needs Java)
+npm run build        # dist/
 ```
 
-Tests that need the private planner file skip themselves when it isn't there, so CI runs without it. The e2e run saves a screenshot of every screen in `test-results/shots` (or the folder in `SHOTS`).
+Tests that read the owner's private files (the tracker and planners) skip themselves when the files aren't there, so CI runs without them. The e2e run saves screenshots of every screen in `test-results/shots`.
 
 | Folder | What's there |
 | --- | --- |
-| `src/domain` | Pure logic with tests: calendar and rescheduling, seasons and holidays, captions, pricing, contracts, funnels, the planner reader |
+| `src/domain` | Pure logic with tests: money and payouts, BIR, pricing, the price list and contract templates, jobs, the tracker and planner readers, the calendar |
 | `src/services` | Saving and loading records, imports, backups |
 | `src/features` | One folder per screen |
 | `src/db` | The IndexedDB schema (Dexie) and settings |
 | `src/sync` | Firebase sign-in and sync |
-| `src/ai` | The Claude client and prompts |
-| `src/reports` | PDF proposals, contracts, approvals and client reports |
+| `src/email` | Branded email templates and sending |
+| `src/reports` | PDFs on the letterhead: invoices, receipts, quotes, contracts, statements, reports |
 | `firebase/firestore.rules` | Who can read and write what in the cloud |
 
 ## Deploy
 
-Every push to `main` runs the checks and publishes to GitHub Pages. One-time setup: in the repository, go to **Settings → Pages → Build and deployment → Source** and choose **GitHub Actions**.
+Every push to `main` runs the checks and publishes to GitHub Pages (**Settings → Pages → Source: GitHub Actions**).

@@ -1,11 +1,11 @@
-/* JoshWorks Campaigns — screens beyond the POS kit, on the same tokens.
+/* JoshWorks Studio — screens beyond the POS kit, on the same tokens.
    Series colours are the validated categorical palette (identity: one colour per team member,
    always shown with a name or initials). The funnel uses a validated one-hue teal ramp. */
 :root {
   --cat-1: #2a78d6; --cat-2: #eb6834; --cat-3: #1baf7a; --cat-4: #eda100;
   --cat-5: #e87ba4; --cat-6: #008300; --cat-7: #4a3aa7; --cat-8: #e34948;
   --fun-1: #34BFCD; --fun-2: #00A2AF; --fun-3: #04848F; --fun-4: #056770; --fun-5: #004C53;
-  --heat-on: #087A86; --heat-off: var(--sunk);
+  --heat-on: #167D88; --heat-off: var(--sunk);
   --st-idea: var(--line-strong); --st-todo: #9AA8A9; --st-doing: var(--teal); --st-review: var(--yellow);
   --st-ready: var(--good); --st-scheduled: #4a3aa7; --st-posted: var(--good); --st-skipped: var(--line-strong);
 }
@@ -14,14 +14,14 @@
     --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; --cat-4: #c98500;
     --cat-5: #d55181; --cat-6: #008300; --cat-7: #9085e9; --cat-8: #e66767;
     --fun-1: #6CE7ED; --fun-2: #4AC9D0; --fun-3: #20ACB3; --fun-4: #028F95; --fun-5: #057176;
-    --heat-on: #3EC1C5; --st-todo: #6E6560; --st-scheduled: #9085e9;
+    --heat-on: #4FC0D0; --st-todo: #6E6560; --st-scheduled: #9085e9;
   }
 }
 :root[data-theme='dark'] {
   --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; --cat-4: #c98500;
   --cat-5: #d55181; --cat-6: #008300; --cat-7: #9085e9; --cat-8: #e66767;
   --fun-1: #6CE7ED; --fun-2: #4AC9D0; --fun-3: #20ACB3; --fun-4: #028F95; --fun-5: #057176;
-  --heat-on: #3EC1C5; --st-todo: #6E6560; --st-scheduled: #9085e9;
+  --heat-on: #4FC0D0; --st-todo: #6E6560; --st-scheduled: #9085e9;
 }
 
 /* ---------- people ---------- */
@@ -199,9 +199,6 @@
 @media (max-width: 760px) { .level-grid { grid-template-columns: 1fr; } }
 .chart-wrap { position: relative; }
 
-/* In a height-limited dialog, grid rows that scroll sideways (tab strips, wide tables) would
-   otherwise shrink to nothing; keep every row at least as tall as its content. */
-.dialog-body > * { min-height: min-content; }
 
 /* A card that is also a row keeps the row layout (the card style alone would make it a grid). */
 .card.row { display: flex; }

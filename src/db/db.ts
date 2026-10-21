@@ -1,7 +1,7 @@
 import Dexie, { type Table } from 'dexie';
 import type {
-  AuditEntry, Campaign, Chat, Client, Comment, Contract, Funnel, Hook, Idea, LocalRow, Member, Metric, Package, Post, Proposal,
-  SettingRow, Snippet, Trend, TrendReport,
+  AuditEntry, Campaign, Chat, Client, Comment, Contract, ContractTemplate, Earning, Expense, Funnel, Hook, Idea, Invoice, Job, JobMoney, JobProgress, LocalRow,
+  Member, Metric, Package, Payment, Payout, PayoutAccount, Post, Proposal, SettingRow, Snippet, Trend, TrendReport,
 } from './types';
 
 /**
@@ -27,6 +27,16 @@ export class CampDB extends Dexie {
   proposals!: Table<Proposal, string>;
   contracts!: Table<Contract, string>;
   audit!: Table<AuditEntry, string>;
+  jobs!: Table<Job, string>;
+  jobProgress!: Table<JobProgress, string>;
+  jobMoney!: Table<JobMoney, string>;
+  payments!: Table<Payment, string>;
+  earnings!: Table<Earning, string>;
+  payouts!: Table<Payout, string>;
+  payoutAccounts!: Table<PayoutAccount, string>;
+  invoices!: Table<Invoice, string>;
+  expenses!: Table<Expense, string>;
+  contractTemplates!: Table<ContractTemplate, string>;
   // Device-only tables (never synced)
   local!: Table<LocalRow, string>;
   chats!: Table<Chat, string>;
@@ -54,6 +64,19 @@ export class CampDB extends Dexie {
       local: 'key',
       chats: 'id, updatedAt',
     });
+    // JoshWorks Studio: the commission tracker, money and documents. Version 1 data stays as it is.
+    this.version(2).stores({
+      jobs: 'id, number, clientId, dueDate, updatedAt, _sync',
+      jobProgress: 'id, status, updatedAt, _sync',
+      jobMoney: 'id, updatedAt, _sync',
+      payments: 'id, jobId, invoiceId, clientId, date, updatedAt, _sync',
+      earnings: 'id, memberId, jobId, paymentId, updatedAt, _sync',
+      payouts: 'id, memberId, date, updatedAt, _sync',
+      payoutAccounts: 'id, updatedAt, _sync',
+      invoices: 'id, number, jobId, clientId, status, updatedAt, _sync',
+      expenses: 'id, date, updatedAt, _sync',
+      contractTemplates: 'id, updatedAt, _sync',
+    });
   }
 }
 
@@ -63,11 +86,17 @@ export const db = new CampDB();
 export const SYNCED_TABLES = [
   'settings', 'members', 'clients', 'packages', 'campaigns', 'funnels', 'ideas', 'snippets', 'posts', 'comments',
   'trends', 'hooks', 'reports', 'metrics', 'proposals', 'contracts', 'audit',
+  'contractTemplates', 'jobs', 'jobProgress', 'jobMoney', 'payments', 'earnings', 'payouts', 'payoutAccounts', 'invoices', 'expenses',
 ] as const;
 export type SyncedTableName = (typeof SYNCED_TABLES)[number];
 
 /** Money and legal documents: only the owner and managers receive them. */
-export const MANAGER_TABLES: readonly SyncedTableName[] = ['packages', 'proposals', 'contracts'];
+export const MANAGER_TABLES: readonly SyncedTableName[] = [
+  'packages', 'proposals', 'contracts', 'contractTemplates', 'jobMoney', 'payments', 'invoices', 'expenses',
+];
+
+/** Designers receive only their own rows of these (filtered by memberId). */
+export const OWN_ROW_TABLES: readonly SyncedTableName[] = ['earnings', 'payouts'];
 
 export function syncedTable(name: SyncedTableName): Table<any, string> {
   return (db as unknown as Record<string, Table<any, string>>)[name];

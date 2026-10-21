@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Bot, Copy, ExternalLink, Globe, Lightbulb, MessageSquarePlus, PanelLeft, Send, Square, Trash2, Wand2 } from 'lucide-react';
+import { Copy, ExternalLink, Globe, Lightbulb, MessageSquarePlus, PanelLeft, Send, Square, Trash2, Wand2 } from 'lucide-react';
 import { useApp } from '../../app/AppContext';
 import { Badge, Button, Callout, IconButton, PageHeader } from '../../components/ui';
 import { Select, TextArea } from '../../components/form';
@@ -10,6 +10,7 @@ import { useCampaigns, useChats, useClients, usePosts, useSettingRows } from '..
 import { settingValue } from '../../db/settings';
 import { db } from '../../db/db';
 import { getApiKey, modelInfo, streamChat, type ChatTurn } from '../../ai/claude';
+import { openInClaude, webPrompt } from '../../ai/claudeWeb';
 import { RECIPES, buildContext, buildSystemPrompt, type Recipe } from '../../ai/prompts';
 import { saveIdea, savePost } from '../../services/content';
 import { uid } from '../../lib/ids';
@@ -37,6 +38,9 @@ export default function AssistantPage() {
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const [showSide, setShowSide] = useState(false);
+  // Claude.ai mode (no API key): the answer is pasted back here.
+  const webMode = hasKey === false;
+  const [pasted, setPasted] = useState('');
   const abort = useRef<AbortController | null>(null);
   const end = useRef<HTMLDivElement>(null);
 
@@ -87,6 +91,16 @@ export default function AssistantPage() {
     setChatId(current.id);
     setText('');
     setRecipe(null);
+    if (webMode) {
+      // The first message carries the instructions and context; follow-ups go into the same Claude.ai chat.
+      const first = current.messages.length === 1;
+      const prompt = first ? webPrompt({ system: await buildSystemPrompt(), context: current.contextText, ask, webSearch: web }) : ask;
+      const copied = await openInClaude(prompt);
+      app.toast(copied ? (first ? 'Copied. In Claude.ai, paste (Ctrl+V) and send, then paste the answer back here.' : 'Copied. Paste it into the same Claude.ai chat.') : 'Couldn’t copy. Use the Copy button on your message.', { tone: copied ? 'good' : 'bad', ms: 8000 });
+      setBusy(false);
+      setStatus('');
+      return;
+    }
     const turns: ChatTurn[] = current.messages.filter((m) => !m.error).map((m, i) => ({ role: m.role, text: i === 0 && current.contextText ? `${current.contextText}\n\n---\n\n${m.text}` : m.text }));
     const controller = new AbortController();
     abort.current = controller;
@@ -124,39 +138,20 @@ export default function AssistantPage() {
     setShowSide(false);
   };
 
-  if (hasKey === false)
-    return (
-      <div className="page narrow">
-        <PageHeader title="Assistant" subtitle="Claude, trained on JoshWorks’ voice, team, rhythm and results." />
-        <Callout tone="info" title="Connect Claude first">
-          The assistant uses your own Claude API key, kept only on this device. Add it in Settings → Assistant. You pay Anthropic per use; a caption set costs about a peso or two, and a trend report with web search about 10–30 US cents.
-        </Callout>
-        <div>
-          <Link to="/settings#s-ai" className="btn primary">
-            <Bot size={18} /> Set up the assistant
-          </Link>
-        </div>
-        <section className="card stack">
-          <h2 className="dot-title">What it can do</h2>
-          <ul className="small" style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 6 }}>
-            {RECIPES.map((r) => (
-              <li key={r.id}>
-                <b>{r.label}</b>
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
-    );
-
   const messages = chat?.messages ?? [];
+  const waitingForPaste = webMode && !!chat && messages[messages.length - 1]?.role === 'user';
+  const addPasted = async () => {
+    if (!chat || !pasted.trim()) return;
+    await db.chats.put({ ...chat, messages: [...chat.messages, { role: 'assistant', text: pasted.trim(), at: Date.now() }], updatedAt: Date.now() });
+    setPasted('');
+  };
   const costTotal = messages.reduce((a, m) => a + (m.usage?.costUsd ?? 0), 0);
 
   return (
     <div className="page" style={{ maxWidth: 1280 }}>
       <PageHeader
         title="Assistant"
-        subtitle={`Claude, trained on JoshWorks’ voice, team, rhythm and results · ${modelInfo(ai.model).label}`}
+        subtitle={webMode ? 'Claude.ai mode: the app writes the prompt with JoshWorks’ voice and context, you paste it into Claude.ai, then paste the answer back. No API key or per-use cost.' : `Claude, trained on JoshWorks’ voice, team, rhythm and results · ${modelInfo(ai.model).label}`}
         actions={
           <>
             <Button className="show-phone" onClick={() => setShowSide((v) => !v)}>
@@ -194,6 +189,11 @@ export default function AssistantPage() {
         <div className="chat-main">
           {!chat ? (
             <div className="stack">
+              {webMode ? (
+                <p className="tiny muted">
+                  Using your Claude plan in the browser. Have a Claude API key? Add it in <Link to="/settings#s-ai">Settings → Assistant</Link> to get answers right here.
+                </p>
+              ) : null}
               <span className="eyebrow">Start with</span>
               <div className="recipes">
                 {RECIPES.map((r) => (
@@ -279,7 +279,27 @@ export default function AssistantPage() {
             <div ref={end} />
           </div>
 
-          <div className="composer">
+          {waitingForPaste ? (
+            <div className="composer paste-box">
+              <TextArea aria-label="Claude’s answer" rows={6} value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="Paste Claude’s answer here (copy it with the copy button under the reply in Claude.ai)." />
+              <div className="row wrap between">
+                <Button
+                  variant="ghost"
+                  onClick={async () => {
+                    const last = messages[messages.length - 1];
+                    const first = messages.length === 1;
+                    await openInClaude(first ? webPrompt({ system: await buildSystemPrompt(), context: chat?.contextText, ask: last.text, webSearch: web }) : last.text);
+                  }}
+                >
+                  <Copy size={16} /> Copy the prompt again
+                </Button>
+                <Button variant="primary" disabled={!pasted.trim()} onClick={addPasted}>
+                  Add Claude’s answer
+                </Button>
+              </div>
+            </div>
+          ) : null}
+          <div className="composer" hidden={waitingForPaste}>
             {recipe ? (
               <div className="row wrap">
                 <Badge tone="yellow">{recipe.label}</Badge>
@@ -300,7 +320,7 @@ export default function AssistantPage() {
                 <input id="as-web" type="checkbox" checked={web} onChange={(e) => setWeb(e.target.checked)} />
                 <span className="track" aria-hidden="true" />
                 <span className="small">
-                  <Globe size={14} /> Search the web (current trends; about 1 US cent per search)
+                  <Globe size={14} /> {webMode ? 'Ask Claude to search the web' : 'Search the web (current trends; about 1 US cent per search)'}
                 </span>
               </label>
               {busy ? (
@@ -309,7 +329,7 @@ export default function AssistantPage() {
                 </Button>
               ) : (
                 <Button variant="primary" onClick={send} disabled={!text.trim() && !recipe}>
-                  <Send size={16} /> Send
+                  {webMode ? <ExternalLink size={16} /> : <Send size={16} />} {webMode ? 'Copy & open Claude.ai' : 'Send'}
                 </Button>
               )}
             </div>

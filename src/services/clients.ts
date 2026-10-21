@@ -1,7 +1,7 @@
 import { alive, db } from '../db/db';
 import { audit, create, patch, remove, save } from '../db/write';
 import { getSetting } from '../db/settings';
-import { STAGE_LABEL } from '../domain/clients';
+import { stageLabel } from '../domain/clients';
 import { fieldsFor } from '../domain/contract';
 import { addDays, todayISO } from '../lib/time';
 import { EMPTY_PERSONA } from './campaigns';
@@ -17,7 +17,8 @@ export function blankClient(fields: Partial<Client> = {}): Omit<Client, 'id' | '
     email: '',
     phone: '',
     location: '',
-    stage: 'lead',
+    stage: 'inquiry',
+    kind: 'business',
     source: '',
     platforms: ['facebook', 'instagram'],
     handles: {},
@@ -39,7 +40,7 @@ export async function saveClient(c: Partial<Client> & { name: string }): Promise
     const prev = await db.clients.get(c.id);
     if (prev) {
       const next = await save(db.clients, { ...prev, ...c } as Client);
-      if (prev.stage !== next.stage) await audit('stage', 'client', next.id, `${next.name}: ${STAGE_LABEL[prev.stage]} → ${STAGE_LABEL[next.stage]}`);
+      if (prev.stage !== next.stage) await audit('stage', 'client', next.id, `${next.name}: ${stageLabel(prev.stage)} → ${stageLabel(next.stage)}`);
       return next;
     }
   }
@@ -52,7 +53,7 @@ export async function setClientStage(id: string, stage: ClientStage): Promise<vo
   const c = await db.clients.get(id);
   if (!c || c.stage === stage) return;
   await patch(db.clients, id, { stage, ...(stage === 'active' && !c.startDate ? { startDate: todayISO() } : {}) });
-  await audit('stage', 'client', id, `${c.name}: ${STAGE_LABEL[c.stage]} → ${STAGE_LABEL[stage]}`);
+  await audit('stage', 'client', id, `${c.name}: ${stageLabel(c.stage)} → ${stageLabel(stage)}`);
 }
 
 export async function toggleClientCheck(id: string, itemId: string, done: boolean): Promise<void> {
@@ -64,7 +65,9 @@ export async function toggleClientCheck(id: string, itemId: string, done: boolea
 export async function deleteClient(id: string): Promise<void> {
   const c = await db.clients.get(id);
   const posts = alive(await db.posts.where('clientId').equals(id).toArray());
-  if (posts.some((p) => p.status === 'posted')) throw new Error(`${c?.name ?? 'This client'} has posted content and results. Mark them Ended instead.`);
+  if (posts.some((p) => p.status === 'posted')) throw new Error(`${c?.name ?? 'This client'} has posted content and results. Mark them Completed or Lost instead.`);
+  const jobs = alive(await db.jobs.where('clientId').equals(id).toArray());
+  if (jobs.length) throw new Error(`${c?.name ?? 'This client'} has ${jobs.length} job${jobs.length === 1 ? '' : 's'}. Mark them Completed or Lost instead.`);
   for (const p of posts) await remove(db.posts, p.id);
   await remove(db.clients, id);
   await audit('delete', 'client', id, `Deleted the client ${c?.name ?? ''}`);
@@ -97,6 +100,11 @@ export async function savePackage(p: Partial<Package> & { name: string; kind: Pa
     active: p.active ?? 1,
     sort: p.sort ?? count,
     notes: p.notes ?? '',
+    category: p.category ?? '',
+    audience: p.audience ?? 'any',
+    studentPrice: p.studentPrice ?? null,
+    turnaround: p.turnaround ?? '',
+    revisions: p.revisions ?? 0,
   });
 }
 
@@ -106,7 +114,7 @@ export async function deletePackage(id: string): Promise<void> {
 
 // ----- proposals -----
 
-async function nextNumber(prefix: 'P' | 'C', table: 'proposals' | 'contracts'): Promise<string> {
+export async function nextNumber(prefix: 'P' | 'C', table: 'proposals' | 'contracts'): Promise<string> {
   const year = new Date().getFullYear();
   const rows = (await db[table].toArray()) as { number: string }[];
   const used = rows.map((r) => Number(new RegExp(`^${prefix}-${year}-(\\d+)$`).exec(r.number)?.[1] ?? 0));

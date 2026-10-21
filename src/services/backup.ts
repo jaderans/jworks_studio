@@ -34,10 +34,10 @@ export function parseBackup(text: string): BackupFile {
   try {
     data = JSON.parse(text);
   } catch {
-    throw new Error('This file isn’t a JoshWorks Campaigns backup (it isn’t valid JSON).');
+    throw new Error('This file isn’t a JoshWorks Studio backup (it isn’t valid JSON).');
   }
   const f = data as Partial<BackupFile>;
-  if (!f || f.app !== 'jworks-campaigns' || typeof f.tables !== 'object' || f.tables === null) throw new Error('This file isn’t a JoshWorks Campaigns backup.');
+  if (!f || f.app !== 'jworks-campaigns' || typeof f.tables !== 'object' || f.tables === null) throw new Error('This file isn’t a JoshWorks Studio backup.');
   if (f.version !== 1) throw new Error('This backup was made by a newer version of the app. Update the app, then try again.');
   for (const [name, rows] of Object.entries(f.tables)) {
     if (!(SYNCED_TABLES as readonly string[]).includes(name)) continue;

@@ -45,7 +45,10 @@ test('owner sets up, imports the planner and works through every screen', async 
   }
   await page.screenshot({ path: `${SHOTS}/dashboard.png`, fullPage: true });
 
-  await page.getByRole('link', { name: 'Board', exact: true }).first().click();
+  // Marketing: one sidebar entry, its pages as tabs.
+  await page.getByRole('link', { name: 'Marketing', exact: true }).first().click();
+  await expect(page.getByRole('heading', { name: 'Content calendar' })).toBeVisible();
+  await page.getByRole('link', { name: 'Content board', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Board' })).toBeVisible();
   await page.screenshot({ path: `${SHOTS}/board.png` });
 
@@ -86,54 +89,49 @@ test('owner sets up, imports the planner and works through every screen', async 
   await expect(page.getByRole('heading', { name: 'Results' })).toBeVisible();
   await page.screenshot({ path: `${SHOTS}/results.png`, fullPage: true });
 
+  // No API key: the assistant works through Claude.ai (copy the prompt, paste the answer back).
   await page.getByRole('link', { name: 'Assistant', exact: true }).first().click();
-  await expect(page.getByText('Connect Claude first')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Copy & open Claude.ai' })).toBeVisible();
 
-  // SMM client: add, open, then a proposal and a contract.
+  // Clients in general: a student org gets student prices and the org discount on a quote, which becomes a job.
   await page.getByRole('link', { name: 'Clients', exact: true }).first().click();
   await page.getByRole('button', { name: 'Add a client' }).first().click();
-  await page.getByLabel('Business name').fill('Kape Ilonggo');
-  await page.getByLabel('Industry').fill('Café');
+  await page.getByLabel('Name (business, org or person)').fill('CPU Student Council');
+  await page.getByRole('dialog').getByLabel('Kind', { exact: true }).selectOption('student-org');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: /Kape Ilonggo/ })).toBeVisible();
-  await page.getByLabel('Package').selectOption({ label: 'Starter · ₱4,500/month' });
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: /CPU Student Council/ })).toBeVisible();
   await page.screenshot({ path: `${SHOTS}/client.png` });
-  await page.keyboard.press('Escape');
-  await page.screenshot({ path: `${SHOTS}/clients.png` });
-
-  await page.getByRole('link', { name: 'Packages', exact: true }).first().click();
-  await expect(page.getByText('₱4,500').first()).toBeVisible();
-  await expect(page.getByText(/Healthy · margin/).first()).toBeVisible();
-  await page.screenshot({ path: `${SHOTS}/packages.png`, fullPage: true });
-  await page.getByRole('link', { name: 'Proposals', exact: true }).click();
-  await page.getByRole('button', { name: 'New proposal' }).click();
-  await page.getByRole('dialog').getByLabel('Client', { exact: true }).selectOption({ label: 'Kape Ilonggo' });
-  await page.getByRole('button', { name: /Growth · ₱7,500/ }).click();
-  await page.getByText(/Founding client offer/).click();
+  await page.getByRole('button', { name: 'History', exact: true }).click();
+  await page.getByRole('button', { name: 'New quote' }).click();
+  const quote = page.getByRole('dialog', { name: /^Quote / });
+  await expect(quote).toBeVisible();
+  await quote.getByRole('button', { name: 'Add from the price list' }).click();
+  const picker = page.getByRole('dialog', { name: 'Add from the price list' });
+  await picker.getByLabel('Search the price list').fill('Essential Branding');
+  await picker.getByRole('button', { name: /Essential Branding/ }).first().click();
+  await picker.getByRole('button', { name: /Done/ }).click();
+  // Student price.
+  await expect(quote.getByText('₱2,700').first()).toBeVisible();
+  await quote.getByLabel('Discount code').fill('REPYOURORG15');
+  await quote.getByRole('button', { name: 'Apply code' }).click();
+  await page.screenshot({ path: `${SHOTS}/quote.png` });
   const download = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'PDF' }).click();
-  const pdf = await download;
-  expect(pdf.suggestedFilename()).toMatch(/P-2026-001.*\.pdf$/);
-  await page.screenshot({ path: `${SHOTS}/proposal.png` });
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await quote.getByRole('button', { name: 'PDF' }).click();
+  expect((await download).suggestedFilename()).toMatch(/\.pdf$/);
+  await quote.getByRole('button', { name: /Make the job/ }).click();
+  await expect(page.getByText(/COM-001 is on the job board/)).toBeVisible();
 
-  await page.getByRole('link', { name: 'Contracts', exact: true }).first().click();
-  await page.getByRole('button', { name: 'New contract' }).first().click();
-  await page.getByRole('dialog').getByLabel('Client', { exact: true }).selectOption({ label: 'Kape Ilonggo' });
-  await page.getByRole('button', { name: 'Make it' }).click();
-  await expect(page.getByText('Social Media Management Agreement').first()).toBeVisible();
-  await expect(page.getByLabel('Preview')).toContainText('₱4,500 a month');
-  await expect(page.getByLabel('Preview')).toContainText('Facebook and Instagram');
-  await page.screenshot({ path: `${SHOTS}/contract.png` });
-  const cdl = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'PDF' }).click();
-  expect((await cdl).suggestedFilename()).toMatch(/C-2026-001.*\.pdf$/);
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('link', { name: 'Documents', exact: true }).first().click();
+  await page.getByRole('link', { name: 'Price list', exact: true }).click();
+  await expect(page.getByText('Essential Branding').first()).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/price-list.png`, fullPage: true });
 
   await page.getByRole('link', { name: 'Team', exact: true }).first().click();
   await expect(page.getByRole('heading', { name: 'Team', exact: true })).toBeVisible();
-  await page.screenshot({ path: `${SHOTS}/team.png` });
+  await page.getByRole('button', { name: /Edit Joshua/ }).click();
+  await expect(page.getByLabel('Sign-in email')).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/team-edit.png` });
+  await page.keyboard.press('Escape');
   await page.goto('/#/settings');
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   await page.screenshot({ path: `${SHOTS}/settings.png`, fullPage: true });

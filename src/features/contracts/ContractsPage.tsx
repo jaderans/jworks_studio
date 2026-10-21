@@ -151,7 +151,7 @@ function Preview({ text, fields }: { text: string; fields: Record<string, string
   );
 }
 
-function ContractEditor({ id, onClose }: { id: string | null; onClose: () => void }) {
+export function ContractEditor({ id, onClose }: { id: string | null; onClose: () => void }) {
   const app = useApp();
   const contracts = useContracts() ?? [];
   const rows = useSettingRows();

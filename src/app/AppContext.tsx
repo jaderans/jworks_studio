@@ -20,14 +20,20 @@ export type Permission =
   | 'settings'
   | 'activity'
   | 'import'
-  | 'assistant';
+  | 'assistant'
+  /** See jobs and update their progress. */
+  | 'jobs'
+  /** Plan jobs: create, assign, set dates (owner and managers). */
+  | 'editJobs'
+  /** A designer's own pay and payout details. */
+  | 'mypay';
 
-const ALL: Permission[] = ['dashboard', 'content', 'editCampaigns', 'clients', 'money', 'team', 'settings', 'activity', 'import', 'assistant'];
+const STUDIO: Permission[] = ['dashboard', 'content', 'editCampaigns', 'clients', 'money', 'activity', 'assistant', 'jobs', 'editJobs'];
 
 export const ROLE_PERMISSIONS: Record<AppRole, readonly Permission[]> = {
-  owner: ALL,
-  manager: ['dashboard', 'content', 'editCampaigns', 'clients', 'money', 'activity', 'assistant'],
-  designer: ['dashboard', 'content', 'assistant'],
+  owner: [...STUDIO, 'team', 'settings', 'import'],
+  manager: STUDIO,
+  designer: ['dashboard', 'content', 'assistant', 'jobs', 'mypay'],
 };
 
 /** Whose content the calendar, board and results show: everyone's, JoshWorks' own pages, or one client. */
@@ -169,7 +175,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setScope = useCallback((s: Scope) => void setLocal('scope', s), []);
   const inScope = useCallback((clientId: string | null) => (scope === 'all' ? true : scope === 'own' ? clientId === null : clientId === scope), [scope]);
 
-  if (!ready || !device) return <div className="loading">Opening JoshWorks Campaigns…</div>;
+  if (!ready || !device) return <div className="loading">Opening JoshWorks Studio…</div>;
 
   const value: AppState = { device, refreshDevice, member, role, switchMember, can, locked: !!cloudLock, askOwner, confirm, toast, online, scope, setScope, scopeClient, inScope };
 

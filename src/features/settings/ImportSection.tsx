@@ -37,7 +37,7 @@ export function ImportSection({ onDone, compact }: { onDone?: () => void; compac
       const skip = defaultSkipRow(p.rows);
       const firstOpen = p.rows.find((r) => r.kind === 'post' && r.row > skip && r.date);
       const past = !!firstOpen?.date && firstOpen.date < new Date().toISOString().slice(0, 10);
-      setOpts({ skipThroughRow: skip, restartOn: past ? defaultRestart() : null, team: true, themes: true, scripts: true, ideas: true, concepts: true, metrics: true, snippets: true });
+      setOpts({ skipThroughRow: skip, restartOn: past ? defaultRestart() : null, team: true, themes: true, scripts: true, ideas: true, concepts: true, metrics: true, snippets: true, breaks: p.rows.some((r) => r.kind === 'break' && r.date), replaceOld: true });
     } catch (e) {
       setParsed(null);
       setError(e instanceof Error ? e.message : 'That file could not be read.');
@@ -163,6 +163,10 @@ export function ImportSection({ onDone, compact }: { onDone?: () => void; compac
             <Check id="im-concepts" checked={opts.concepts} onChange={(v) => setOpts({ ...opts, concepts: v })} label="WHAT IF series and Concept Drops" />
             <Check id="im-metrics" checked={opts.metrics} onChange={(v) => setOpts({ ...opts, metrics: v })} label="Past results (Performance Tracker)" sub="Kept as history for the Results page." />
             <Check id="im-snips" checked={opts.snippets} onChange={(v) => setOpts({ ...opts, snippets: v })} label="Hashtag and caption bank" />
+            {parsed.rows.some((r) => r.kind === 'break' && r.date) ? (
+              <Check id="im-breaks" checked={opts.breaks} onChange={(v) => setOpts({ ...opts, breaks: v })} label="Use the planner’s break weeks" sub={`${parsed.rows.filter((r) => r.kind === 'break' && r.date).length} break weeks, instead of the last-Monday rule.`} />
+            ) : null}
+            <Check id="im-replace" checked={opts.replaceOld} onChange={(v) => { setOpts({ ...opts, replaceOld: v }); setPreview(null); }} label="Replace the older plan’s unposted posts" sub="Posted posts and their results stay." />
           </div>
           {!preview ? (
             <div>
@@ -173,8 +177,9 @@ export function ImportSection({ onDone, compact }: { onDone?: () => void; compac
           ) : (
             <div className="stack">
               <Callout tone="good" title={`${preview.posts.length} posts go on the calendar`}>
-                {preview.skipped} already-posted rows are skipped.
-                {opts.restartOn && preview.posts.length ? ` First: ${fmtIsoWeekday(preview.posts[0].date as string)}. Last: ${fmtIsoWeekday(preview.posts[preview.posts.length - 1].date as string)}.` : ''}
+                {preview.skipped ? `${preview.skipped} already-posted rows are skipped. ` : ''}
+                {preview.replaced ? `${preview.replaced} unposted posts from the older plan are removed. ` : ''}
+                {preview.posts.length && preview.posts[0].date ? ` First: ${fmtIsoWeekday(preview.posts[0].date as string)}. Last: ${fmtIsoWeekday(preview.posts[preview.posts.length - 1].date as string)}.` : ''}
               </Callout>
               <div className="table-wrap" style={{ maxHeight: 360 }}>
                 <table className="table">

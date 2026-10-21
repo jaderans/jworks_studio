@@ -1,0 +1,176 @@
+/* JoshWorks Studio — jobs, money and documents, on the same tokens as app.css.
+   Job status colours reuse the post status colours so a status reads the same everywhere. */
+:root {
+  --job-inquiry: var(--line-strong); --job-not-started: var(--st-todo); --job-in-progress: var(--teal);
+  --job-review: var(--yellow); --job-revisions: var(--warn); --job-completed: var(--good);
+  --job-blocked: var(--bad); --job-cancelled: var(--line-strong);
+}
+
+/* ---------- shared utilities (used across lazy-loaded pages) ---------- */
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.dot-title { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.dot-title::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--teal); flex: none; }
+.dot-title.bad::before { background: var(--bad); }
+.dot-title.bad { color: var(--bad); }
+.pre-wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+.center-text { text-align: center; justify-items: center; }
+.big { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.01em; line-height: 1.2; overflow-wrap: anywhere; }
+.page.wide { max-width: 1600px; }
+@media (min-width: 1800px) { .page.wide { max-width: 1760px; } }
+
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
+.filters .search { flex: 1 1 220px; min-width: 0; }
+.filters > .input, .filters > select { flex: 0 1 auto; max-width: 100%; }
+
+.attention { border-color: var(--yellow); box-shadow: inset 4px 0 0 var(--yellow); }
+.actions-cell { white-space: nowrap; text-align: right; width: 1%; }
+.actions-cell > * + * { margin-left: 4px; }
+
+details.disclosure > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 32px; }
+details.disclosure > summary::-webkit-details-marker { display: none; }
+details.disclosure > summary::before { content: ''; width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform 0.15s; flex: none; margin-right: 2px; }
+details.disclosure[open] > summary::before { transform: rotate(45deg); }
+
+.scroll-x { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.scroll-x::-webkit-scrollbar { display: none; }
+.scroll-x > * { flex: none; }
+
+.kv-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; align-items: baseline; }
+.kv-grid > span:nth-child(odd) { color: var(--muted); font-size: 0.85rem; font-weight: 700; }
+.kv-grid.small > span:nth-child(odd) { font-size: 0.8rem; }
+
+/* ---------- job status ---------- */
+.sdot.job-inquiry { background: var(--job-inquiry); } .sdot.job-not-started { background: var(--job-not-started); }
+.sdot.job-in-progress { background: var(--job-in-progress); } .sdot.job-review { background: var(--job-review); }
+.sdot.job-revisions { background: var(--job-revisions); } .sdot.job-completed { background: var(--job-completed); }
+.sdot.job-blocked { background: var(--job-blocked); } .sdot.job-cancelled { background: var(--job-cancelled); }
+.status-text { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 700; white-space: nowrap; }
+.status-text::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--job-not-started); flex: none; }
+.status-text.job-inquiry::before { background: var(--job-inquiry); } .status-text.job-in-progress::before { background: var(--job-in-progress); }
+.status-text.job-review::before { background: var(--job-review); } .status-text.job-revisions::before { background: var(--job-revisions); }
+.status-text.job-completed::before { background: var(--job-completed); } .status-text.job-blocked::before { background: var(--job-blocked); }
+.status-text.job-cancelled { color: var(--muted); text-decoration: line-through; }
+.status-text.job-cancelled::before { background: var(--job-cancelled); }
+
+/* ---------- job board ---------- */
+.job-board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(260px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 8px; align-items: start; scroll-snap-type: x proximity; }
+.job-col { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-lg); display: grid; align-content: start; min-height: 260px; min-width: 0; scroll-snap-align: start; }
+.job-col.over { outline: 2px dashed var(--teal); outline-offset: -3px; }
+.job-col-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px 6px; font-size: 0.86rem; position: sticky; top: 0; }
+.job-col-head .count { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 800; }
+.job-col-body { display: grid; gap: 8px; padding: 4px 10px 10px; align-content: start; }
+@media (max-width: 640px) {
+  .job-board { grid-auto-columns: 86%; }
+  /* Touch screens can't drag cards, so empty columns only take up a screen of swiping. */
+  .job-col:has(.job-col-body:empty) { display: none; }
+}
+
+.job-card { display: grid; gap: 6px; padding: 10px 11px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-align: left; cursor: pointer; min-width: 0; width: 100%; font: inherit; }
+.job-card:hover { border-color: var(--teal); }
+.job-card:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.job-card[draggable='true'] { cursor: grab; }
+.job-card.hot { box-shadow: inset 3px 0 0 var(--bad); }
+.job-card-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.job-title { font-size: 0.9rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.job-card-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.job-card .balance { color: var(--warn); }
+.job-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+
+.due-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 0.74rem; font-weight: 800; color: var(--muted); white-space: nowrap; }
+.due-chip.warn { color: var(--warn); }
+.due-chip.bad { color: var(--bad); }
+
+.mini-row { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; min-height: 44px; padding: 8px 6px; border: 0; border-top: 1px solid var(--line); background: none; color: var(--ink); text-align: left; cursor: pointer; font: inherit; font-size: 0.88rem; border-radius: 8px; }
+.mini-row:hover { background: var(--surface-2); }
+
+.link-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto auto; gap: 6px; align-items: center; }
+.split-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.split-row > select, .split-row > .input { flex: 1 1 160px; min-width: 0; width: auto; }
+@media (max-width: 620px) {
+  .link-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .link-row > .input:first-child { grid-column: 1 / -1; }
+}
+
+/* ---------- price lines (quotes, contracts, jobs, invoices) ---------- */
+.price-lines { display: grid; gap: 8px; }
+.price-line { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); }
+.price-line .pl-label { flex: 1 1 200px; min-width: 0; }
+.price-line .pl-qty { flex: 0 0 96px; }
+.price-line .pl-price { flex: 0 0 150px; }
+.price-line .pl-pct { flex: 0 1 auto; color: var(--ink-2); font-weight: 700; }
+.price-line .pl-flag { flex: none; white-space: nowrap; }
+.price-line .pl-flag label { white-space: nowrap; }
+@media (max-width: 620px) {
+  .price-line { flex-wrap: wrap; }
+  .price-line .pl-label { flex-basis: 100%; }
+  .price-line .pl-price { flex: 1 1 120px; }
+  .price-line .pl-pct { flex: 1 1 100%; order: 1; }
+}
+.catalog-row { gap: 14px; }
+.catalog-row .main-text span { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.catalog-price { display: grid; justify-items: end; text-align: right; white-space: nowrap; flex: none; }
+
+/* ---------- contract templates ---------- */
+.template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.template-card { display: grid; gap: 4px; align-content: start; padding: 12px 14px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-align: left; cursor: pointer; font: inherit; min-width: 0; position: relative; overflow: hidden; }
+.template-card::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--brand-bar); }
+.template-card:hover { border-color: var(--teal); }
+.template-card.on { border-color: var(--teal); box-shadow: 0 0 0 2px var(--teal-soft); }
+.template-card.muted { opacity: 0.6; }
+
+/* ---------- payouts ---------- */
+.payout-card .kv-grid { grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr); }
+.pay-to { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; border-radius: var(--r-sm); background: var(--sunk); min-width: 0; }
+.pay-to > :nth-child(2) { flex: 1; min-width: 0; }
+.qr-preview { width: min(220px, 70vw); height: auto; aspect-ratio: 1; object-fit: contain; border-radius: var(--r-sm); background: #fff; padding: 6px; border: 1px solid var(--line); }
+.qr-preview.sm { width: 56px; padding: 2px; }
+
+/* ---------- charts ---------- */
+.target-mark { stroke: var(--ink); stroke-width: 2; stroke-dasharray: 3 3; opacity: 0.7; }
+
+/* ---------- tables that become cards on phones ---------- */
+@media (max-width: 640px) {
+  .table-wrap:has(.cards-on-phone) { border: 0; background: none; overflow: visible; }
+  .table.cards-on-phone, .table.cards-on-phone tbody, .table.cards-on-phone tr, .table.cards-on-phone td { display: block; width: 100%; }
+  .table.cards-on-phone thead { display: none; }
+  .table.cards-on-phone tr { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 6px 12px; margin-bottom: 8px; }
+  .table.cards-on-phone td { border: 0; padding: 5px 0; display: flex; gap: 12px; justify-content: space-between; align-items: baseline; text-align: right; min-width: 0; }
+  .table.cards-on-phone td > * { min-width: 0; }
+  .table.cards-on-phone td::before { content: attr(data-label); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 800; text-align: left; flex: none; }
+  .table.cards-on-phone td:first-child { display: block; text-align: left; font-size: 0.95rem; padding-top: 8px; }
+  .table.cards-on-phone td:first-child::before { display: none; }
+  .table.cards-on-phone td:not([data-label]):not(:first-child)::before { content: none; }
+  .table.cards-on-phone td.actions-cell { width: 100%; justify-content: flex-end; border-top: 1px solid var(--line); margin-top: 4px; padding-top: 8px; }
+  .table.cards-on-phone tr.click:hover td { background: none; }
+  .table.cards-on-phone tfoot { display: block; }
+  .table.cards-on-phone tfoot tr { display: flex; justify-content: space-between; }
+}
+
+/* While a dialog is open, the newest toast sits over its title bar and clicks pass through it,
+   so it never covers the dialog's buttons or fields. Its action link still works. */
+body[data-dialog-open='true'] .toasts { top: calc(10px + env(safe-area-inset-top, 0px)); bottom: auto; }
+body[data-dialog-open='true'] .toast { pointer-events: none; }
+body[data-dialog-open='true'] .toast button { pointer-events: auto; }
+body[data-dialog-open='true'] .toast:not(:last-child) { display: none; }
+
+/* ---------- sign-in ---------- */
+.btn.google-btn { background: #fff; color: #1f1f1f; border: 1px solid #747775; justify-content: center; gap: 10px; font-weight: 700; }
+.btn.google-btn:hover { background: #F2F2F2; }
+.or-line { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 0.8rem; font-weight: 700; }
+.or-line::before, .or-line::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
+/* Firebase email links: confirm the email, set a new password. */
+.auth-page { min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; background: var(--bg); background-image: var(--brand-glow); }
+.auth-card { width: min(460px, 100%); padding: 26px 24px; gap: 16px; position: relative; overflow: hidden; }
+.auth-card::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 5px; background: linear-gradient(90deg, #167D88 0 60%, #ECC039 60% 100%); }
+.auth-card h1 { font-size: 1.45rem; }
+.auth-brand { display: flex; align-items: flex-end; gap: 8px; }
+.auth-brand img { height: 40px; width: auto; }
+.auth-brand .brand-sub { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.22em; text-transform: uppercase; color: var(--teal); padding-bottom: 5px; }
+
+/* Settings → Money: one row per monthly target. */
+.target-row { display: grid; grid-template-columns: minmax(150px, 190px) minmax(0, 1fr) auto minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+@media (max-width: 620px) {
+  .target-row { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .target-row > input[type='month'] { grid-column: 1 / -1; }
+}

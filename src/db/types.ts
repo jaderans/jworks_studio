@@ -252,16 +252,26 @@ export interface Metric extends Syncable {
   notes: string;
 }
 
-export type ClientStage = 'lead' | 'discovery' | 'proposal' | 'contract' | 'onboarding' | 'strategy' | 'active' | 'paused' | 'ended' | 'lost';
+/**
+ * inquiry → quoted → booked → active → completed (or lost).
+ * Older records may still hold the first app's SMM stages; `normalizeStage` maps them.
+ */
+export type ClientStage = 'inquiry' | 'quoted' | 'booked' | 'active' | 'completed' | 'lost';
+export type LegacyClientStage = 'lead' | 'discovery' | 'proposal' | 'contract' | 'onboarding' | 'strategy' | 'paused' | 'ended';
+
+export type ClientKind = 'business' | 'student-org' | 'school' | 'individual' | 'government';
 
 export interface Client extends Syncable {
   name: string;
+  /** Business, student org, school… Sets which price tier quotes start from. */
+  kind?: ClientKind;
   industry: string;
   contactName: string;
   email: string;
   phone: string;
   location: string;
-  stage: ClientStage;
+  stage: ClientStage | LegacyClientStage;
+  /** Where they found us: Messenger, Facebook, referral, walk-in… */
   source: string;
   platforms: PlatformKey[];
   handles: Partial<Record<PlatformKey, string>>;
@@ -287,12 +297,16 @@ export interface Deliverable {
   role: string;
 }
 
+export type Audience = 'business' | 'student' | 'any';
+
+/** One line of the price list: a package, a single item, or an add-on. */
 export interface Package extends Syncable {
   kind: 'smm' | 'design' | 'addon';
   name: string;
   tagline: string;
+  /** For unit 'percent', the percent × 100 (25% → 2500). */
   price: Cents;
-  unit: 'month' | 'project' | 'piece' | 'hour' | 'percent';
+  unit: 'month' | 'project' | 'piece' | 'hour' | 'percent' | 'participant';
   platforms: PlatformKey[];
   deliverables: Deliverable[];
   includes: string[];
@@ -302,6 +316,15 @@ export interface Package extends Syncable {
   active: 0 | 1;
   sort: number;
   notes: string;
+  /** Price list section, e.g. "Branding", "Merch", "Yearbook". */
+  category?: string;
+  audience?: Audience;
+  /** Student-org price, when it differs from the business price. */
+  studentPrice?: Cents | null;
+  /** e.g. "7–14 days". */
+  turnaround?: string;
+  /** Revision rounds included. */
+  revisions?: number;
 }
 
 export interface ProposalItem {
@@ -312,8 +335,11 @@ export interface ProposalItem {
   unit: Package['unit'];
   /** Months for monthly items. */
   months: number;
+  /** A package line: percentage add-ons (rush, revisions, source files…) are worked out on these lines. */
+  base?: boolean;
 }
 
+/** A quote (called a proposal in the first version of the app). */
 export interface Proposal extends Syncable {
   number: string;
   clientId: string | null;
@@ -330,6 +356,10 @@ export interface Proposal extends Syncable {
   status: 'draft' | 'sent' | 'won' | 'lost';
   intro: string;
   notes: string;
+  /** Peso discount on the one-off work (a promo code, a bulk discount). */
+  discountAmount?: Cents;
+  /** The job this quote turned into. */
+  jobId?: string | null;
 }
 
 export interface ContractSection {
@@ -338,6 +368,9 @@ export interface ContractSection {
   body: string;
   on: boolean;
 }
+
+/** Which brand-kit letterhead a document is printed on. */
+export type FrameKey = 'general' | 'merch' | 'web' | 'logo';
 
 export interface Contract extends Syncable {
   number: string;
@@ -350,6 +383,203 @@ export interface Contract extends Syncable {
   sections: ContractSection[];
   signedAt: number | null;
   notes: string;
+  /** Set on contracts made from a contract template (the second version of the app). */
+  templateId?: string | null;
+  title?: string;
+  subtitle?: string;
+  frame?: FrameKey;
+  /** The chosen package(s) and add-ons, priced like a quote. */
+  items?: ProposalItem[];
+  discountAmount?: Cents;
+  /** Answers to the template's brief or questionnaire. */
+  brief?: { q: string; a: string }[];
+  rush?: boolean;
+  /** Percent of the total due on signing (50 by default). */
+  downPct?: number;
+  jobId?: string | null;
+}
+
+/** A contract type from the studio's v1.0 contract set, e.g. "Merch Design". */
+export interface ContractTemplate extends Syncable {
+  name: string;
+  /** Line under the title, e.g. "Logo design, brand systems & visual identity". */
+  tagline: string;
+  /** Pricing tier line, e.g. "Business / Commercial". */
+  subtitle: string;
+  /** Extra line under the phases (e.g. which phases apply to which part). */
+  phasesNote: string;
+  frame: FrameKey;
+  /** Price list sections whose packages and add-ons this contract offers. */
+  categories: string[];
+  audience: Audience;
+  welcome: string;
+  /** "This Agreement Covers: …" */
+  covers: string;
+  phases: { title: string; text: string }[];
+  briefTitle: string;
+  brief: string[];
+  sections: ContractSection[];
+  /** Client agreement statement points. */
+  agreement: string[];
+  active: 0 | 1;
+  sort: number;
+}
+
+// ----- the studio's work and money -----
+
+export type JobType =
+  | 'Branding' | 'General' | 'Merch' | '3D Model' | 'Video Editing' | 'Campaign' | 'SMM / Retainer' | 'Pop-up / Stickers'
+  | 'Publication' | 'Web' | 'Motion' | 'Training';
+
+export type JobStatus = 'inquiry' | 'not-started' | 'in-progress' | 'review' | 'revisions' | 'completed' | 'blocked' | 'cancelled';
+
+export type Priority = 'low' | 'med' | 'high';
+
+/**
+ * One commission (a row of the commission tracker): the plan, set by the owner
+ * or a manager. The money is in JobMoney; day-to-day progress is in JobProgress,
+ * which designers update.
+ */
+export interface Job extends Syncable {
+  /** COM-001… */
+  number: string;
+  title: string;
+  type: JobType;
+  clientId: string | null;
+  /** As written in the tracker, kept when the client isn't in Clients yet. */
+  clientName: string;
+  priority: Priority;
+  startDate: string;
+  dueDate: string;
+  rush: boolean;
+  /** Who works on it (members). */
+  designers: string[];
+  lead: string | null;
+  revisionsIncluded: number;
+  brief: string;
+  /** Where the inquiry came from (Messenger, Facebook, referral…). */
+  source: string;
+  /** Inquiry details: the budget the client mentioned. */
+  budgetNote: string;
+}
+
+/** A job's progress, kept apart so a designer's update never overwrites the plan. Its id is the job's id. */
+export interface JobProgress extends Syncable {
+  status: JobStatus;
+  completedOn: string;
+  revisionsUsed: number;
+  /** Delivery checklist: item id → done. */
+  checklist: Record<string, boolean>;
+  /** Drive folder, final files… */
+  links: { label: string; url: string }[];
+  notes: string;
+}
+
+/** A job with its progress, as screens show it. */
+export type JobView = Job & Omit<JobProgress, keyof Syncable> & { progressAt: number };
+
+export interface SplitShare {
+  memberId: string;
+  /** 0–100. */
+  pct: number;
+}
+
+/** The money side of a job: owner and managers only. Its id is the job's id. */
+export interface JobMoney extends Syncable {
+  total: Cents;
+  /** Price lines from the quote or contract (package, add-ons). */
+  items: ProposalItem[];
+  discountAmount: Cents;
+  /** Standard deduction / processing fee taken before the team split (5%). */
+  deductionPct: number;
+  split: SplitShare[];
+  /** Tax withheld by the client (Form 2307). */
+  taxWithheld: Cents;
+  form2307: 'yes' | 'no' | 'na';
+  /** Tracker invoice no., when it came from the commission tracker. */
+  invoiceNo: string;
+  notes: string;
+}
+
+export type PayMethod = 'GCash' | 'Mari Bank' | 'Union Bank' | 'On Hand' | 'Bank transfer' | 'PayPal' | 'Wise' | 'Other';
+
+/** Money a client paid. */
+export interface Payment extends Syncable {
+  jobId: string | null;
+  invoiceId: string | null;
+  clientId: string | null;
+  amount: Cents;
+  date: string;
+  method: PayMethod;
+  reference: string;
+  kind: 'down' | 'final' | 'partial' | 'full';
+  /** Acknowledgment receipt number, AR-0001-2026. */
+  receiptNo: string;
+  note: string;
+}
+
+/** A designer's share of one client payment: payment × (1 − deduction) × their split. */
+export interface Earning extends Syncable {
+  memberId: string;
+  jobId: string;
+  paymentId: string;
+  amount: Cents;
+  date: string;
+}
+
+/** Money actually sent to a designer. */
+export interface Payout extends Syncable {
+  memberId: string;
+  amount: Cents;
+  date: string;
+  method: string;
+  reference: string;
+  note: string;
+}
+
+/** Where a designer gets paid. Its id is the member's id. */
+export interface PayoutAccount extends Syncable {
+  method: string;
+  accountName: string;
+  accountNumber: string;
+  /** Shrunk QR code image (data URL), or ''. */
+  qrImage: string;
+  notes: string;
+}
+
+export interface InvoiceItem {
+  label: string;
+  qty: number;
+  /** Line amount (already × qty). */
+  amount: Cents;
+  addOn: boolean;
+}
+
+export interface Invoice extends Syncable {
+  /** JW-0032-2026 */
+  number: string;
+  jobId: string | null;
+  clientId: string | null;
+  issueDate: string;
+  dueDate: string;
+  billTo: { name: string; contact: string; address: string; emailPhone: string };
+  items: InvoiceItem[];
+  discountLabel: string;
+  discountAmount: Cents;
+  /** Payments received before this invoice when it has no job (a job's payments are counted automatically). */
+  paidManual: Cents;
+  status: 'draft' | 'sent' | 'void';
+  sentAt: number | null;
+  notes: string;
+}
+
+export interface Expense extends Syncable {
+  date: string;
+  category: string;
+  amount: Cents;
+  vendor: string;
+  jobId: string | null;
+  note: string;
 }
 
 /** A weekly trend report: from the scheduled Claude routine (feed) or written in the app. */
@@ -403,6 +633,8 @@ export interface BusinessSettings {
   handles: Partial<Record<PlatformKey, string>>;
   /** Where client payments go, printed on proposals: "GCash 09xx…, BPI …". */
   paymentDetails: string;
+  /** Person who signs documents for the studio, e.g. "Joshua David G. Ranin, Head Designer". */
+  signatory?: string;
 }
 
 export interface BrandVoice {
@@ -482,7 +714,71 @@ export interface SecuritySettings {
   pinSalt: string | null;
 }
 
-export type SettingKey = 'business' | 'voice' | 'cadence' | 'checklist' | 'rates' | 'ai' | 'contract' | 'security';
+export interface MonthlyTarget {
+  /** YYYY-MM */
+  month: string;
+  low: Cents;
+  high: Cents;
+}
+
+export interface MoneySettings {
+  /** Standard deduction / processing fee before the team split, in percent (5). */
+  deductionPct: number;
+  /** Invoice numbers: JW-0032-2026 → prefix "JW", next 32. */
+  invoicePrefix: string;
+  invoiceNext: number;
+  receiptNext: number;
+  /** Days an invoice stays valid / is due. */
+  invoiceDays: number;
+  /** Percent due on signing. */
+  downPct: number;
+  invoiceNotes: string[];
+  /** A job at or above this total counts as a big project. */
+  bigProject: Cents;
+  targets: MonthlyTarget[];
+  /** The default split for new jobs (empty = the lead designer gets 100%). */
+  defaultSplit: SplitShare[];
+  expenseCategories: string[];
+  /** Set once the price list has been moved to the studio catalog. */
+  catalogVersion: number;
+}
+
+export interface BirSettings {
+  /** First day receipts count for BIR (registration date). */
+  startDate: string;
+  /** Uses the 8% income tax option. */
+  eightPct: boolean;
+  /** Tax-free amount each year under the 8% option. */
+  exemption: Cents;
+  /** Non-VAT ceiling over 12 months. */
+  vatCeiling: Cents;
+}
+
+/** Where clients pay JoshWorks: printed on invoices and contracts. */
+export interface StudioPayMethod {
+  id: string;
+  label: string;
+  accountName: string;
+  accountNumber: string;
+  /** Shrunk QR image (data URL), or ''. */
+  qrImage: string;
+  on: boolean;
+}
+
+export interface EmailSettings {
+  /** EmailJS service, template and public key. */
+  serviceId: string;
+  templateId: string;
+  publicKey: string;
+  fromName: string;
+  replyTo: string;
+  /** Email the owner is copied on (BCC in the EmailJS template). */
+  copyTo: string;
+}
+
+export type SettingKey =
+  | 'business' | 'voice' | 'cadence' | 'checklist' | 'rates' | 'ai' | 'contract' | 'security'
+  | 'money' | 'bir' | 'payMethods' | 'email';
 
 // ----- device-only -----
 

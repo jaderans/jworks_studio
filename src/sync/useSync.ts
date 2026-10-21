@@ -17,6 +17,8 @@ export interface SyncStatus {
   needsVerification: boolean;
   access: CloudAccess | null;
   ws: string | null;
+  /** Changes the cloud refused (usually: the security rules need republishing). They stay on the device and are retried. */
+  refused: number;
 }
 
 let status: SyncStatus = {
@@ -28,6 +30,7 @@ let status: SyncStatus = {
   needsVerification: false,
   access: null,
   ws: null,
+  refused: 0,
 };
 const listeners = new Set<() => void>();
 

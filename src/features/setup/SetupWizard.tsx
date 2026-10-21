@@ -57,13 +57,13 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
           <img src={logo} alt="" width={56} height={56} style={{ borderRadius: 14 }} />
           <div>
             <span className="eyebrow">Welcome</span>
-            <h1>JoshWorks Campaigns</h1>
+            <h1>JoshWorks Studio</h1>
           </div>
         </div>
 
         {step === 'welcome' ? (
           <div className="stack">
-            <p className="muted">Plan content on your weekly themes, run campaigns, follow trends, ask Claude for captions and ideas, and manage SMM clients: packages, proposals, contracts and reports. It works offline and syncs the team when you turn it on.</p>
+            <p className="muted">Run the studio in one place: jobs and deadlines, clients, quotes, contracts and invoices on the JoshWorks letterhead, payments and designer payouts, BIR, and the content calendar. It works offline and syncs the team when you turn it on.</p>
             <div className="grid-2">
               <button type="button" className="card pad-lg" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setStep('business')}>
                 <Megaphone size={28} className="teal" />

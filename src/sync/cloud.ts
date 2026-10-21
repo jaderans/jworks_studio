@@ -1,14 +1,15 @@
 import { deleteApp, initializeApp, type FirebaseApp } from 'firebase/app';
 import {
-  browserLocalPersistence, connectAuthEmulator, createUserWithEmailAndPassword, indexedDBLocalPersistence, initializeAuth, onAuthStateChanged,
-  sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signOut, type Auth, type User,
+  GoogleAuthProvider, browserLocalPersistence, browserPopupRedirectResolver, connectAuthEmulator, createUserWithEmailAndPassword, indexedDBLocalPersistence,
+  initializeAuth, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, signOut,
+  type ActionCodeSettings, type Auth, type User,
 } from 'firebase/auth';
 import {
   Timestamp, collection, connectFirestoreEmulator, deleteDoc, doc, getDoc, getDocs, initializeFirestore, memoryLocalCache, onSnapshot, query,
   serverTimestamp, setDoc, where, writeBatch, type Firestore, type Unsubscribe,
 } from 'firebase/firestore';
 import { liveQuery, type Subscription } from 'dexie';
-import { alive, db, SYNCED_TABLES, syncedTable, type SyncedTableName } from '../db/db';
+import { alive, db, MANAGER_TABLES, SYNCED_TABLES, syncedTable, type SyncedTableName } from '../db/db';
 import { getLocal, setLocal } from '../db/local';
 import { isNewer } from '../services/backup';
 import { setSyncStatus, type CloudAccess } from './useSync';
@@ -24,19 +25,21 @@ import type { AppRole, Member, Syncable } from '../db/types';
  */
 
 const CONTENT: readonly SyncedTableName[] = ['ideas', 'snippets', 'posts', 'comments', 'trends', 'hooks', 'reports', 'metrics'];
+/** Tables a designer receives only their own rows of, through their own listeners. */
+const OWN_ROWS: readonly SyncedTableName[] = ['earnings', 'payouts', 'payoutAccounts'];
 const READ: Record<AppRole, readonly SyncedTableName[]> = {
   owner: SYNCED_TABLES.filter((t) => t !== 'settings'),
   manager: SYNCED_TABLES.filter((t) => t !== 'settings'),
-  designer: ['members', 'clients', 'campaigns', 'funnels', ...CONTENT],
+  designer: ['members', 'clients', 'campaigns', 'funnels', 'jobs', 'jobProgress', ...CONTENT],
 };
 const WRITE: Record<AppRole, readonly SyncedTableName[]> = {
   owner: SYNCED_TABLES,
   manager: SYNCED_TABLES.filter((t) => t !== 'settings' && t !== 'members'),
-  designer: [...CONTENT, 'audit'],
+  designer: [...CONTENT, 'jobProgress', 'payoutAccounts', 'audit'],
 };
 const SETTINGS_READ: Record<AppRole, readonly string[]> = {
   owner: [],
-  manager: ['business', 'voice', 'cadence', 'checklist', 'rates', 'ai', 'contract'],
+  manager: ['business', 'voice', 'cadence', 'checklist', 'rates', 'ai', 'contract', 'money', 'bir', 'payMethods', 'email'],
   designer: ['business', 'voice', 'cadence', 'checklist', 'ai'],
 };
 
@@ -63,7 +66,7 @@ async function ensureFirebase(c: CloudConfig) {
   cfg = c;
   const { emulator, ...options } = c.firebase;
   fbApp = initializeApp(options, `jwcamp-${c.firebase.projectId}`);
-  auth = initializeAuth(fbApp, { persistence: [indexedDBLocalPersistence, browserLocalPersistence] });
+  auth = initializeAuth(fbApp, { persistence: [indexedDBLocalPersistence, browserLocalPersistence], popupRedirectResolver: browserPopupRedirectResolver });
   fs = initializeFirestore(fbApp, { localCache: memoryLocalCache(), ignoreUndefinedProperties: true });
   if (emulator) {
     connectAuthEmulator(auth, `http://${emulator.host}:${emulator.authPort}`, { disableWarnings: true });
@@ -134,10 +137,24 @@ const need = () => {
   return { auth, fs, cfg };
 };
 
+/** Firebase's email links come back to this app (its "Email confirmed" page), not a generic Firebase page. */
+const backHere = (): ActionCodeSettings => ({ url: `${window.location.origin}${window.location.pathname}` });
+
+/** Send with the link back to the app; if this address isn't an authorized domain yet, send without it. */
+async function withContinue(send: (s?: ActionCodeSettings) => Promise<void>): Promise<void> {
+  try {
+    await send(backHere());
+  } catch (e) {
+    const code = (e as { code?: string })?.code ?? '';
+    if (code === 'auth/unauthorized-continue-uri' || code === 'auth/invalid-continue-uri') await send();
+    else throw e;
+  }
+}
+
 export async function signUpCloud(email: string, password: string): Promise<void> {
   const { auth } = need();
   const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-  await sendEmailVerification(cred.user).catch(() => undefined);
+  await withContinue((s) => sendEmailVerification(cred.user, s)).catch(() => undefined);
 }
 
 export async function signInCloud(email: string, password: string): Promise<void> {
@@ -145,9 +162,25 @@ export async function signInCloud(email: string, password: string): Promise<void
   await signInWithEmailAndPassword(auth, email.trim(), password);
 }
 
+/** Sign in with Google. Google has already checked the email, so no confirmation email is needed. */
+export async function signInWithGoogle(loginHint?: string): Promise<void> {
+  const { auth } = need();
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters(loginHint ? { prompt: 'select_account', login_hint: loginHint } : { prompt: 'select_account' });
+  try {
+    await signInWithPopup(auth, provider);
+  } catch (e) {
+    // Some phones (and installed apps) can't open the Google window: go to Google and come back instead.
+    const code = (e as { code?: string })?.code ?? '';
+    if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') await signInWithRedirect(auth, provider);
+    else throw e;
+  }
+}
+
 export async function resendVerification(): Promise<void> {
   const { auth } = need();
-  if (auth.currentUser) await sendEmailVerification(auth.currentUser);
+  const u = auth.currentUser;
+  if (u) await withContinue((s) => sendEmailVerification(u, s));
 }
 
 /** After clicking the email link: refresh the account so the app sees it's verified. */
@@ -163,7 +196,7 @@ export async function checkVerified(): Promise<boolean> {
 
 export async function resetPassword(email: string): Promise<void> {
   const { auth } = need();
-  await sendPasswordResetEmail(auth, email.trim());
+  await withContinue((s) => sendPasswordResetEmail(auth, email.trim(), s));
 }
 
 export async function signOutCloud(): Promise<void> {
@@ -182,6 +215,12 @@ export function friendlyError(e: unknown): string {
     'auth/invalid-email': 'That email address doesn’t look right.',
     'auth/network-request-failed': 'No connection. Try again when you’re online.',
     'auth/too-many-requests': 'Too many tries. Wait a few minutes, then try again.',
+    'auth/popup-blocked': 'The browser blocked the Google window. Allow pop-ups for this site, or sign in with email.',
+    'auth/popup-closed-by-user': 'The Google window was closed before signing in.',
+    'auth/cancelled-popup-request': 'The Google window was closed before signing in.',
+    'auth/unauthorized-domain': 'This site isn’t allowed to sign in yet. In Firebase, add it under Authentication → Settings → Authorized domains.',
+    'auth/operation-not-allowed': 'That sign-in method is off. Turn it on in Firebase → Authentication → Sign-in method.',
+    'auth/account-exists-with-different-credential': 'This email already has an account. Sign in with its password first, then use Google next time.',
     'permission-denied': 'This account isn’t allowed to do that. Check its role in Team.',
     unavailable: 'Can’t reach the cloud right now. Your changes keep saving on this device.',
   };
@@ -261,7 +300,15 @@ async function onUser(user: User | null) {
     if (a.memberId) await setLocal('currentMemberId', a.memberId);
     await setLocal('setupDone', true);
   }
-  setSyncStatus({ access: a, message: 'Syncing…' });
+  // A new role or person on this device reads everything again from the start.
+  const who = `${a.role}:${a.memberId ?? ''}`;
+  if ((await getLocal<string>('lastPullFor', '')) !== who) {
+    lastPull = {};
+    await setLocal('lastPull', {});
+    await setLocal('lastPullFor', who);
+  }
+  if (a.role === 'designer') await purgeForDesigner(a.memberId);
+  setSyncStatus({ access: a, message: 'Syncing…', refused: 0 });
   startListeners(a);
   pendingSub?.unsubscribe();
   let lastCount = -1;
@@ -282,9 +329,22 @@ async function countPending(): Promise<number> {
   return n;
 }
 
+/**
+ * A designer's device may hold money and other people's pay from when it was
+ * used by the owner or a manager. Clear what a designer doesn't receive.
+ */
+async function purgeForDesigner(memberId: string | null) {
+  for (const t of MANAGER_TABLES) await syncedTable(t).clear();
+  await db.earnings.filter((r) => r.memberId !== memberId).delete();
+  await db.payouts.filter((r) => r.memberId !== memberId).delete();
+  await db.payoutAccounts.filter((r) => r.id !== memberId).delete();
+  const keep = new Set(SETTINGS_READ.designer);
+  await db.settings.filter((r) => !keep.has(r.id)).delete();
+}
+
 function startListeners(a: CloudAccess) {
   const { fs, cfg } = need();
-  const tables = READ[a.role] ?? [];
+  const tables = (READ[a.role] ?? []).filter((t) => a.role !== 'designer' || !OWN_ROWS.includes(t));
   for (const t of tables) {
     const col = collection(fs, 'camp', cfg.ws, `t_${t}`);
     const q = query(col, where('_srv', '>=', Timestamp.fromMillis(lastPull[t] ?? 0)));
@@ -293,6 +353,31 @@ function startListeners(a: CloudAccess) {
         q,
         (snap) => void applyRemote(t, snap.docChanges().filter((c) => c.type !== 'removed').map((c) => ({ id: c.doc.id, data: c.doc.data() }))),
         (err) => setSyncStatus({ state: 'error', message: `${friendlyError(err)} (${t})` }),
+      ),
+    );
+  }
+  // A designer's own pay: only rows with their memberId (the rules allow nothing else).
+  if (a.role === 'designer' && a.memberId) {
+    for (const t of ['earnings', 'payouts'] as const) {
+      const q = query(collection(fs, 'camp', cfg.ws, `t_${t}`), where('memberId', '==', a.memberId));
+      listeners.push(
+        onSnapshot(
+          q,
+          (snap) => {
+            const changes = snap.docChanges();
+            void applyRemote(t, changes.filter((c) => c.type !== 'removed').map((c) => ({ id: c.doc.id, data: c.doc.data() })), null);
+            const gone = changes.filter((c) => c.type === 'removed').map((c) => c.doc.id);
+            if (gone.length) void syncedTable(t).bulkDelete(gone);
+          },
+          () => undefined,
+        ),
+      );
+    }
+    listeners.push(
+      onSnapshot(
+        doc(fs, 'camp', cfg.ws, 't_payoutAccounts', a.memberId),
+        (d) => d.exists() && void applyRemote('payoutAccounts', [{ id: d.id, data: d.data() }], null),
+        () => undefined,
       ),
     );
   }
@@ -310,7 +395,7 @@ function startListeners(a: CloudAccess) {
       listeners.push(
         onSnapshot(
           doc(fs, 'camp', cfg.ws, 't_settings', key),
-          (d) => d.exists() && void applyRemote('settings', [{ id: d.id, data: d.data() }]),
+          (d) => d.exists() && void applyRemote('settings', [{ id: d.id, data: d.data() }], null),
           () => undefined,
         ),
       );
@@ -324,9 +409,13 @@ function persistLastPull() {
   persistTimer = window.setTimeout(() => void setLocal('lastPull', lastPull), 800);
 }
 
-async function applyRemote(table: SyncedTableName, docs: { id: string; data: Record<string, unknown> }[]) {
+/**
+ * Apply records from the cloud. `pullKey` is the bookmark to advance; single-doc
+ * and filtered listeners pass null so they never move a full listener's bookmark.
+ */
+async function applyRemote(table: SyncedTableName, docs: { id: string; data: Record<string, unknown> }[], pullKey: SyncedTableName | null = table) {
   if (!docs.length) return;
-  let maxSrv = lastPull[table] ?? 0;
+  let maxSrv = pullKey ? (lastPull[pullKey] ?? 0) : 0;
   const incoming: Syncable[] = docs.map(({ id, data }) => {
     const { _srv, _by, ...rest } = data as { _srv?: unknown; _by?: unknown } & Record<string, unknown>;
     void _by;
@@ -334,14 +423,21 @@ async function applyRemote(table: SyncedTableName, docs: { id: string; data: Rec
     return { ...(rest as unknown as Syncable), id };
   });
   const t = syncedTable(table);
+  let changed: Syncable[] = [];
   await db.transaction('rw', t, async () => {
     const locals = (await t.bulkGet(incoming.map((r) => r.id))) as (Syncable | undefined)[];
     const put = incoming.filter((r, i) => isNewer(r, locals[i])).map((r) => ({ ...r, _sync: 0 as const }));
     if (put.length) await t.bulkPut(put);
+    changed = put;
   });
-  if (maxSrv > (lastPull[table] ?? 0)) {
-    lastPull[table] = maxSrv;
+  if (pullKey && maxSrv > (lastPull[pullKey] ?? 0)) {
+    lastPull[pullKey] = maxSrv;
     persistLastPull();
+  }
+  // Payments or a split changed on another device: owner and manager devices bring the designers' earnings up to date.
+  if (changed.length && (table === 'payments' || table === 'jobMoney') && access && access.role !== 'designer') {
+    const jobIds = [...new Set(changed.map((r) => (table === 'payments' ? ((r as unknown as { jobId: string | null }).jobId ?? '') : r.id)).filter(Boolean))];
+    if (jobIds.length) void import('../services/money').then((m) => m.recomputeEarnings(jobIds)).catch(() => undefined);
   }
   setSyncStatus({ state: 'ok', lastSyncAt: Date.now(), message: 'Up to date' });
 }
@@ -362,6 +458,9 @@ async function markSynced(table: SyncedTableName, rows: Syncable[]) {
   });
 }
 
+/** Refused uploads this round (kept on the device and retried). */
+let refusedIds = new Set<string>();
+
 async function pushOnce(): Promise<number> {
   const { fs, cfg, auth } = need();
   const a = access;
@@ -371,7 +470,7 @@ async function pushOnce(): Promise<number> {
   let pushed = 0;
   for (const t of SYNCED_TABLES) {
     const table = syncedTable(t);
-    const rows = (await table.where('_sync').equals(1).limit(200).toArray()) as Syncable[];
+    const rows = ((await table.where('_sync').equals(1).limit(400).toArray()) as Syncable[]).filter((r) => !refusedIds.has(`${t}/${r.id}`)).slice(0, 200);
     if (!rows.length) continue;
     if (!writable.has(t)) {
       // This role can't change these in the cloud; keep them on this device only.
@@ -391,13 +490,23 @@ async function pushOnce(): Promise<number> {
         try {
           await setDoc(doc(fs, 'camp', cfg.ws, `t_${t}`, r.id), toRemote(r, uid));
           pushed++;
+          await markSynced(t, [r]);
         } catch (e2) {
           if (!isDenied(e2)) throw e2;
+          // A newer copy in the cloud wins: take it. Otherwise the rules refused it: keep it and try again later.
+          const remote = await getDoc(doc(fs, 'camp', cfg.ws, `t_${t}`, r.id)).catch(() => null);
+          const data = remote?.exists() ? (remote.data() as Syncable) : null;
+          if (data && (data.updatedAt ?? 0) >= (r.updatedAt ?? 0)) {
+            await applyRemote(t, [{ id: r.id, data: data as unknown as Record<string, unknown> }], null);
+            await markSynced(t, [r]);
+          } else {
+            refusedIds.add(`${t}/${r.id}`);
+          }
         }
-        await markSynced(t, [r]);
       }
     }
   }
+  setSyncStatus({ refused: refusedIds.size });
   return pushed;
 }
 
@@ -436,6 +545,8 @@ async function push() {
 }
 
 export async function syncNow(): Promise<void> {
+  // Try refused changes again (e.g. after the owner republished the rules).
+  refusedIds = new Set();
   if (auth?.currentUser && !access) await onUser(auth.currentUser);
   else await push();
 }

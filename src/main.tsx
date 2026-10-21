@@ -16,6 +16,7 @@ import '@fontsource/jetbrains-mono/latin-400.css';
 import '@fontsource/jetbrains-mono/latin-500.css';
 import './styles/app.css';
 import './styles/campaigns.css';
+import './styles/studio.css';
 import { App } from './app/App';
 import { applyTheme, getTheme } from './lib/theme';
 

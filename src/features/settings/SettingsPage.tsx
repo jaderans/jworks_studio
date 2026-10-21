@@ -14,8 +14,10 @@ import { setOwnerPin } from '../../services/team';
 import { downloadBlob, readFileAsText } from '../../lib/files';
 import { DOW_NAMES } from '../../lib/time';
 import { ImportSection } from './ImportSection';
+import { TrackerImport } from './TrackerImport';
 import { CloudSection } from './CloudSection';
 import { AiSection } from './AiSection';
+import { BirSection, EmailSection, MoneySection, PayMethodsSection } from './StudioSections';
 import type { BrandVoice, BusinessSettings, CadenceSettings, ChecklistItem, PlatformKey } from '../../db/types';
 
 export default function SettingsPage() {
@@ -29,12 +31,24 @@ export default function SettingsPage() {
   }, [location.hash]);
   return (
     <div className="page narrow">
-      <PageHeader title="Settings" subtitle={owner ? 'Your business, voice, rhythm and the team’s connections.' : 'This device’s connections. The owner manages the rest.'} />
+      <PageHeader title="Settings" subtitle={owner ? 'Your business, money, email, content rhythm and the team’s connections.' : 'This device’s connections. The owner manages the rest.'} />
       {owner ? <BusinessSection /> : null}
+      {owner ? <MoneySection /> : null}
+      {owner ? <PayMethodsSection /> : null}
+      {owner ? <EmailSection /> : null}
+      {owner ? <BirSection /> : null}
       {owner ? <VoiceSection /> : null}
       {owner ? <RhythmSection /> : null}
       {owner ? <ChecklistSection /> : null}
       <AiSection />
+      {app.can('import') ? (
+        <section id="s-tracker" className="card pad-lg" style={{ scrollMarginTop: 80 }}>
+          <h2 className="row" style={{ gap: 8 }}>
+            <FileSpreadsheet size={22} className="teal" /> Import the commission tracker
+          </h2>
+          <TrackerImport />
+        </section>
+      ) : null}
       {app.can('import') ? (
         <section id="s-import" className="card pad-lg" style={{ scrollMarginTop: 80 }}>
           <h2 className="row" style={{ gap: 8 }}>
@@ -78,6 +92,7 @@ function BusinessSection() {
         {field('contact', 'Phone')}
         {field('email', 'Email')}
         {field('website', 'Website')}
+        {field('signatory', 'Signs documents as', 'e.g. Joshua Ranin, Head Designer')}
       </div>
       <Field label="Our pages" hint="Handles or links; used in reports and by the assistant.">
         <div className="form-grid">
@@ -89,7 +104,7 @@ function BusinessSection() {
           ))}
         </div>
       </Field>
-      <Field label="How clients pay you" htmlFor="bz-pay" hint="Printed on proposals and contracts, e.g. GCash 09xx xxx xxxx (Joshua R.), BPI 1234-5678-90.">
+      <Field label="Payment note (fallback)" htmlFor="bz-pay" hint="Printed only when no payment method below is turned on.">
         <TextArea id="bz-pay" rows={2} value={b.paymentDetails} onChange={(e) => setB({ ...b, paymentDetails: e.target.value })} />
       </Field>
       <div className="actions">

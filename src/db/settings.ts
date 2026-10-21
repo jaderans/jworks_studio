@@ -4,7 +4,11 @@ import { DEFAULT_CADENCE } from '../domain/calendar';
 import { DEFAULT_CHECKLIST } from '../domain/checklist';
 import { DEFAULT_RATES } from '../domain/pricing';
 import { DEFAULT_CONTRACT_SECTIONS } from '../domain/contract';
-import type { AiSettings, BrandVoice, BusinessSettings, CadenceSettings, ChecklistItem, ContractSection, RateSettings, SecuritySettings, SettingKey, SettingRow } from './types';
+import { DEFAULT_BIR, DEFAULT_MONEY, DEFAULT_PAY_METHODS } from '../domain/money';
+import type {
+  AiSettings, BirSettings, BrandVoice, BusinessSettings, CadenceSettings, ChecklistItem, ContractSection, EmailSettings, MoneySettings, RateSettings,
+  SecuritySettings, SettingKey, SettingRow, StudioPayMethod,
+} from './types';
 
 /** Settings shared by every device (they sync). */
 
@@ -14,10 +18,20 @@ export const DEFAULT_BUSINESS: BusinessSettings = {
   registration: 'DTI-registered',
   address: 'Iloilo City',
   contact: '',
-  email: '',
-  website: '',
-  handles: { tiktok: '@joshworks_onart' },
+  email: 'jworks1505@gmail.com',
+  website: 'facebook.com/artsbyjosh',
+  handles: { tiktok: '@joshworks_onart', facebook: '@artsbyjosh' },
   paymentDetails: '',
+  signatory: '',
+};
+
+export const DEFAULT_EMAIL: EmailSettings = {
+  serviceId: '',
+  templateId: '',
+  publicKey: '',
+  fromName: 'JoshWorks Studio',
+  replyTo: 'jworks1505@gmail.com',
+  copyTo: '',
 };
 
 /** How JoshWorks already writes its captions. */
@@ -49,6 +63,10 @@ export interface SettingValues {
   ai: AiSettings;
   contract: ContractSection[];
   security: SecuritySettings;
+  money: MoneySettings;
+  bir: BirSettings;
+  payMethods: StudioPayMethod[];
+  email: EmailSettings;
 }
 
 export const DEFAULTS: SettingValues = {
@@ -60,6 +78,10 @@ export const DEFAULTS: SettingValues = {
   ai: DEFAULT_AI,
   contract: DEFAULT_CONTRACT_SECTIONS,
   security: { pinHash: null, pinSalt: null },
+  money: DEFAULT_MONEY,
+  bir: DEFAULT_BIR,
+  payMethods: DEFAULT_PAY_METHODS,
+  email: DEFAULT_EMAIL,
 };
 
 function merge<K extends SettingKey>(key: K, value: unknown): SettingValues[K] {

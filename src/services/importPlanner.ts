@@ -23,6 +23,19 @@ export interface PlannerOptions {
   concepts: boolean;
   metrics: boolean;
   snippets: boolean;
+  /** Use the planner's break weeks (instead of the last-Monday rule). */
+  breaks: boolean;
+  /** Remove the posts of earlier planner imports that weren't posted yet. */
+  replaceOld: boolean;
+}
+
+/** Posts from one planner import share this id prefix. Older imports used the year alone. */
+export const planPrefix = (p: Pick<PlannerImport, 'start' | 'year'>): string => (p.start ? `planner-${p.start.slice(0, 7)}` : `planner-${p.year}`);
+
+/** Unposted posts that came from a different planner import. */
+export async function oldPlanPosts(p: Pick<PlannerImport, 'start' | 'year'>): Promise<Post[]> {
+  const prefix = planPrefix(p);
+  return alive(await db.posts.toArray()).filter((x) => x.id.startsWith('planner-') && !x.id.startsWith(`${prefix}-`) && x.status !== 'posted');
 }
 
 export interface PreviewPost {
@@ -36,6 +49,8 @@ export interface PlannerPreview {
   /** Posts that need a decision (season over, no room). */
   unplaced: PreviewPost[];
   skipped: number;
+  /** Unposted posts from an earlier planner that this import replaces. */
+  replaced: number;
 }
 
 /** First Monday of next month — a calm restart that leaves time to batch content. */
@@ -45,8 +60,11 @@ export async function previewPlanner(p: PlannerImport, opts: PlannerOptions): Pr
   const cadence = await getSetting('cadence');
   const rows = p.rows.filter((r) => r.kind === 'post' && r.row > opts.skipThroughRow);
   const skipped = p.rows.filter((r) => r.kind === 'post' && r.row <= opts.skipThroughRow).length;
-  if (!opts.restartOn) return { posts: rows.map((row) => ({ row, date: row.date, note: '' })), unplaced: [], skipped };
-  const busy = new Set(alive(await db.posts.toArray()).filter((x) => x.date && x.status !== 'skipped' && !x.id.startsWith(`planner-${p.year}-`)).map((x) => x.date as string));
+  const old = opts.replaceOld ? await oldPlanPosts(p) : [];
+  const replaced = old.length;
+  if (!opts.restartOn) return { posts: rows.filter((r) => r.date).map((row) => ({ row, date: row.date, note: '' })), unplaced: rows.filter((r) => !r.date).map((row) => ({ row, date: null, note: 'Backlog: no date yet' })), skipped, replaced };
+  const oldIds = new Set(old.map((x) => x.id));
+  const busy = new Set(alive(await db.posts.toArray()).filter((x) => x.date && x.status !== 'skipped' && !x.id.startsWith(`${planPrefix(p)}-`) && !oldIds.has(x.id)).map((x) => x.date as string));
   const posted = rows.filter((r) => statusFromPlanner(r.status) === 'posted');
   const open = rows.filter((r) => statusFromPlanner(r.status) !== 'posted');
   const res = reschedule(
@@ -60,6 +78,7 @@ export async function previewPlanner(p: PlannerImport, opts: PlannerOptions): Pr
     posts: [...posted.map((row) => ({ row, date: row.date, note: '' })), ...res.placed.map((x) => ({ row: byId.get(x.id) as PlannerRow, date: x.date, note: x.note }))],
     unplaced: res.unplaced.map((u) => ({ row: byId.get(u.id) as PlannerRow, date: null, note: u.reason })),
     skipped,
+    replaced,
   };
 }
 
@@ -74,6 +93,7 @@ const SERIES: [RegExp, string][] = [
 const seriesOf = (title: string) => SERIES.find(([re]) => re.test(title))?.[1] ?? '';
 
 export interface ImportSummary {
+  replaced: number;
   posts: number;
   backlog: number;
   members: number;
@@ -86,9 +106,18 @@ export interface ImportSummary {
 }
 
 export async function applyPlanner(p: PlannerImport, opts: PlannerOptions, preview: PlannerPreview): Promise<ImportSummary> {
-  const sum: ImportSummary = { posts: 0, backlog: 0, members: 0, ideas: 0, scripts: 0, metrics: 0, snippets: 0, alreadyThere: 0, droppedLinks: p.droppedLinks };
+  const sum: ImportSummary = { replaced: 0, posts: 0, backlog: 0, members: 0, ideas: 0, scripts: 0, metrics: 0, snippets: 0, alreadyThere: 0, droppedLinks: p.droppedLinks };
   const cadence = await getSetting('cadence');
-  const prefix = `planner-${p.year}`;
+  const prefix = planPrefix(p);
+
+  // ----- the older plan's unposted posts make way for this one -----
+  if (opts.replaceOld) {
+    const { deletePost } = await import('./content');
+    for (const x of await oldPlanPosts(p)) {
+      await deletePost(x.id);
+      sum.replaced++;
+    }
+  }
 
   // ----- team -----
   const members: Member[] = alive(await db.members.toArray());
@@ -119,7 +148,8 @@ export async function applyPlanner(p: PlannerImport, opts: PlannerOptions, previ
   };
 
   // ----- weekly themes, rotation and the restart date -----
-  if (opts.themes || opts.restartOn) {
+  const breakRows = p.rows.filter((r) => r.kind === 'break' && r.date && r.end);
+  if (opts.themes || opts.restartOn || (opts.breaks && breakRows.length)) {
     const themes = cadence.themes.map((t) => {
       const from = opts.themes ? p.themes.find((x) => x.key === t.key) : undefined;
       if (!from) return t;
@@ -130,7 +160,17 @@ export async function applyPlanner(p: PlannerImport, opts: PlannerOptions, previ
       ...cadence,
       themes,
       fridayRotation: opts.themes && p.fridayRotation.length ? p.fridayRotation : cadence.fridayRotation,
-      resumeOn: opts.restartOn ?? cadence.resumeOn,
+      // A paused calendar picks up on this plan's first post.
+      resumeOn: opts.restartOn ?? (cadence.resumeOn && p.start && p.start > todayISO() ? p.start : cadence.resumeOn),
+      ...(opts.breaks && breakRows.length
+        ? {
+            breakRule: false,
+            breaks: [
+              ...cadence.breaks.filter((b) => !breakRows.some((r) => r.date === b.start)),
+              ...breakRows.map((r) => ({ start: r.date as string, end: r.end as string, label: (r.brief || r.title || 'Break week').split(/[.;]/)[0].slice(0, 80) })),
+            ].sort((a, b) => a.start.localeCompare(b.start)),
+          }
+        : {}),
     });
   }
 
@@ -338,7 +378,7 @@ export async function applyPlanner(p: PlannerImport, opts: PlannerOptions, previ
     'import',
     'app',
     null,
-    `Imported the content planner: ${sum.posts} posts on the calendar${sum.backlog ? `, ${sum.backlog} waiting for a date` : ''}${opts.restartOn ? ` (restarting ${opts.restartOn})` : ''}, ${sum.ideas} ideas, ${sum.scripts} scripts, ${sum.metrics} results`,
+    `Imported the content planner: ${sum.replaced ? `replaced ${sum.replaced} unposted posts from the older plan, ` : ''}${sum.posts} posts on the calendar${sum.backlog ? `, ${sum.backlog} waiting for a date` : ''}${opts.restartOn ? ` (restarting ${opts.restartOn})` : ''}, ${sum.ideas} ideas, ${sum.scripts} scripts, ${sum.metrics} results`,
   );
   return sum;
 }

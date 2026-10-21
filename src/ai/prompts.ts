@@ -17,7 +17,7 @@ export async function buildSystemPrompt(): Promise<string> {
   const [business, voice, cadence] = await Promise.all([getSetting('business'), getSetting('voice'), getSetting('cadence')]);
   const members = alive(await db.members.toArray()).filter((m) => m.active === 1);
   const themes = cadence.themes.filter((t) => t.active).map((t) => `- ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][t.dow]}: ${t.name}${t.flex ? ' (flex, only when needed)' : ''} — ${t.description}`);
-  return `You are the marketing assistant inside JoshWorks Campaigns, the planning app of ${business.name}, a ${business.registration || 'registered'} creative studio in ${business.address || 'Iloilo City, Philippines'}.
+  return `You are the marketing assistant inside JoshWorks Studio, the planning app of ${business.name}, a ${business.registration || 'registered'} creative studio in ${business.address || 'Iloilo City, Philippines'}.
 
 ## The studio
 ${business.name} designs branding and logos, packaging, merchandise (shirts, ID laces, tote bags), stickers, illustrations and characters, motion graphics, and websites. It is also starting a social media management (SMM) service for local businesses, at introductory prices. Clients are small businesses, student organizations, schools and companies around Iloilo and the Philippines.

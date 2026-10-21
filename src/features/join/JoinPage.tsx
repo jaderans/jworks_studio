@@ -39,7 +39,7 @@ export function JoinPage({ onJoined }: { onJoined: () => void }) {
           <img src={logo} alt="" width={56} height={56} style={{ borderRadius: 14 }} />
           <div>
             <span className="eyebrow">Team invite</span>
-            <h1>Join JoshWorks Campaigns</h1>
+            <h1>Join JoshWorks Studio</h1>
           </div>
         </div>
         {!invite ? (

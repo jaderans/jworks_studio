@@ -128,6 +128,73 @@ export function WeekColumns({ data, label, height = 200 }: { data: { week: strin
   );
 }
 
+/**
+ * Monthly columns for one money measure, with an optional target per month
+ * drawn as a short dashed marker on the same axis.
+ */
+export function MonthColumns({ data, label, format, height = 220 }: { data: { month: string; value: number; target?: number | null }[]; label: string; format: (v: number) => string; height?: number }) {
+  const [hover, setHover] = useState<number | null>(null);
+  if (!data.length) return <p className="muted small">Nothing yet.</p>;
+  const W = 640;
+  const H = height;
+  const padL = 56;
+  const padB = 24;
+  const padT = 12;
+  const top = niceMax(Math.max(...data.map((d) => Math.max(d.value, d.target ?? 0)), 1));
+  const plotW = W - padL - 6;
+  const plotH = H - padB - padT;
+  const slot = plotW / data.length;
+  const barW = Math.max(6, Math.min(34, slot - 8));
+  const y = (v: number) => padT + plotH - (v / top) * plotH;
+  const monthLabel = (m: string) => new Date(`${m}-01T00:00:00`).toLocaleDateString('en-PH', { month: 'short' }) + (m.endsWith('-01') ? ` ’${m.slice(2, 4)}` : '');
+  const hv = hover !== null ? data[hover] : null;
+  return (
+    <div className="chart-wrap">
+      <svg className="chart-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${label} by month`}>
+        {[0, 0.5, 1].map((f) => (
+          <g key={f}>
+            <line className="axis" x1={padL} x2={W - 6} y1={y(top * f)} y2={y(top * f)} />
+            <text className="lbl" x={padL - 8} y={y(top * f) + 4} textAnchor="end">
+              {format(top * f)}
+            </text>
+          </g>
+        ))}
+        {data.map((d, i) => {
+          const cx = padL + slot * i + slot / 2;
+          const h = d.value > 0 ? Math.max(2, plotH - (y(d.value) - padT)) : 0;
+          const r = Math.min(4, barW / 2, h);
+          const x0 = cx - barW / 2;
+          const yTop = padT + plotH - h;
+          return (
+            <g
+              key={d.month}
+              tabIndex={0}
+              onMouseEnter={() => setHover(i)}
+              onMouseLeave={() => setHover(null)}
+              onFocus={() => setHover(i)}
+              onBlur={() => setHover(null)}
+              aria-label={`${monthLabel(d.month)}: ${format(d.value)}${d.target ? `, target ${format(d.target)}` : ''}`}
+            >
+              <rect x={padL + slot * i} y={padT} width={slot} height={plotH} fill="transparent" />
+              {h > 0 ? <path className={`bar ${hover === i ? 'on' : ''}`} d={`M${x0},${padT + plotH} V${yTop + r} Q${x0},${yTop} ${x0 + r},${yTop} H${x0 + barW - r} Q${x0 + barW},${yTop} ${x0 + barW},${yTop + r} V${padT + plotH} Z`} /> : null}
+              {d.target ? <line className="target-mark" x1={x0 - 4} x2={x0 + barW + 4} y1={y(d.target)} y2={y(d.target)} /> : null}
+              <text className="lbl" x={cx} y={H - 6} textAnchor="middle">
+                {monthLabel(d.month)}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      {hv ? (
+        <div className="chart-tip" style={{ left: `${((padL + slot * (hover as number) + slot / 2) / W) * 100}%`, top: `${(y(Math.max(hv.value, hv.target ?? 0)) / H) * 100}%` }}>
+          <b>{format(hv.value)}</b> {label.toLowerCase()} · {monthLabel(hv.month)}
+          {hv.target ? ` · target ${format(hv.target)}` : ''}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** Horizontal ranked bars, one colour (or an emphasised few). */
 export function BarList({
   rows,

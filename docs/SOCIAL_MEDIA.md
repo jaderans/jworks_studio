@@ -1,6 +1,6 @@
 # Posting to Facebook, Instagram and TikTok
 
-JoshWorks Campaigns uses a **link and copy** flow. The app writes, checks and stores the caption, then sends you to each platform's own composer to post or schedule. Nothing needs a developer account, tokens or a server, and it works the same for JoshWorks' pages and for clients' pages.
+JoshWorks Studio uses a **link and copy** flow. The app writes, checks and stores the caption, then sends you to each platform's own composer to post or schedule. Nothing needs a developer account, tokens or a server, and it works the same for JoshWorks' pages and for clients' pages.
 
 ## How to post
 

@@ -123,6 +123,11 @@ export function CloudSection() {
                 <span className="muted small">{sync.lastSyncAt ? `Last sync ${relativeTime(sync.lastSyncAt)}` : ''}</span>
               </div>
               <p className="small muted">{sync.message}</p>
+              {sync.refused ? (
+                <Callout tone="warn" title={`${sync.refused} change${sync.refused === 1 ? '' : 's'} the cloud refused`}>
+                  They’re kept on this device and tried again on the next sync. Usually the security rules need publishing again: copy them below and publish them in Firebase → Firestore → Rules.
+                </Callout>
+              ) : null}
               <div className="actions">
                 <Button
                   size="sm"

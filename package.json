@@ -1,8 +1,8 @@
 {
-  "name": "jworks-campaigns",
+  "name": "jworks-studio",
   "private": true,
   "version": "0.1.0",
-  "description": "JoshWorks Campaigns: content calendar, campaigns, trends, results, a Claude assistant, and SMM client tools (packages, proposals, contracts, funnels).",
+  "description": "JoshWorks Studio: the studio app for JoshWorks: jobs, clients, quotes, contracts, invoices, payments, designer payouts, reports and marketing.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,7 +12,8 @@
     "test": "vitest run",
     "e2e": "npm run build && playwright test",
     "emulators": "npx --yes firebase-tools emulators:start --only auth,firestore --project demo-jwcamp",
-    "check": "npm run typecheck && npm test"
+    "check": "npm run typecheck && npm test",
+    "test:rules": "npx --yes firebase-tools emulators:exec --only firestore --project demo-jwcamp \"node firebase/rules.check.mjs\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
@@ -31,6 +32,7 @@
     "react-router": "^7.18.4"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@playwright/test": "^1.63.0",
     "@types/node": "^26.6.3",
     "@types/pdfmake": "^0.3.3",

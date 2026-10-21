@@ -1,5 +1,5 @@
 import { percentOf, toCents, type Cents } from '../lib/money';
-import type { Package, Proposal, RateSettings } from '../db/types';
+import type { Package, Proposal, ProposalItem, RateSettings } from '../db/types';
 
 /**
  * Prices and margins. A package's cost is the hours it takes at the team's own
@@ -68,6 +68,11 @@ export function costCheck(pkg: Pick<Package, 'deliverables' | 'price' | 'unit'>,
   return { lines, hours, direct, cost, margin, verdict, minPrice: priceFor(rates.minMarginPct), targetPrice: priceFor(rates.targetMarginPct) };
 }
 
+/** Totals for a contract, a job or an invoice: no VAT, no withholding, an optional peso discount. */
+export function docTotals(items: ProposalItem[], discountAmount = 0): ProposalTotals {
+  return proposalTotals({ items, discountPct: 0, discountMonths: 0, vat: false, ewt: false, discountAmount }, { vatPct: 12, ewtPct: 2 });
+}
+
 export interface ProposalLine {
   label: string;
   qty: number;
@@ -96,7 +101,10 @@ export interface ProposalTotals {
  * add-ons (rush) on the one-off work, an introductory discount on the first
  * months, then VAT and the 2% withholding tax (on the amount before VAT).
  */
-export function proposalTotals(p: Pick<Proposal, 'items' | 'discountPct' | 'discountMonths' | 'vat' | 'ewt'>, rates: Pick<RateSettings, 'vatPct' | 'ewtPct'>): ProposalTotals {
+export function proposalTotals(
+  p: Pick<Proposal, 'items' | 'discountPct' | 'discountMonths' | 'vat' | 'ewt'> & { discountAmount?: Cents },
+  rates: Pick<RateSettings, 'vatPct' | 'ewtPct'>,
+): ProposalTotals {
   const base = p.items.filter((i) => i.unit !== 'percent');
   const lines: ProposalLine[] = base.map((i) => {
     const monthly = i.unit === 'month';
@@ -104,16 +112,18 @@ export function proposalTotals(p: Pick<Proposal, 'items' | 'discountPct' | 'disc
     return { label: i.label, qty: i.qty, unitPrice: i.unitPrice, months, monthly, amount: i.unitPrice * i.qty * months };
   });
   const oneTimeBase = lines.filter((l) => !l.monthly).reduce((a, l) => a + l.amount, 0);
+  // Percentage add-ons are on the package price when package lines are marked, otherwise on all one-off work.
+  const packageBase = base.some((i) => i.base) ? base.filter((i) => i.base && i.unit !== 'month').reduce((a, i) => a + i.unitPrice * i.qty, 0) : oneTimeBase;
   for (const i of p.items.filter((x) => x.unit === 'percent')) {
     // For percentage items, unitPrice holds the percent × 100 (2500 = 25%).
-    const amount = Math.round((oneTimeBase * i.unitPrice) / 10000) * Math.max(1, i.qty);
+    const amount = Math.round((packageBase * i.unitPrice) / 10000) * Math.max(1, i.qty);
     lines.push({ label: i.label, qty: i.qty, unitPrice: i.unitPrice, months: 1, monthly: false, amount });
   }
   const perMonth = lines.filter((l) => l.monthly).reduce((a, l) => a + l.unitPrice * l.qty, 0);
   const oneTime = lines.filter((l) => !l.monthly).reduce((a, l) => a + l.amount, 0);
   const gross = lines.reduce((a, l) => a + l.amount, 0);
   const discountBase = lines.filter((l) => l.monthly).reduce((a, l) => a + l.unitPrice * l.qty * Math.min(l.months, Math.max(0, p.discountMonths)), 0);
-  const discount = p.discountPct > 0 ? percentOf(discountBase, p.discountPct) : 0;
+  const discount = (p.discountPct > 0 ? percentOf(discountBase, p.discountPct) : 0) + Math.max(0, Math.min(p.discountAmount ?? 0, oneTime));
   const net = gross - discount;
   const vat = p.vat ? percentOf(net, rates.vatPct) : 0;
   const invoice = net + vat;

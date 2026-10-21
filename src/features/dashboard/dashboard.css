@@ -4,15 +4,17 @@
 .dash-grid {
   display: grid; gap: 16px; align-items: stretch;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: 'hero' 'week' 'attn' 'cal' 'trends' 'results' 'team' 'act';
+  grid-template-areas: 'hero' 'attn' 'money' 'jobs' 'week' 'cal' 'trends' 'results' 'team' 'act';
 }
 @container (min-width: 720px) {
-  .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: 'hero hero' 'week week' 'cal attn' 'trends results' 'team act'; }
+  .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: 'hero hero' 'money jobs' 'attn attn' 'week week' 'cal cal' 'trends results' 'team act'; }
 }
 @container (min-width: 1060px) {
-  .dash-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: 'hero hero cal' 'week week cal' 'attn trends results' 'team act act'; }
+  .dash-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: 'hero hero money' 'jobs jobs attn' 'week week cal' 'trends results cal' 'team act act'; }
 }
 .dash-hero { grid-area: hero; }
+.dash-money { grid-area: money; }
+.dash-jobs { grid-area: jobs; }
 .dash-cal { grid-area: cal; }
 .dash-week { grid-area: week; }
 .dash-attn { grid-area: attn; }
@@ -21,8 +23,6 @@
 .dash-team { grid-area: team; }
 .dash-act { grid-area: act; }
 
-.dot-title { display: flex; align-items: center; gap: 9px; min-width: 0; }
-.dot-title::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--teal); flex: none; }
 
 /* hero: the brand's teal, the time, and a clock */
 .dash-hero {
@@ -32,7 +32,7 @@
   background:
     radial-gradient(circle at 88% 20%, rgba(247, 216, 32, 0.2), transparent 36%),
     radial-gradient(circle at 6% 120%, rgba(255, 255, 255, 0.12), transparent 42%),
-    linear-gradient(135deg, #065A62 0%, #087A86 52%, #1A979E 100%);
+    linear-gradient(135deg, #0F5961 0%, #167D88 52%, #2A98A6 100%);
 }
 :root[data-theme='dark'] .dash-hero {
   background:
@@ -60,7 +60,7 @@
 .hero-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .btn.on-dark { background: rgba(255, 255, 255, 0.12); color: #fff; border-color: rgba(255, 255, 255, 0.3); }
 .btn.on-dark:hover { background: rgba(255, 255, 255, 0.2); border-color: rgba(255, 255, 255, 0.55); }
-.dash-hero :focus-visible { outline-color: #F7D820; }
+.dash-hero :focus-visible { outline-color: #FEC756; }
 
 .analog { width: clamp(96px, 15cqw, 196px); height: auto; flex: none; filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.18)); }
 .analog .face { fill: rgba(255, 255, 255, 0.08); stroke: rgba(255, 255, 255, 0.38); stroke-width: 2; }
@@ -69,8 +69,8 @@
 .analog .hand { stroke: #fff; stroke-linecap: round; }
 .analog .hour { stroke-width: 6.5; }
 .analog .minute { stroke-width: 4; }
-.analog .second { stroke: #F7D820; stroke-width: 2; }
-.analog .pin { fill: #F7D820; stroke: #065A62; stroke-width: 2; }
+.analog .second { stroke: #FEC756; stroke-width: 2; }
+.analog .pin { fill: #FEC756; stroke: #0F5961; stroke-width: 2; }
 @container (max-width: 520px) {
   .dash-hero { padding: 20px; align-items: flex-start; }
   .analog { width: 84px; }
@@ -129,7 +129,6 @@
 .dash-row .grow { display: grid; gap: 1px; min-width: 0; }
 .dash-row.voided { color: var(--muted); }
 .dash-row.voided b { text-decoration: line-through; }
-.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .receipt-no { font-family: var(--f-mono); font-size: 0.78rem; font-weight: 700; color: var(--muted); flex: none; }
 .attn-text { flex: 1; min-width: 0; }
 .attn-ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: none; background: var(--warn-soft); color: var(--warn); }

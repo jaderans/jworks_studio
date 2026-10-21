@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { alive, db } from '../db/db';
-import type { SettingRow } from '../db/types';
+import { alive, db, SYNCED_TABLES, syncedTable } from '../db/db';
+import { viewOf } from '../domain/jobs';
+import type { JobMoney, JobView, SettingRow } from '../db/types';
 
 /** Live queries: components re-render whenever the underlying rows change. */
 
@@ -27,6 +28,24 @@ export const useClients = () => useLiveQuery(async () => alive(await db.clients.
 export const usePackages = () => useLiveQuery(async () => alive(await db.packages.toArray()).sort((a, b) => a.sort - b.sort), []);
 export const useProposals = () => useLiveQuery(async () => alive(await db.proposals.toArray()).sort((a, b) => b.createdAt - a.createdAt), []);
 export const useContracts = () => useLiveQuery(async () => alive(await db.contracts.toArray()).sort((a, b) => b.createdAt - a.createdAt), []);
+export const useContractTemplates = () => useLiveQuery(async () => alive(await db.contractTemplates.toArray()).sort((a, b) => a.sort - b.sort), []);
+
+/** Jobs with their progress, newest number first. */
+export const useJobs = () =>
+  useLiveQuery(async (): Promise<JobView[]> => {
+    const [jobs, progress] = await Promise.all([db.jobs.toArray(), db.jobProgress.toArray()]);
+    const byId = new Map(progress.map((p) => [p.id, p]));
+    return alive(jobs)
+      .map((j) => viewOf(j, byId.get(j.id)))
+      .sort((a, b) => b.number.localeCompare(a.number, undefined, { numeric: true }));
+  }, []);
+export const useJobMoney = () => useLiveQuery(async () => new Map(alive(await db.jobMoney.toArray()).map((m) => [m.id, m] as [string, JobMoney])), []);
+export const usePayments = () => useLiveQuery(async () => alive(await db.payments.toArray()).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt), []);
+export const useEarnings = () => useLiveQuery(async () => alive(await db.earnings.toArray()), []);
+export const usePayouts = () => useLiveQuery(async () => alive(await db.payouts.toArray()).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt), []);
+export const usePayoutAccounts = () => useLiveQuery(async () => alive(await db.payoutAccounts.toArray()), []);
+export const useInvoices = () => useLiveQuery(async () => alive(await db.invoices.toArray()).sort((a, b) => b.number.localeCompare(a.number, undefined, { numeric: true })), []);
+export const useExpenses = () => useLiveQuery(async () => alive(await db.expenses.toArray()).sort((a, b) => b.date.localeCompare(a.date)), []);
 export const useChats = () => useLiveQuery(async () => (await db.chats.toArray()).sort((a, b) => b.updatedAt - a.updatedAt), []);
 export const useAudit = (limit = 300) => useLiveQuery(async () => (await db.audit.orderBy('at').reverse().limit(limit).toArray()).filter((a) => a.deleted !== 1), [limit]);
 export const useSettingRows = () => useLiveQuery(async () => (await db.settings.toArray()) as SettingRow[], []);
@@ -40,9 +59,7 @@ export const useLocal = <T,>(key: string, fallback: T) =>
 export const usePendingCount = () =>
   useLiveQuery(async () => {
     let n = 0;
-    for (const t of ['posts', 'comments', 'ideas', 'metrics', 'clients', 'campaigns', 'trends', 'hooks', 'proposals', 'contracts', 'audit'] as const) {
-      n += await (db[t] as any).where('_sync').equals(1).count();
-    }
+    for (const t of SYNCED_TABLES) n += await syncedTable(t).where('_sync').equals(1).count();
     return n;
   }, []);
 

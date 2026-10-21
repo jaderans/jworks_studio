@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import {
-  Bot, Briefcase, CalendarDays, ChevronDown, ChevronsLeft, ChevronsRight, CloudUpload, FileSignature, Flame, History, KanbanSquare, LayoutGrid,
-  Layers, Lightbulb, ListChecks, Megaphone, Menu, Monitor, Moon, Package, Settings, Sun, TrendingUp, Users, WifiOff, type LucideIcon,
+  Briefcase, ChevronDown, ChevronsLeft, ChevronsRight, CloudUpload, Contact, FileSignature, History, LayoutGrid, Layers, ListChecks, Megaphone, Menu, Monitor,
+  Moon, Settings, Sun, Users, Wallet, WifiOff, type LucideIcon,
 } from 'lucide-react';
-import logo from '../assets/brand/logo-128.png';
+import mark from '../assets/brand/mark.png';
+import lockupLight from '../assets/brand/lockup-on-light.png';
+import lockupDark from '../assets/brand/lockup-on-dark.png';
 import { useApp, type Permission } from './AppContext';
-import { useAudit, useClients, useMembers, usePendingCount, useSettingRows } from '../hooks/data';
+import { useAudit, useClients, useMembers, usePendingCount, usePosts, useSettingRows } from '../hooks/data';
 import { settingValue } from '../db/settings';
 import { setLocal } from '../db/local';
 import { Dialog } from '../components/Dialog';
@@ -14,67 +16,109 @@ import { Popover } from '../components/Popover';
 import { Badge, Button, Callout, Initials } from '../components/ui';
 import { Field, TextInput } from '../components/form';
 import { ROLE_LABEL, makeOwner, restoreOwner } from '../services/team';
-import { STAGE_LABEL } from '../domain/clients';
+import { normalizeStage, stageLabel } from '../domain/clients';
 import { relativeTime } from '../lib/time';
 import { applyTheme, getTheme, setTheme, type ThemeMode } from '../lib/theme';
 import { useSyncStatus } from '../sync/useSync';
 import { ACTIVITY_LABELS, activityTone } from '../features/activity/labels';
 import { ErrorBoundary } from './ErrorBoundary';
 
-interface NavItem {
+interface Tab {
   to: string;
   label: string;
-  short?: string;
-  icon: LucideIcon;
   perm?: Permission;
   end?: boolean;
 }
 
-interface NavGroup {
+/** One sidebar entry. Its pages share a tab strip, so the menu stays short. */
+export interface Section {
   id: string;
   label: string;
-  items: NavItem[];
+  short?: string;
+  icon: LucideIcon;
+  perm?: Permission;
+  to: string;
+  /** Paths that belong to this section. */
+  match: string[];
+  tabs?: Tab[];
 }
 
-const GROUPS: NavGroup[] = [
+export const SECTIONS: Section[] = [
+  { id: 'home', label: 'Dashboard', short: 'Home', icon: LayoutGrid, to: '/', match: ['/', '/me', '/activity'] },
   {
-    id: 'home',
-    label: 'Home',
-    items: [
-      { to: '/', label: 'Dashboard', short: 'Home', icon: LayoutGrid, perm: 'dashboard', end: true },
-      { to: '/me', label: 'My tasks', short: 'Tasks', icon: ListChecks },
+    id: 'jobs',
+    label: 'Jobs',
+    icon: Briefcase,
+    perm: 'jobs',
+    to: '/jobs',
+    match: ['/jobs'],
+    tabs: [
+      { to: '/jobs', label: 'Job board', end: true },
+      { to: '/jobs/list', label: 'All jobs' },
+      { to: '/jobs/deadlines', label: 'Deadlines' },
+      { to: '/jobs/workload', label: 'Workload' },
+    ],
+  },
+  { id: 'clients', label: 'Clients', icon: Contact, perm: 'clients', to: '/clients', match: ['/clients'] },
+  {
+    id: 'money',
+    label: 'Money',
+    icon: Wallet,
+    perm: 'money',
+    to: '/money/invoices',
+    match: ['/money'],
+    tabs: [
+      { to: '/money/invoices', label: 'Invoices' },
+      { to: '/money/payments', label: 'Payments' },
+      { to: '/money/payouts', label: 'Payouts' },
+      { to: '/money/expenses', label: 'Expenses' },
+      { to: '/money/reports', label: 'Reports' },
+      { to: '/money/bir', label: 'BIR' },
     ],
   },
   {
-    id: 'content',
-    label: 'Content',
-    items: [
-      { to: '/calendar', label: 'Calendar', icon: CalendarDays, perm: 'content' },
-      { to: '/board', label: 'Board', icon: KanbanSquare, perm: 'content' },
-      { to: '/ideas', label: 'Ideas', icon: Lightbulb, perm: 'content' },
+    id: 'docs',
+    label: 'Documents',
+    short: 'Docs',
+    icon: FileSignature,
+    perm: 'money',
+    to: '/docs/quotes',
+    match: ['/docs', '/packages', '/contracts'],
+    tabs: [
+      { to: '/docs/quotes', label: 'Quotes' },
+      { to: '/docs/contracts', label: 'Contracts' },
+      { to: '/docs/prices', label: 'Price list' },
+      { to: '/docs/templates', label: 'Contract templates' },
+      { to: '/docs/rates', label: 'Team rates' },
     ],
   },
+  { id: 'mypay', label: 'My pay', icon: Wallet, perm: 'mypay', to: '/mypay', match: ['/mypay'] },
   {
-    id: 'grow',
-    label: 'Grow',
-    items: [
-      { to: '/campaigns', label: 'Campaigns', icon: Megaphone, perm: 'content' },
-      { to: '/trends', label: 'Trends', icon: Flame, perm: 'content' },
-      { to: '/results', label: 'Results', icon: TrendingUp, perm: 'content' },
-      { to: '/assistant', label: 'Assistant', icon: Bot, perm: 'assistant' },
+    id: 'marketing',
+    label: 'Marketing',
+    icon: Megaphone,
+    perm: 'content',
+    to: '/calendar',
+    match: ['/calendar', '/board', '/ideas', '/campaigns', '/trends', '/results', '/assistant'],
+    tabs: [
+      { to: '/calendar', label: 'Calendar' },
+      { to: '/board', label: 'Content board' },
+      { to: '/ideas', label: 'Ideas' },
+      { to: '/campaigns', label: 'Campaigns' },
+      { to: '/trends', label: 'Trends' },
+      { to: '/results', label: 'Results' },
+      { to: '/assistant', label: 'Assistant', perm: 'assistant' },
     ],
   },
-  {
-    id: 'clients',
-    label: 'SMM clients',
-    items: [
-      { to: '/clients', label: 'Clients', icon: Briefcase, perm: 'clients' },
-      { to: '/packages', label: 'Packages', icon: Package, perm: 'money' },
-      { to: '/contracts', label: 'Contracts', icon: FileSignature, perm: 'money' },
-    ],
-  },
-  { id: 'people', label: 'People', items: [{ to: '/team', label: 'Team', icon: Users, perm: 'team' }] },
+  { id: 'team', label: 'Team', icon: Users, perm: 'team', to: '/team', match: ['/team'] },
 ];
+
+/** The section a path belongs to. */
+export function sectionOf(pathname: string): Section | undefined {
+  const home = SECTIONS[0];
+  if (home.match.includes(pathname)) return home;
+  return SECTIONS.find((s) => s.id !== 'home' && s.match.some((m) => pathname === m || pathname.startsWith(`${m}/`)));
+}
 
 const NAV_KEY = 'jwcamp-nav';
 const SEEN_KEY = 'jwcamp-activity-seen';
@@ -92,6 +136,22 @@ function writePref(key: string, value: string) {
   } catch {
     /* private mode: it just won't be remembered */
   }
+}
+
+/** The JoshWorks lockup from the brand kit (dark text in light mode, white text in dark mode). */
+function Brand({ compact }: { compact?: boolean }) {
+  return (
+    <span className="brand-lockup">
+      <img className="brand-mark" src={mark} alt="" width={36} height={36} />
+      {compact ? null : (
+        <span className="brand-words">
+          <img className="lockup only-light" src={lockupLight} alt="JoshWorks" />
+          <img className="lockup only-dark" src={lockupDark} alt="" aria-hidden="true" />
+          <span className="brand-sub">Studio</span>
+        </span>
+      )}
+    </span>
+  );
 }
 
 export function Shell() {
@@ -114,13 +174,19 @@ export function Shell() {
     return () => mq.removeEventListener('change', on);
   }, [theme]);
 
-  const allowed = (n: NavItem) => (n.perm ? app.can(n.perm) : true);
-  const groups = GROUPS.map((g) => ({ ...g, items: g.items.filter(allowed) })).filter((g) => g.items.length > 0);
-  const flat = groups.flatMap((g) => g.items);
-  // Phones: four tabs, the rest under More.
-  const primary = flat.length <= 5 ? flat : flat.slice(0, 4);
-  const primarySet = new Set(primary.map((n) => n.to));
-  const moreGroups = groups.map((g) => ({ ...g, items: g.items.filter((n) => !primarySet.has(n.to)) })).filter((g) => g.items.length > 0);
+  const sections = SECTIONS.filter((s) => !s.perm || app.can(s.perm));
+  const current = sectionOf(location.pathname);
+  const tabs = (current?.tabs ?? []).filter((t) => !t.perm || app.can(t.perm));
+  const marketing = current?.id === 'marketing';
+  // Phones: four tabs picked for the role, the rest under More.
+  const phoneIds = app.can('money') ? ['home', 'jobs', 'money', 'marketing'] : ['home', 'jobs', 'marketing', 'mypay'];
+  const primary = phoneIds.map((id) => sections.find((s) => s.id === id)).filter((s): s is Section => !!s);
+  const moreSections = sections.filter((s) => !primary.includes(s));
+  const moreItems = [
+    ...moreSections.map((s) => ({ key: s.id, label: s.label, icon: s.icon, to: s.to })),
+    { key: 'settings', label: 'Settings', icon: Settings, to: '/settings' },
+    ...(app.can('activity') ? [{ key: 'activity', label: 'Activity', icon: History, to: '/activity' }] : []),
+  ];
 
   const pickTheme = (m: ThemeMode) => {
     setTheme(m);
@@ -132,35 +198,23 @@ export function Shell() {
     writePref(NAV_KEY, next);
   };
   const scopeLabel = app.scope === 'all' ? 'All brands' : app.scope === 'own' ? business.name || 'JoshWorks' : (app.scopeClient?.name ?? 'Client');
+  const isActive = (s: Section) => current?.id === s.id;
 
   return (
     <div className="shell" data-nav={navMode}>
       <aside className="sidebar">
-        <Link to="/" className="side-brand" aria-label="JoshWorks Campaigns home">
-          <img src={logo} alt="" width={36} height={36} />
-          <span className="brand-text">
-            <b>JoshWorks</b>
-            <span>Campaigns</span>
-          </span>
+        <Link to="/" className="side-brand" aria-label="JoshWorks Studio home">
+          <Brand compact={navMode === 'rail'} />
         </Link>
         <nav className="side-nav" aria-label="Main">
-          {groups.map((g) => (
-            <div key={g.id} className="nav-group" role="group" aria-label={g.label}>
-              {g.id !== 'home' ? (
-                <span className="nav-group-label" aria-hidden="true">
-                  {g.label}
-                </span>
-              ) : null}
-              {g.items.map((n) => (
-                <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} title={n.label}>
-                  <n.icon size={20} aria-hidden="true" />
-                  <span className="nav-label full">{n.label}</span>
-                  <span className="nav-label short" aria-hidden="true">
-                    {n.short ?? n.label}
-                  </span>
-                </NavLink>
-              ))}
-            </div>
+          {sections.map((s) => (
+            <NavLink key={s.id} to={s.to} className={() => `nav-item${isActive(s) ? ' active' : ''}`} aria-current={isActive(s) ? 'page' : undefined} title={s.label}>
+              <s.icon size={20} aria-hidden="true" />
+              <span className="nav-label full">{s.label}</span>
+              <span className="nav-label short" aria-hidden="true">
+                {s.short ?? s.label}
+              </span>
+            </NavLink>
           ))}
         </nav>
         <button type="button" className="nav-collapse" onClick={toggleNav} aria-label={navMode === 'full' ? 'Collapse the menu' : 'Expand the menu'} title={navMode === 'full' ? 'Collapse the menu' : 'Expand the menu'}>
@@ -170,19 +224,23 @@ export function Shell() {
       </aside>
 
       <header className="topbar">
-        <Link to="/" className="topbar-brand" aria-label="JoshWorks Campaigns home">
-          <img src={logo} alt="" width={34} height={34} />
+        <Link to="/" className="topbar-brand" aria-label="JoshWorks Studio home">
+          <img src={mark} alt="" width={34} height={34} />
         </Link>
-        <button type="button" className="event-switch" onClick={() => setScopePicker(true)} aria-label={`Showing ${scopeLabel}. Change brand`}>
-          <Layers size={18} aria-hidden="true" />
-          <span className="label">{scopeLabel}</span>
-          {app.scopeClient ? (
-            <span className="hide-phone">
-              <Badge tone={app.scopeClient.stage === 'active' ? 'good' : 'teal'}>{STAGE_LABEL[app.scopeClient.stage]}</Badge>
-            </span>
-          ) : null}
-          <ChevronDown size={16} aria-hidden="true" />
-        </button>
+        {marketing ? (
+          <button type="button" className="event-switch" onClick={() => setScopePicker(true)} aria-label={`Showing ${scopeLabel}. Change brand`}>
+            <Layers size={18} aria-hidden="true" />
+            <span className="label">{scopeLabel}</span>
+            {app.scopeClient ? (
+              <span className="hide-phone">
+                <Badge tone="teal">{stageLabel(app.scopeClient.stage)}</Badge>
+              </span>
+            ) : null}
+            <ChevronDown size={16} aria-hidden="true" />
+          </button>
+        ) : (
+          <span className="topbar-title">{current?.label ?? 'JoshWorks Studio'}</span>
+        )}
         <div className="spacer" />
         <ConnectionPill />
         {app.can('activity') ? <ActivityMenu /> : null}
@@ -224,34 +282,13 @@ export function Shell() {
                 </div>
               </div>
               <div className="menu-list">
-                <button
-                  type="button"
-                  className="menu-item"
-                  onClick={() => {
-                    close();
-                    setUserPicker(true);
-                  }}
-                >
+                <button type="button" className="menu-item" onClick={() => { close(); setUserPicker(true); }}>
                   <Users size={18} aria-hidden="true" /> {app.locked ? 'Who’s signed in' : 'Switch person'}
                 </button>
-                <button
-                  type="button"
-                  className="menu-item"
-                  onClick={() => {
-                    close();
-                    navigate('/me');
-                  }}
-                >
+                <button type="button" className="menu-item" onClick={() => { close(); navigate('/me'); }}>
                   <ListChecks size={18} aria-hidden="true" /> My tasks
                 </button>
-                <button
-                  type="button"
-                  className="menu-item"
-                  onClick={() => {
-                    close();
-                    navigate('/settings');
-                  }}
-                >
+                <button type="button" className="menu-item" onClick={() => { close(); navigate('/settings'); }}>
                   <Settings size={18} aria-hidden="true" /> Settings
                 </button>
               </div>
@@ -261,53 +298,56 @@ export function Shell() {
       </header>
 
       <main className="main" id="main">
+        {tabs.length > 1 ? (
+          <nav className="section-tabs" aria-label={`${current?.label ?? ''} pages`}>
+            <div className="section-tabs-inner">
+              {tabs.map((t) => (
+                <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive: on }) => `section-tab${on ? ' active' : ''}`}>
+                  {t.label}
+                </NavLink>
+              ))}
+            </div>
+          </nav>
+        ) : null}
         <ErrorBoundary key={location.pathname}>
           <Outlet />
         </ErrorBoundary>
       </main>
 
-      <nav className="bottomnav" aria-label="Main" style={{ gridTemplateColumns: `repeat(${primary.length + (moreGroups.length ? 1 : 0)}, minmax(0, 1fr))` }}>
-        {primary.map((n) => (
-          <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? 'active' : '')}>
-            <n.icon size={22} aria-hidden="true" />
-            <span>{n.short ?? n.label}</span>
+      <nav className="bottomnav" aria-label="Main" style={{ gridTemplateColumns: `repeat(${primary.length + 1}, minmax(0, 1fr))` }}>
+        {primary.map((s) => (
+          <NavLink key={s.id} to={s.to} className={() => (isActive(s) ? 'active' : '')}>
+            <s.icon size={22} aria-hidden="true" />
+            <span>{s.short ?? s.label}</span>
           </NavLink>
         ))}
-        {moreGroups.length ? (
-          <button type="button" onClick={() => setMore(true)} className={moreGroups.some((g) => g.items.some((n) => location.pathname.startsWith(n.to))) ? 'active' : ''}>
-            <Menu size={22} aria-hidden="true" />
-            <span>More</span>
-          </button>
-        ) : null}
+        <button type="button" onClick={() => setMore(true)} className={current && !primary.includes(current) ? 'active' : ''}>
+          <Menu size={22} aria-hidden="true" />
+          <span>More</span>
+        </button>
       </nav>
 
       <Dialog open={more} onClose={() => setMore(false)} title="More" size="sm">
-        {moreGroups.map((g) => (
-          <div key={g.id} className="stack tight">
-            <span className="eyebrow">{g.label}</span>
-            <div className="card flush">
-              <div className="list">
-                {g.items.map((n) => (
-                  <button
-                    key={n.to}
-                    type="button"
-                    className="list-item click"
-                    style={{ border: 0, background: 'none', textAlign: 'left', width: '100%', borderBottom: '1px solid var(--line)' }}
-                    onClick={() => {
-                      setMore(false);
-                      navigate(n.to);
-                    }}
-                  >
-                    <n.icon size={20} aria-hidden="true" />
-                    <span className="main-text">
-                      <b>{n.label}</b>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
+        <div className="card flush">
+          <div className="list">
+            {moreItems.map((n) => (
+              <button
+                key={n.key}
+                type="button"
+                className="list-item click more-item"
+                onClick={() => {
+                  setMore(false);
+                  navigate(n.to);
+                }}
+              >
+                <n.icon size={20} aria-hidden="true" />
+                <span className="main-text">
+                  <b>{n.label}</b>
+                </span>
+              </button>
+            ))}
           </div>
-        ))}
+        </div>
       </Dialog>
 
       <ScopePicker open={scopePicker} onClose={() => setScopePicker(false)} ownName={business.name || 'JoshWorks'} />
@@ -386,10 +426,13 @@ function ConnectionPill() {
   if (sync.enabled) {
     const busy = sync.state === 'syncing';
     return (
-      <span className={`status-pill ${sync.state === 'error' ? 'error' : busy ? 'busy' : 'online'}`} title={sync.message}>
+      <span
+        className={`status-pill ${sync.state === 'error' || sync.refused ? 'error' : busy ? 'busy' : 'online'}`}
+        title={sync.refused ? `${sync.refused} change${sync.refused === 1 ? '' : 's'} the cloud refused. They are kept on this device; the owner may need to publish the latest security rules (Settings → Cloud sync).` : sync.message}
+      >
         <span className="dot" />
         <CloudUpload size={14} aria-hidden="true" />
-        <span className="hide-phone">{sync.state === 'error' ? 'Sync problem' : pending ? `${pending} to sync` : 'Synced'}</span>
+        <span className="hide-phone">{sync.state === 'error' ? 'Sync problem' : sync.refused ? `${sync.refused} not synced` : pending ? `${pending} to sync` : 'Synced'}</span>
       </span>
     );
   }
@@ -405,7 +448,10 @@ function ScopePicker({ open, onClose, ownName }: { open: boolean; onClose: () =>
   const app = useApp();
   const clients = useClients();
   const navigate = useNavigate();
-  const visible = (clients ?? []).filter((c) => c.stage !== 'lost' && c.stage !== 'ended');
+  const posts = usePosts();
+  // Brands with content on the calendar: the clients whose social media we run.
+  const withPosts = new Set((posts ?? []).map((p) => p.clientId).filter(Boolean));
+  const visible = (clients ?? []).filter((c) => withPosts.has(c.id) || (normalizeStage(c.stage) === 'active' && !!c.packageId));
   const row = (key: string, label: string, sub: string, badge?: React.ReactNode) => (
     <button
       key={key}
@@ -449,7 +495,7 @@ function ScopePicker({ open, onClose, ownName }: { open: boolean; onClose: () =>
         <div className="list">
           {row('all', 'All brands', 'JoshWorks and every client')}
           {row('own', ownName, 'Our own pages')}
-          {visible.map((c) => row(c.id, c.name, c.industry || 'Client', <Badge tone={c.stage === 'active' ? 'good' : 'teal'}>{STAGE_LABEL[c.stage]}</Badge>))}
+          {visible.map((c) => row(c.id, c.name, c.industry || 'Client', <Badge tone={normalizeStage(c.stage) === 'active' ? 'good' : 'teal'}>{stageLabel(c.stage)}</Badge>))}
         </div>
       </div>
     </Dialog>

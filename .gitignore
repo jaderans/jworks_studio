@@ -17,3 +17,14 @@ ui-debug.log
 # in the browser instead, so none of it needs to be in this public repository.
 Jworks Previous Campaigns/
 *.xlsx
+
+# Studio working files: the commission tracker and planners (*.xlsx above), client documents,
+# brand source files and fonts (Wolvirun, Aqua Grotesque are licensed), and anything kept private.
+*.docx
+*.doc
+*.ai
+*.psd
+*.otf
+*.ttf
+!src/assets/fonts/*.ttf
+private/

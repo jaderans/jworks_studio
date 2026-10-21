@@ -90,6 +90,8 @@ export interface PlannerImport {
   snippets: PlannerSnippet[];
   /** Links left out because they held a wallet address instead of a folder ID. */
   droppedLinks: number;
+  /** The first dated post (YYYY-MM-DD): names this plan, so a newer plan never collides with an older one. */
+  start: string | null;
   sheetsFound: string[];
 }
 
@@ -209,6 +211,7 @@ export function parsePlanner(sheets: Sheet[], opts: { year?: number } = {}): Pla
     metrics: [],
     snippets: [],
     droppedLinks: 0,
+    start: null,
     sheetsFound: [],
   };
 
@@ -287,12 +290,18 @@ export function parsePlanner(sheets: Sheet[], opts: { year?: number } = {}): Pla
       const get = (r: number, k: string) => (c[k] ? cellText(cal, r, c[k]) : '');
       let year = out.year;
       let lastDate: string | null = null;
+      // Rows under a "BACKLOG" heading have no date yet.
+      let backlog = false;
       for (let r = hm.row + 1; r <= cal.maxRow; r++) {
         const dateText = get(r, 'date');
         const dayTheme = get(r, 'theme');
         const week = get(r, 'week');
         const title = get(r, 'title');
         const designer = get(r, 'designer');
+        if (/^backlog\b/i.test(get(r, 'month') || cellText(cal, r, 1))) {
+          backlog = true;
+          continue;
+        }
         if (!dateText && !title && !designer && !dayTheme) continue;
         if (/no posting/i.test(dayTheme) || /break/i.test(week)) {
           const range = parseRange(dateText, year);
@@ -300,8 +309,15 @@ export function parsePlanner(sheets: Sheet[], opts: { year?: number } = {}): Pla
           if (range) lastDate = range.end;
           continue;
         }
-        let date: string | null = lastDate;
-        if (dateText) {
+        let date: string | null = backlog ? null : lastDate;
+        if (dateText && /^\d{5}(\.\d+)?$/.test(dateText.trim())) {
+          // A real date cell (Excel stores it as a day number).
+          date = parseShortDate(Math.floor(Number(dateText)));
+          if (date) {
+            lastDate = date;
+            year = Number(date.slice(0, 4));
+          }
+        } else if (dateText) {
           let d = parseDayText(dateText, year);
           // A planner that runs into the new year: dates go backwards → next year.
           if (d && lastDate && d < addDays(lastDate, -150)) {
@@ -343,6 +359,7 @@ export function parsePlanner(sheets: Sheet[], opts: { year?: number } = {}): Pla
           links,
         });
       }
+      out.start = out.rows.filter((r) => r.kind === 'post' && r.date).map((r) => r.date as string).sort()[0] ?? null;
       // Rows that share a date with the row above inherit its theme.
       for (let i = 1; i < out.rows.length; i++) {
         const cur = out.rows[i];

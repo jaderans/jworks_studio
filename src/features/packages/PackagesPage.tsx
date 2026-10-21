@@ -7,7 +7,7 @@ import { Field, MoneyInput, NumberInput, Select, TextArea, TextInput } from '../
 import { Dialog } from '../../components/Dialog';
 import { useClients, usePackages, useProposals, useSettingRows } from '../../hooks/data';
 import { setSetting, settingValue } from '../../db/settings';
-import { FOUNDING_OFFER, UNIT_LABEL } from '../../domain/packages';
+import { CATEGORIES, FOUNDING_OFFER, UNIT_LABEL } from '../../domain/packages';
 import { costCheck, proposalTotals, type CostCheck } from '../../domain/pricing';
 import { PLATFORMS, PLATFORM_ORDER } from '../../domain/platforms';
 import { SERVICE_LABEL } from '../../domain/campaignTemplates';
@@ -47,7 +47,7 @@ function priceText(p: Pick<Package, 'price' | 'unit'>) {
   return p.unit === 'percent' ? `+${(p.price / 100).toFixed(0)}%` : peso(p.price);
 }
 
-function MarginLine({ check, rates }: { check: CostCheck; rates: RateSettings }) {
+export function MarginLine({ check, rates }: { check: CostCheck; rates: RateSettings }) {
   if (check.verdict === 'none') return null;
   const pct = Math.max(0, Math.min(100, check.margin ?? 0));
   return (
@@ -118,7 +118,7 @@ function PackageList({ kind }: { kind: Package['kind'] }) {
   );
 }
 
-function PackageDialog({ value, onClose }: { value: Partial<Package> | null; onClose: () => void }) {
+export function PackageDialog({ value, onClose }: { value: Partial<Package> | null; onClose: () => void }) {
   const app = useApp();
   const rates = settingValue(useSettingRows(), 'rates');
   const [p, setP] = useState<Partial<Package>>({});
@@ -183,7 +183,8 @@ function PackageDialog({ value, onClose }: { value: Partial<Package> | null; onC
             <option value="project">Project</option>
             <option value="piece">Piece</option>
             <option value="hour">Hour</option>
-            <option value="percent">Percent of one-off work</option>
+            <option value="participant">Participant</option>
+            <option value="percent">Percent of the package price</option>
           </Select>
         </Field>
         <Field label="Service" htmlFor="pk-svc">
@@ -195,6 +196,25 @@ function PackageDialog({ value, onClose }: { value: Partial<Package> | null; onC
               </option>
             ))}
           </Select>
+        </Field>
+        <Field label="Price list section" htmlFor="pk-cat">
+          <TextInput id="pk-cat" list="pk-cats" value={p.category ?? ''} onChange={(e) => setP({ ...p, category: e.target.value })} placeholder="e.g. Branding, Merch" />
+          <datalist id="pk-cats">
+            {CATEGORIES.map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
+        </Field>
+        {p.unit !== 'percent' ? (
+          <Field label="Student-org price" htmlFor="pk-student" hint="Leave empty when it’s the same for everyone.">
+            <MoneyInput id="pk-student" value={p.studentPrice ?? null} onChange={(v) => setP({ ...p, studentPrice: v })} />
+          </Field>
+        ) : null}
+        <Field label="Turnaround" htmlFor="pk-turn">
+          <TextInput id="pk-turn" value={p.turnaround ?? ''} onChange={(e) => setP({ ...p, turnaround: e.target.value })} placeholder="e.g. 7–14 days" />
+        </Field>
+        <Field label="Revision rounds included" htmlFor="pk-revs">
+          <NumberInput id="pk-revs" decimals={false} min={0} value={p.revisions ?? null} onChange={(v) => setP({ ...p, revisions: v ?? 0 })} />
         </Field>
         <Field label="One-line description" htmlFor="pk-tag" className="span-2">
           <TextInput id="pk-tag" value={p.tagline ?? ''} onChange={(e) => setP({ ...p, tagline: e.target.value })} />
@@ -576,7 +596,7 @@ function ProposalDialog({ id, onClose }: { id: string | null; onClose: () => voi
   );
 }
 
-function Rates() {
+export function Rates() {
   const app = useApp();
   const stored = settingValue(useSettingRows(), 'rates');
   const [r, setR] = useState<RateSettings | null>(null);

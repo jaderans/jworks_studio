@@ -9,8 +9,10 @@ import { usePwaUpdates } from './usePwa';
 import { clearLanding, peekLanding } from './landing';
 import { startSync } from '../sync/engine';
 import { expireTrends, fetchFeed } from '../services/growth';
+import { readAuthAction } from '../features/join/authAction';
 
 const JoinPage = lazy(() => import('../features/join/JoinPage').then((m) => ({ default: m.JoinPage })));
+const AuthActionPage = lazy(() => import('../features/join/AuthActionPage').then((m) => ({ default: m.AuthActionPage })));
 const DashboardPage = lazy(() => import('../features/dashboard/DashboardPage'));
 const CalendarPage = lazy(() => import('../features/calendar/CalendarPage'));
 const BoardPage = lazy(() => import('../features/board/BoardPage'));
@@ -20,8 +22,10 @@ const TrendsPage = lazy(() => import('../features/trends/TrendsPage'));
 const ResultsPage = lazy(() => import('../features/results/ResultsPage'));
 const AssistantPage = lazy(() => import('../features/assistant/AssistantPage'));
 const ClientsPage = lazy(() => import('../features/clients/ClientsPage'));
-const PackagesPage = lazy(() => import('../features/packages/PackagesPage'));
-const ContractsPage = lazy(() => import('../features/contracts/ContractsPage'));
+const JobsPage = lazy(() => import('../features/jobs/JobsPage'));
+const MoneyPage = lazy(() => import('../features/money/MoneyPage'));
+const DocsPage = lazy(() => import('../features/docs/DocsPage'));
+const MyPayPage = lazy(() => import('../features/mypay/MyPayPage'));
 const TeamPage = lazy(() => import('../features/team/TeamPage'));
 const MyTasksPage = lazy(() => import('../features/me/MyTasksPage'));
 const SettingsPage = lazy(() => import('../features/settings/SettingsPage'));
@@ -38,6 +42,8 @@ export function App() {
 }
 
 function Gate() {
+  // A link from a Firebase email (confirm the email, reset the password) opens its own page, set up or not.
+  const [authAction] = useState(readAuthAction);
   const [done, setDone] = useState<boolean | null>(null);
   const location = useLocation();
   usePwaUpdates();
@@ -51,6 +57,12 @@ function Gate() {
     void fetchFeed();
     void expireTrends();
   }, [done]);
+  if (authAction)
+    return (
+      <Lazy>
+        <AuthActionPage action={authAction} />
+      </Lazy>
+    );
   if (done === null) return <Loading />;
   if (location.pathname === '/join')
     return (
@@ -76,8 +88,16 @@ function Gate() {
         <Route path="results" element={<Guard perm="content"><Lazy><ResultsPage /></Lazy></Guard>} />
         <Route path="assistant" element={<Guard perm="assistant"><Lazy><AssistantPage /></Lazy></Guard>} />
         <Route path="clients/*" element={<Guard perm="clients"><Lazy><ClientsPage /></Lazy></Guard>} />
-        <Route path="packages/*" element={<Guard perm="money"><Lazy><PackagesPage /></Lazy></Guard>} />
-        <Route path="contracts/*" element={<Guard perm="money"><Lazy><ContractsPage /></Lazy></Guard>} />
+        <Route path="jobs/*" element={<Guard perm="jobs"><Lazy><JobsPage /></Lazy></Guard>} />
+        <Route path="money/*" element={<Guard perm="money"><Lazy><MoneyPage /></Lazy></Guard>} />
+        <Route path="docs/*" element={<Guard perm="money"><Lazy><DocsPage /></Lazy></Guard>} />
+        <Route path="mypay" element={<Guard perm="mypay"><Lazy><MyPayPage /></Lazy></Guard>} />
+        {/* Old links (bookmarks, older builds) land on the new pages. */}
+        <Route path="packages" element={<Moved to="/docs/prices" />} />
+        <Route path="packages/proposals" element={<Moved to="/docs/quotes" />} />
+        <Route path="packages/rates" element={<Moved to="/docs/rates" />} />
+        <Route path="packages/*" element={<Moved to="/docs/prices" />} />
+        <Route path="contracts/*" element={<Moved to="/docs/contracts" />} />
         <Route path="team" element={<Guard perm="team"><Lazy><TeamPage /></Lazy></Guard>} />
         <Route path="me" element={<Lazy><MyTasksPage /></Lazy>} />
         <Route path="activity" element={<Guard perm="activity"><Lazy><ActivityPage /></Lazy></Guard>} />
@@ -105,6 +125,12 @@ function Home() {
       </Lazy>
     );
   return <Navigate to="/me" replace />;
+}
+
+/** Redirect an old path, keeping its ?query (client=, proposal=). */
+function Moved({ to }: { to: string }) {
+  const { search } = useLocation();
+  return <Navigate to={`${to}${search}`} replace />;
 }
 
 function Guard({ perm, children }: { perm: Permission; children: ReactNode }) {

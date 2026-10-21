@@ -4,6 +4,11 @@ import manropeBold from '../assets/fonts/Manrope-Bold.ttf?url';
 import manropeExtraBold from '../assets/fonts/Manrope-ExtraBold.ttf?url';
 import soraBold from '../assets/fonts/Sora-Bold.ttf?url';
 import logoUrl from '../assets/brand/logo-256.png?url';
+import frameGeneral from '../assets/brand/frames/general.png?url';
+import frameMerch from '../assets/brand/frames/merch.png?url';
+import frameWeb from '../assets/brand/frames/web.png?url';
+import frameLogo from '../assets/brand/frames/logo.png?url';
+import type { FrameKey } from '../db/types';
 import { downloadBlob, shareBlob } from '../lib/files';
 import { fmtDateTime } from '../lib/time';
 
@@ -48,9 +53,9 @@ async function load(): Promise<PdfMake> {
   }
 }
 
-export const INK = '#152122';
+export const INK = '#231F20';
 export const MUTED = '#5D6C6D';
-export const TEAL = '#087A86';
+export const TEAL = '#167D88';
 export const LINE = '#DAE3E3';
 export const SOFT = '#EEF4F4';
 export const GOOD = '#1E7B45';
@@ -63,7 +68,26 @@ export interface DocOptions {
   landscape?: boolean;
   /** Replaces the default footer text (e.g. the contract number on a legal document). */
   footerNote?: string;
+  /**
+   * Print on the brand-kit letterhead (Legal size): the frame is the page background.
+   * `cover` hides the title baked into the frame, for documents that set their own.
+   */
+  letterhead?: { frame: FrameKey; cover?: boolean };
 }
+
+const FRAMES: Record<FrameKey, string> = { general: frameGeneral, merch: frameMerch, web: frameWeb, logo: frameLogo };
+const frameCache = new Map<FrameKey, string>();
+
+async function frameData(key: FrameKey): Promise<string> {
+  const hit = frameCache.get(key);
+  if (hit) return hit;
+  const data = `data:image/png;base64,${await toBase64(FRAMES[key])}`;
+  frameCache.set(key, data);
+  return data;
+}
+
+/** Legal page in points, and the frame's free area (inside the side bar, header band and footer icons). */
+export const LEGAL = { width: 612, height: 1008, margins: [42, 104, 44, 64] as [number, number, number, number] };
 
 /**
  * pdfmake rewrites the objects and arrays it is given while laying out a page.
@@ -84,11 +108,12 @@ export async function frame(opts: DocOptions, rawContent: Content[]): Promise<TD
   await load();
   const content = copyContent(rawContent);
   const generated = fmtDateTime(Date.now());
+  if (opts.letterhead) return letterheadDoc(opts, content, await frameData(opts.letterhead.frame));
   return {
     pageSize: 'A4',
     pageOrientation: opts.landscape ? 'landscape' : 'portrait',
     pageMargins: [36, 64, 36, 44],
-    info: { title: opts.title, author: opts.business, creator: 'JoshWorks Campaigns' },
+    info: { title: opts.title, author: opts.business, creator: 'JoshWorks Studio' },
     defaultStyle: { font: 'Manrope', fontSize: 9, color: INK, lineHeight: 1.2 },
     header: () => ({
       margin: [36, 22, 36, 0],
@@ -101,7 +126,7 @@ export async function frame(opts: DocOptions, rawContent: Content[]): Promise<TD
     footer: (page: number, pages: number) => ({
       margin: [36, 12, 36, 0],
       columns: [
-        { text: opts.footerNote ?? `Made with JoshWorks Campaigns · ${generated}`, style: 'muted' },
+        { text: opts.footerNote ?? `Made with JoshWorks Studio · ${generated}`, style: 'muted' },
         { text: `Page ${page} of ${pages}`, style: 'muted', alignment: 'right' },
       ],
     }),
@@ -119,6 +144,60 @@ export async function frame(opts: DocOptions, rawContent: Content[]): Promise<TD
       good: { color: GOOD, bold: true },
       bad: { color: BAD, bold: true },
       note: { color: MUTED, fontSize: 8, italics: false },
+    },
+    content,
+  };
+}
+
+const STYLES: TDocumentDefinitions['styles'] = {
+  brand: { font: 'Sora', fontSize: 10, color: INK },
+  h1: { font: 'Sora', fontSize: 20, color: INK, margin: [0, 0, 0, 4] },
+  h2: { font: 'Sora', fontSize: 12.5, color: INK, margin: [0, 14, 0, 6] },
+  h3: { bold: true, fontSize: 10, margin: [0, 8, 0, 4] },
+  muted: { color: MUTED, fontSize: 8 },
+  label: { color: MUTED, fontSize: 7.5, bold: true, characterSpacing: 0.6 },
+  big: { font: 'ManropeX', fontSize: 16 },
+  th: { bold: true, fontSize: 7.5, color: MUTED, fillColor: SOFT, characterSpacing: 0.4 },
+  num: { alignment: 'right' },
+  total: { bold: true },
+  good: { color: GOOD, bold: true },
+  bad: { color: BAD, bold: true },
+  note: { color: MUTED, fontSize: 8, italics: false },
+  docTitle: { font: 'Sora', fontSize: 17, color: TEAL, alignment: 'center', margin: [0, 0, 0, 12] },
+  section: { font: 'Sora', fontSize: 11, color: TEAL, characterSpacing: 0.3, margin: [0, 12, 0, 6] },
+  small: { fontSize: 8.5 },
+};
+
+/** Brand-kit letterhead: Legal page, the frame drawn behind every page, page numbers clear of the footer icons. */
+function letterheadDoc(opts: DocOptions, content: Content[], frameImage: string): TDocumentDefinitions {
+  const cover = !!opts.letterhead?.cover;
+  return {
+    pageSize: { width: LEGAL.width, height: LEGAL.height },
+    pageOrientation: 'portrait',
+    pageMargins: LEGAL.margins,
+    info: { title: opts.title, author: opts.business, creator: 'JoshWorks Studio' },
+    defaultStyle: { font: 'Manrope', fontSize: 9.5, color: INK, lineHeight: 1.25 },
+    images: { frame: frameImage },
+    background: () => [
+      { image: 'frame', width: LEGAL.width, height: LEGAL.height, absolutePosition: { x: 0, y: 0 } },
+      // The frame has "COMMISSION CONTRACT" set in its header; documents with their own title cover it.
+      ...(cover ? [{ canvas: [{ type: 'rect', x: 372, y: 32, w: 204, h: 28, color: '#FFFFFF' }], absolutePosition: { x: 0, y: 0 } }] : []),
+    ] as Content[],
+    footer: (page: number, pages: number) => ({
+      margin: [404, 35, 44, 0],
+      text: [{ text: opts.footerNote ? `${opts.footerNote}  ·  ` : '' }, { text: `Page ${page} of ${pages}` }],
+      style: 'muted',
+      alignment: 'right',
+      fontSize: 7,
+    }),
+    styles: STYLES,
+    // Never leave a section heading (and its one-line intro) alone at the bottom of a page.
+    pageBreakBefore: (node, q) => {
+      if (node.headlineLevel !== 1) return false;
+      // Starts in the bottom 15% of the page, or nothing substantial follows it there.
+      const low = ((node.startPosition as { verticalRatio?: number } | undefined)?.verticalRatio ?? 0) > 0.85;
+      const after = q.getFollowingNodesOnPage() as { table?: unknown; ul?: unknown; columns?: unknown; stack?: unknown }[];
+      return low || (after.length <= 1 && !after.some((n) => n.table || n.ul || n.columns || n.stack));
     },
     content,
   };

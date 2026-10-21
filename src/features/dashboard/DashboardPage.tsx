@@ -1,11 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
-  AlertTriangle, BarChart3, Bot, CalendarClock, CalendarPlus, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, FileSignature, Flame, Hourglass,
+  AlertTriangle, BarChart3, Bot, Briefcase, Inbox, ReceiptText, Wrench, CalendarClock, CalendarPlus, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, FileSignature, Flame, Hourglass,
   Megaphone, MessageSquareWarning, PenLine, Sparkles,
 } from 'lucide-react';
 import { useApp } from '../../app/AppContext';
-import { useAudit, useClients, useContracts, useHooks, useMembers, useMetrics, usePosts, useProposals, useReports, useSettingRows, useTrends } from '../../hooks/data';
+import { useAudit, useClients, useContracts, useHooks, useJobs, useMembers, useMetrics, usePosts, useProposals, useReports, useSettingRows, useTrends } from '../../hooks/data';
 import { useNow } from '../../hooks/useNow';
 import { settingValue } from '../../db/settings';
 import { Badge, Button, Loading, Stat } from '../../components/ui';
@@ -19,6 +19,8 @@ import { addDays, dayStart, daysFrom, fmtIsoDate, fmtIsoWeekday, isoDate, monday
 import { ACTIVITY_LABELS, activityTone } from '../activity/labels';
 import { PostDialog } from '../calendar/PostDialog';
 import type { Post } from '../../db/types';
+import { JobsCard, MoneyCard, MyPayCard } from './StudioCards';
+import { useInvoiceRows } from '../../hooks/money';
 import './dashboard.css';
 
 const longDateFmt = new Intl.DateTimeFormat('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
@@ -26,7 +28,7 @@ const monthFmt = new Intl.DateTimeFormat('en-PH', { month: 'long', year: 'numeri
 const dayNameFmt = new Intl.DateTimeFormat('en-PH', { weekday: 'long', month: 'long', day: 'numeric' });
 const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-/** The start screen: the time, what's posting this week, what needs doing, trends and results. */
+/** The start screen: the time, money and jobs, what needs doing, then this week's posts, trends and results. */
 export default function DashboardPage() {
   const app = useApp();
   const posts = usePosts();
@@ -36,6 +38,8 @@ export default function DashboardPage() {
     <div className="page dash">
       <div className="dash-grid">
         <Hero posts={scoped} loaded={!!posts} />
+        {app.can('money') ? <MoneyCard /> : app.can('mypay') ? <MyPayCard /> : null}
+        <JobsCard />
         <CalendarCard posts={scoped} onOpen={setOpen} />
         <WeekCard posts={scoped} onOpen={setOpen} loaded={!!posts} />
         <AttentionCard posts={scoped} onOpen={setOpen} />
@@ -107,17 +111,33 @@ function Hero({ posts, loaded }: { posts: Post[]; loaded: boolean }) {
           )}
         </p>
         <div className="hero-actions">
-          <Button variant="primary" onClick={() => navigate('/calendar?new=1')}>
+          {app.can('editJobs') ? (
+            <>
+              <Button variant="primary" onClick={() => navigate('/jobs?new=inquiry')}>
+                <Inbox size={18} /> New inquiry
+              </Button>
+              <button type="button" className="btn on-dark" onClick={() => navigate('/jobs?new=job')}>
+                <Briefcase size={18} /> New job
+              </button>
+            </>
+          ) : (
+            <Button variant="primary" onClick={() => navigate('/jobs')}>
+              <Briefcase size={18} /> My jobs
+            </Button>
+          )}
+          <button type="button" className="btn on-dark" onClick={() => navigate('/calendar?new=1')}>
             <CalendarPlus size={18} /> New post
-          </Button>
+          </button>
           {app.can('editCampaigns') ? (
-            <button type="button" className="btn on-dark" onClick={() => navigate('/campaigns?new=1')}>
+            <button type="button" className="btn on-dark hide-phone" onClick={() => navigate('/campaigns?new=1')}>
               <Megaphone size={18} /> Plan a campaign
             </button>
           ) : null}
-          <button type="button" className="btn on-dark" onClick={() => navigate('/assistant')}>
-            <Bot size={18} /> Ask Claude
-          </button>
+          {app.can('assistant') ? (
+            <button type="button" className="btn on-dark hide-phone" onClick={() => navigate('/assistant')}>
+              <Bot size={18} /> Ask Claude
+            </button>
+          ) : null}
         </div>
       </div>
       <AnalogClock now={now} />
@@ -333,10 +353,31 @@ function AttentionCard({ posts, onOpen }: { posts: Post[]; onOpen: (id: string) 
   const trends = useTrends();
   const hooks = useHooks();
   const cadence = settingValue(useSettingRows(), 'cadence');
+  const jobs = useJobs();
+  const invoiceRows = useInvoiceRows();
 
   const todos = useMemo<Todo[] | null>(() => {
     if (!metrics || !trends || !hooks) return null;
     const out: Todo[] = [];
+    if (app.can('money') && invoiceRows) {
+      const overdue = invoiceRows.filter((r) => r.t.overdue);
+      if (overdue.length)
+        out.push({ key: 'inv-overdue', icon: <ReceiptText size={18} />, tone: 'warn', text: <><b>{overdue.length}</b> invoice{overdue.length === 1 ? ' is' : 's are'} overdue. Send a reminder.</>, cta: 'Invoices', go: () => navigate('/money/invoices') });
+    }
+    if (jobs) {
+      const meId = app.member?.id;
+      const minej = (j: { designers: string[]; lead: string | null }) => app.role !== 'designer' || (!!meId && (j.designers.includes(meId) || j.lead === meId));
+      const lateJobs = jobs.filter((j) => j.dueDate && j.dueDate < today && ['not-started', 'in-progress', 'review', 'revisions'].includes(j.status) && minej(j));
+      if (lateJobs.length)
+        out.push({ key: 'jobs-late', icon: <AlertTriangle size={18} />, tone: 'warn', text: <><b>{lateJobs.length}</b> job{lateJobs.length === 1 ? ' is' : 's are'} past the due date</>, cta: 'Deadlines', go: () => navigate('/jobs/deadlines') });
+      const revisions = jobs.filter((j) => j.status === 'revisions' && minej(j));
+      for (const j of revisions.slice(0, 2)) out.push({ key: `rev-${j.id}`, icon: <Wrench size={18} />, tone: 'info', text: <>Revisions asked on {j.number} “{j.title}”</>, cta: 'Open', go: () => navigate(`/jobs?job=${j.id}`) });
+      if (app.can('editJobs')) {
+        const waiting = jobs.filter((j) => j.status === 'inquiry' && daysFrom(isoDate(j.createdAt), today) >= 1);
+        if (waiting.length)
+          out.push({ key: 'inq', icon: <Inbox size={18} />, tone: 'warn', text: <><b>{waiting.length}</b> inquir{waiting.length === 1 ? 'y' : 'ies'} waiting a day or more for a quote</>, cta: 'Answer', go: () => navigate('/jobs') });
+      }
+    }
     const mine = (p: Post) => !app.member || app.role !== 'designer' || p.assignees.includes(app.member.id);
     const overdue = posts.filter((p) => p.date && p.date < today && !isDone(p.status) && p.status !== 'scheduled' && mine(p));
     if (overdue.length)
@@ -365,9 +406,9 @@ function AttentionCard({ posts, onOpen }: { posts: Post[]; onOpen: (id: string) 
       out.push({ key: 'decide', icon: <Hourglass size={18} />, tone: 'info', text: <><b>{decide.length}</b> post{decide.length === 1 ? '' : 's'} in the backlog need a new date (their season passed)</>, cta: 'Backlog', go: () => navigate('/calendar') });
     if (app.can('money') && proposals && contracts) {
       const stale = proposals.filter((p) => p.status === 'sent' && daysFrom(p.date, today) >= 3);
-      if (stale.length) out.push({ key: 'prop', icon: <Sparkles size={18} />, tone: 'info', text: <><b>{stale.length}</b> proposal{stale.length === 1 ? '' : 's'} sent 3+ days ago. Follow up.</>, cta: 'Proposals', go: () => navigate('/packages/proposals') });
+      if (stale.length) out.push({ key: 'prop', icon: <Sparkles size={18} />, tone: 'info', text: <><b>{stale.length}</b> quote{stale.length === 1 ? '' : 's'} sent 3+ days ago. Follow up.</>, cta: 'Quotes', go: () => navigate('/docs/quotes') });
       const unsigned = contracts.filter((c) => c.status === 'sent');
-      if (unsigned.length) out.push({ key: 'con', icon: <FileSignature size={18} />, tone: 'info', text: <><b>{unsigned.length}</b> contract{unsigned.length === 1 ? '' : 's'} waiting for a signature</>, cta: 'Contracts', go: () => navigate('/contracts') });
+      if (unsigned.length) out.push({ key: 'con', icon: <FileSignature size={18} />, tone: 'info', text: <><b>{unsigned.length}</b> contract{unsigned.length === 1 ? '' : 's'} waiting for a signature</>, cta: 'Contracts', go: () => navigate('/docs/contracts') });
     }
     if (app.can('clients') && clients) {
       const renew = clients.filter((c) => c.renewalDate && c.renewalDate >= today && c.renewalDate <= addDays(today, 14));
@@ -378,7 +419,7 @@ function AttentionCard({ posts, onOpen }: { posts: Post[]; onOpen: (id: string) 
     if (app.member && !hooks.some((h) => h.memberId === app.member?.id && h.practiceDate === today))
       out.push({ key: 'hook', icon: <PenLine size={18} />, tone: 'info', text: <>Today’s hook practice: rewrite one viral hook in your own words</>, cta: 'Practise', go: () => navigate('/trends/hooks') });
     return out;
-  }, [posts, metrics, proposals, contracts, clients, trends, hooks, today, app, navigate, onOpen, cadence]);
+  }, [posts, metrics, proposals, contracts, clients, trends, hooks, today, app, navigate, onOpen, cadence, jobs, invoiceRows]);
 
   return (
     <section className="card dash-attn" aria-labelledby="attn-title">

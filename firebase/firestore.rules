@@ -1,13 +1,16 @@
 rules_version = '2';
 
-// JoshWorks Campaigns — Firestore security rules.
+// JoshWorks Studio — Firestore security rules.
 // Every record lives under camp/{ws}/t_{table}/{id}. Access is by verified email:
 // the owner writes camp/{ws}/access/{email} = { role, memberId, active } for each person.
 //   owner    — everything
-//   manager  — content, clients, campaigns, funnels, packages, proposals, contracts; not the team or settings
-//   designer — content (posts, comments, ideas, caption blocks, trends, hooks, reports, results);
-//              reads the team, clients, campaigns and funnels
-// Packages, proposals and contracts are owner/manager only; designers never receive them.
+//   manager  — jobs, clients, money (quotes, contracts, invoices, payments, payouts, expenses), content;
+//              not the team or settings
+//   designer — content (posts, comments, ideas, caption blocks, trends, hooks, reports, results) and job
+//              progress; reads the team, clients, campaigns, funnels and jobs; reads only their own
+//              earnings and payouts, and reads and edits only their own payout details
+// Prices, quotes, contracts, invoices, client payments and expenses are owner/manager only;
+// designers never receive them.
 // Nothing is hard-deleted (the app writes tombstones), and a write can never replace a
 // newer copy of a record (last change wins, even after working offline).
 // If JoshWorks POS uses the same Firebase project, merge its `match /ws/{ws}` block into this file.
@@ -45,6 +48,13 @@ service cloud.firestore {
     function isTeam(ws) {
       return isManager(ws) || (hasAccess(ws) && role(ws) == 'designer');
     }
+    // The team member this sign-in belongs to (set by the owner in the access list).
+    function myMemberId(ws) {
+      return get(accessPath(ws)).data.memberId;
+    }
+    function isMe(ws, memberId) {
+      return hasAccess(ws) && memberId == myMemberId(ws);
+    }
     // Last change wins: an update must not be older than what is stored.
     function notOlder() {
       return !('updatedAt' in resource.data) || request.resource.data.updatedAt >= resource.data.updatedAt;
@@ -60,8 +70,8 @@ service cloud.firestore {
         allow write: if isOwner(ws);
       }
 
-      // Settings: the owner writes. Managers read everything but the PIN;
-      // designers read the brand, voice, rhythm, checklist and AI model choice (not rates or contract terms).
+      // Settings: the owner writes. Managers read everything but the PIN (money, BIR, payment methods,
+      // email keys included); designers read the brand, voice, rhythm, checklist and AI model choice.
       match /t_settings/{key} {
         allow read: if isOwner(ws)
           || (isManager(ws) && key != 'security')
@@ -113,6 +123,68 @@ service cloud.firestore {
       match /t_contracts/{id} {
         allow read, create: if isManager(ws);
         allow update: if isManager(ws) && notOlder();
+        allow delete: if false;
+      }
+      match /t_contractTemplates/{id} {
+        allow read, create: if isManager(ws);
+        allow update: if isManager(ws) && notOlder();
+        allow delete: if false;
+      }
+      match /t_jobMoney/{id} {
+        allow read, create: if isManager(ws);
+        allow update: if isManager(ws) && notOlder();
+        allow delete: if false;
+      }
+      match /t_payments/{id} {
+        allow read, create: if isManager(ws);
+        allow update: if isManager(ws) && notOlder();
+        allow delete: if false;
+      }
+      match /t_invoices/{id} {
+        allow read, create: if isManager(ws);
+        allow update: if isManager(ws) && notOlder();
+        allow delete: if false;
+      }
+      match /t_expenses/{id} {
+        allow read, create: if isManager(ws);
+        allow update: if isManager(ws) && notOlder();
+        allow delete: if false;
+      }
+
+      // Jobs: the team reads; owner and managers plan them (client, dates, team, brief).
+      match /t_jobs/{id} {
+        allow read: if isTeam(ws);
+        allow create: if isManager(ws);
+        allow update: if isManager(ws) && notOlder();
+        allow delete: if false;
+      }
+      // Job progress (status, revisions, delivery checklist, links): the whole team updates it.
+      match /t_jobProgress/{id} {
+        allow read, create: if isTeam(ws);
+        allow update: if isTeam(ws) && notOlder();
+        allow delete: if false;
+      }
+
+      // Designer pay: owner and managers write; each designer reads only their own rows
+      // (the app asks with where memberId == their id, which these rules can check).
+      match /t_earnings/{id} {
+        allow read: if isManager(ws) || isMe(ws, resource.data.memberId);
+        allow create: if isManager(ws);
+        allow update: if isManager(ws) && notOlder();
+        allow delete: if false;
+      }
+      match /t_payouts/{id} {
+        allow read: if isManager(ws) || isMe(ws, resource.data.memberId);
+        allow create: if isManager(ws);
+        allow update: if isManager(ws) && notOlder();
+        allow delete: if false;
+      }
+      // Where each person gets paid (id = their member id): owner and managers see everyone's;
+      // each person reads and edits only their own.
+      match /t_payoutAccounts/{id} {
+        allow read: if isManager(ws) || isMe(ws, id);
+        allow create: if isManager(ws) || isMe(ws, id);
+        allow update: if (isManager(ws) || isMe(ws, id)) && notOlder();
         allow delete: if false;
       }
 

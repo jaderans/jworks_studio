@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link, Route, Routes, useNavigate } from 'react-router';
+import { Route, Routes, useNavigate } from 'react-router';
 import { Bookmark, Bot, CalendarPlus, Copy, ExternalLink, Flame, Loader2, PenLine, Plus, RefreshCw, Trash2, TrendingUp } from 'lucide-react';
 import { useApp } from '../../app/AppContext';
 import { Badge, Button, Callout, EmptyState, IconButton, PageHeader, Tabs } from '../../components/ui';
@@ -16,6 +16,7 @@ import { PLATFORMS, PLATFORM_ORDER, platformLabel } from '../../domain/platforms
 import { parseTrendFeed } from '../../domain/trendFeed';
 import { getApiKey, streamChat } from '../../ai/claude';
 import { TREND_REPORT_PROMPT, buildSystemPrompt, extractJson } from '../../ai/prompts';
+import { openInClaude, webPrompt } from '../../ai/claudeWeb';
 import { createPost, saveIdea } from '../../services/content';
 import { deleteHook, deleteTrend, fetchFeed, saveHook, saveTrend, saveTrendItem, storeReport } from '../../services/growth';
 import { copyText } from '../../lib/text';
@@ -57,6 +58,27 @@ function ThisWeek() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const report = (reports ?? []).find((r) => r.id === pick) ?? reports?.[0];
+  const [pasting, setPasting] = useState(false);
+  const [pasted, setPasted] = useState('');
+  const researchInClaude = async () => {
+    const prompt = webPrompt({ system: await buildSystemPrompt(), ask: TREND_REPORT_PROMPT(mondayOf(todayISO())), webSearch: true });
+    const ok = await openInClaude(prompt);
+    setPasting(true);
+    app.toast(ok ? 'Copied. Paste it into Claude.ai (turn on web search), then paste the whole answer back here.' : 'Couldn’t copy the prompt.', { tone: ok ? 'good' : 'bad', ms: 9000 });
+  };
+  const savePasted = async () => {
+    try {
+      const parsed = parseTrendFeed(extractJson(pasted), 'assistant');
+      if (!parsed) throw new Error('That doesn’t look like the report. Paste Claude’s whole answer, including the part in { }.');
+      const saved = await storeReport(parsed);
+      setPick(saved.id);
+      setPasted('');
+      setPasting(false);
+      app.toast(`Saved the report: ${parsed.items.length} trends. The team sees it too.`, { tone: 'good' });
+    } catch (e) {
+      app.toast(e instanceof Error ? e.message : 'Could not read that report', { tone: 'bad' });
+    }
+  };
 
   const refresh = async () => {
     setBusy(true);
@@ -122,15 +144,30 @@ function ThisWeek() {
             {busy ? <Loader2 size={18} className="spin" /> : <Bot size={18} />} {busy ? status || 'Researching…' : 'Research trends now'}
           </Button>
         ) : (
-          <Link to="/settings#s-ai" className="btn">
-            <Bot size={18} /> Connect Claude to research trends
-          </Link>
+          <Button variant="primary" onClick={researchInClaude}>
+            <ExternalLink size={18} /> Research in Claude.ai
+          </Button>
         )}
       </div>
+      {pasting ? (
+        <section className="card stack tight">
+          <h2 className="dot-title">Paste Claude’s report</h2>
+          <p className="small muted">In Claude.ai, turn on web search, paste the prompt and send. When it finishes, copy the whole answer and paste it here.</p>
+          <TextArea aria-label="Claude’s report" rows={8} value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="{ &quot;weekOf&quot;: … }" />
+          <div className="row wrap between">
+            <Button variant="ghost" onClick={() => setPasting(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" disabled={!pasted.trim()} onClick={savePasted}>
+              Save the report
+            </Button>
+          </div>
+        </section>
+      ) : null}
       {busy ? <Callout tone="info">Claude is searching the web and writing this week’s report. It takes a minute or two and costs about 10–30 US cents.</Callout> : null}
       {!reports ? null : !report ? (
         <EmptyState icon={<Flame size={40} />} title="No trend report yet">
-          Every Monday a Claude routine can publish one here automatically (see Settings → Assistant), or press Research trends now.
+          Run /trend-report in Claude Code each Monday to publish one here for the whole team, or research one now.
         </EmptyState>
       ) : (
         <>
