@@ -67,22 +67,13 @@ function layout(b: BusinessSettings, l: Layout): string {
         <a href="${esc(l.button.url)}" style="display:inline-block;padding:13px 26px;font:700 15px ${FONT};color:${INK};text-decoration:none;border-radius:999px">${esc(l.button.label)}</a>
       </td></tr></table>`
     : '';
-  const payable = payableMethods(l.methods);
-  const qrs = payable.filter((m) => m.qrImage);
-  const methods = payable.length
+  // Only the QR codes: account names and numbers never go out by email.
+  const qrs = payableMethods(l.methods);
+  const methods = qrs.length
     ? `<div style="font:700 13px ${FONT};color:${TEAL};letter-spacing:.06em;text-transform:uppercase;margin:6px 0 8px">Where to pay</div>
-       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 ${qrs.length ? 12 : 18}px;border-collapse:collapse">
-        ${payable
-          .map((m) => `<tr><td style="padding:8px 0;font:600 14px ${FONT};color:${INK};border-bottom:1px solid #EEF0F0">${esc(m.label)}</td><td align="right" style="padding:8px 0;font:14px ${FONT};color:#3A3536;border-bottom:1px solid #EEF0F0">${esc([m.accountName, m.accountNumber].filter(Boolean).join(' · '))}</td></tr>`)
-          .join('')}
-       </table>
-       ${
-         qrs.length
-           ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;background:#F1F8F9;border-radius:12px"><tr>${qrs
-               .map((m) => `<td align="center" valign="top" style="padding:14px 8px"><img src="cid:${qrCid(m)}" width="140" alt="${esc(m.label)} QR code" style="display:block;width:140px;max-width:100%;height:auto;border:4px solid #FFFFFF;border-radius:8px"><div style="font:700 12px ${FONT};color:${INK};margin-top:6px">Scan to pay · ${esc(m.label)}</div></td>`)
-               .join('')}</tr></table>`
-           : ''
-       }`
+       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;background:#F1F8F9;border-radius:12px"><tr>${qrs
+         .map((m) => `<td align="center" valign="top" style="padding:14px 8px"><img src="cid:${qrCid(m)}" width="140" alt="${esc(m.label)} QR code" style="display:block;width:140px;max-width:100%;height:auto;border:4px solid #FFFFFF;border-radius:8px"><div style="font:700 12px ${FONT};color:${INK};margin-top:6px">Scan to pay · ${esc(m.label)}</div></td>`)
+         .join('')}</tr></table>`
     : '';
   const contact = [b.address, b.email, b.website].filter(Boolean).map((x) => esc(x as string)).join(' &middot; ');
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"><title>${esc(l.heading)}</title></head>
@@ -120,7 +111,7 @@ function plain(l: Layout, b: BusinessSettings): string {
     ...(l.highlight ? ['', `${l.highlight.label}: ${l.highlight.value}`] : []),
     ...(l.rows ?? []).map(([k, v]) => `${k}: ${v}`),
     ...(l.button ? ['', `${l.button.label}: ${l.button.url}`] : []),
-    ...(l.methods ?? []).filter((m) => m.on && (m.accountNumber || m.accountName)).map((m) => `${m.label}: ${[m.accountName, m.accountNumber].filter(Boolean).join(' · ')}`),
+    ...(payableMethods(l.methods).length ? ['', `To pay, scan the QR code in this email (${payableMethods(l.methods).map((m) => m.label).join(', ')}).`] : []),
     ...(l.note ? ['', strip(l.note)] : []),
     '',
     strip(l.signoff ?? `Thank you,\n${b.name || 'JoshWorks'}`),
@@ -129,9 +120,9 @@ function plain(l: Layout, b: BusinessSettings): string {
   ].join('\n');
 }
 
-/** Methods worth listing: turned on, with an account or a QR code. */
+/** Methods shown to clients: turned on and with a QR code. Their account names and numbers are never sent. */
 function payableMethods(methods: StudioPayMethod[] | undefined): StudioPayMethod[] {
-  return (methods ?? []).filter((m) => m.on && (m.accountNumber || m.accountName || m.qrImage));
+  return (methods ?? []).filter((m) => m.on && m.qrImage);
 }
 const qrCid = (m: StudioPayMethod) => `qr${m.id.replace(/[^a-z0-9]/gi, '')}`;
 

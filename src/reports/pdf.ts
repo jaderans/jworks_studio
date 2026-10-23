@@ -309,7 +309,7 @@ export function signatureLine(label: string, signature?: string): Content {
     columns: [
       {
         stack: [
-          signature ? { image: signature, fit: [150, 44], margin: [6, 0, 0, -8] } : { text: ' ', margin: [0, 16, 0, 0] },
+          signature ? { image: signature, fit: [150, 44], margin: [6, 0, 0, 0] } : { text: ' ', margin: [0, 16, 0, 0] },
           { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 170, y2: 0, lineWidth: 0.6, lineColor: MUTED }] },
           { text: label, style: 'muted', margin: [0, 3, 0, 0] },
         ],

@@ -134,7 +134,7 @@ export function MoneySection() {
   );
 }
 
-/** Where clients send money: printed on invoices, contracts and emails. */
+/** Where clients send money: only the QR codes reach clients (invoices, contracts, emails, client links). */
 export function PayMethodsSection() {
   const app = useApp();
   const stored = settingValue(useSettingRows(), 'payMethods');
@@ -145,7 +145,9 @@ export function PayMethodsSection() {
       <h2 className="row" style={{ gap: 8 }}>
         <QrCode size={22} className="teal" /> How clients pay you
       </h2>
-      <p className="muted small">Shown under “Payment details” on invoices and contracts, and under “Where to pay” in emails. Only owners and managers can see these.</p>
+      <p className="muted small">
+        Clients see <b>only the QR codes</b>, each with its method’s name: under “Payment details” on invoices, quotations and contracts, under “Where to pay” in emails, and on client links. Account names and numbers stay here, for the studio’s own reference; they are never printed or sent. A method without a QR code isn’t shown to clients. Only owners and managers can see this section.
+      </p>
       <div className="stack">
         {list.map((pm, i) => (
           <div key={pm.id} className="card stack tight" style={{ background: 'var(--surface-2)' }}>
@@ -162,7 +164,7 @@ export function PayMethodsSection() {
               <Field label="Account name" htmlFor={`pm-n-${pm.id}`}>
                 <TextInput id={`pm-n-${pm.id}`} value={pm.accountName} onChange={(e) => set(i, { accountName: e.target.value })} />
               </Field>
-              <Field label="Account or mobile number" htmlFor={`pm-a-${pm.id}`} className="span-2">
+              <Field label="Account or mobile number" htmlFor={`pm-a-${pm.id}`} className="span-2" hint={pm.qrImage ? 'For your reference only; clients see the QR code.' : 'Not shown to clients. Upload this method’s QR code so clients can pay with it.'}>
                 <TextInput id={`pm-a-${pm.id}`} value={pm.accountNumber} onChange={(e) => set(i, { accountNumber: e.target.value })} inputMode="numeric" />
               </Field>
             </div>

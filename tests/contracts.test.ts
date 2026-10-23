@@ -142,7 +142,14 @@ describe('client links', () => {
   it('shares only what the client should see', () => {
     const tpl = SEED_TEMPLATES[0] as unknown as ContractTemplate;
     const pkgs = [{ id: 'a', active: 1, category: 'Branding' }, { id: 'b', active: 1, category: 'Merch' }, { id: 'c', active: 0, category: 'Branding' }] as unknown as Package[];
-    const s = linkSnapshot({ contract: { ...base, clientSignature: 'x', _sync: 1 } as Contract, template: tpl, business: {} as never, payMethods: [], packages: pkgs, audience: 'business', payments: [{ kind: 'down', amount: 1 } as never] });
+    const methods = [
+      { id: 'g', label: 'GCash', accountName: 'J. Ranin', accountNumber: '0917 000 0000', qrImage: 'data:image/png;base64,AAA', on: true },
+      { id: 'u', label: 'UnionBank', accountName: 'J. Ranin', accountNumber: '1093 2701', qrImage: '', on: true },
+    ];
+    const s = linkSnapshot({ contract: { ...base, clientSignature: 'x', _sync: 1 } as Contract, template: tpl, business: {} as never, payMethods: methods, packages: pkgs, audience: 'business', payments: [{ kind: 'down', amount: 1 } as never] });
+    // Payment methods travel as QR codes only.
+    expect(s.payMethods).toEqual([{ id: 'g', label: 'GCash', accountName: '', accountNumber: '', qrImage: 'data:image/png;base64,AAA', on: true }]);
+    expect(JSON.stringify(s)).not.toContain('0917');
     expect(s.packages.map((p) => p.id)).toEqual(['a']);
     expect(s.contract.notes).toBe('');
     expect(s.contract).not.toHaveProperty('link');

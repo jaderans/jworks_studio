@@ -60,16 +60,17 @@ const gridLayout = {
   paddingBottom: () => 4,
 };
 
-/** Where clients pay: the studio's methods, with QR codes when they were added in Settings. */
+/**
+ * Where clients pay: only the QR codes added in Settings, each with its method's
+ * name. Account names and numbers are never printed (documents get forwarded).
+ */
 export function paymentDetails(methods: StudioPayMethod[], fallback = ''): Content[] {
-  const on = methods.filter((m) => m.on && (m.accountNumber || m.qrImage || m.accountName));
+  const on = methods.filter((m) => m.on && m.qrImage);
   if (!on.length) return fallback ? [sectionTitle('Payment details'), { text: fallback }] : [];
   const cells: TableCell[] = on.map((m) => ({
     stack: [
-      ...(m.qrImage ? [{ image: m.qrImage, fit: [110, 110], alignment: 'center', margin: [0, 0, 0, 4] }] : []),
-      { text: m.label, bold: true, alignment: 'center', color: TEAL },
-      ...(m.accountName ? [{ text: m.accountName, alignment: 'center', fontSize: 8.5 }] : []),
-      ...(m.accountNumber ? [{ text: m.accountNumber, alignment: 'center', fontSize: 8.5, bold: true }] : []),
+      { image: m.qrImage, fit: [110, 110], alignment: 'center', margin: [0, 0, 0, 4] },
+      { text: `Scan to pay · ${m.label}`, bold: true, alignment: 'center', color: TEAL },
     ],
     margin: [0, 4, 0, 4],
   })) as TableCell[];
@@ -605,8 +606,8 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
         sectionTitle('Signatures'),
         {
           columns: [
-            signatureBlock('CLIENT ACKNOWLEDGMENT', CLIENT_ACK, `Client Name & Signature${f.signer ? `: ${f.signer}` : ''}`, c.clientSignature, c.signedOnline ? isoDate(c.signedOnline.at) : '', c.signedOnline ? `Signed online by ${c.signedOnline.name} · ${fmtDateTime(c.signedOnline.at)}` : ''),
-            signatureBlock('DESIGNER ACKNOWLEDGMENT', DESIGNER_ACK, `Designer Name & Signature${f.designer ? `: ${f.designer}` : ''}`, c.useSignature !== false ? ctx.business.signature : undefined, c.useSignature !== false && ctx.business.signature ? made : '', ''),
+            signatureBlock('CLIENT ACKNOWLEDGMENT', CLIENT_ACK, 'Client', f.signer || '', c.clientSignature, c.signedOnline ? isoDate(c.signedOnline.at) : '', c.signedOnline ? `Signed online · ${fmtDateTime(c.signedOnline.at)}` : ''),
+            signatureBlock('DESIGNER ACKNOWLEDGMENT', DESIGNER_ACK, 'Designer', f.designer || ctx.business.signatory || '', c.useSignature !== false ? ctx.business.signature : undefined, c.useSignature !== false && ctx.business.signature ? made : '', ''),
           ],
           columnGap: 24,
         },
@@ -626,15 +627,25 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
   return doc(7.5, true);
 }
 
-/** One side of the signature block: who, the acknowledgment, the signature (if saved or signed online) on the line, and the date. */
-function signatureBlock(title: string, ack: string, name: string, signature: string | undefined, date: string, note: string): Content {
+/**
+ * One side of the signature block: who, the acknowledgment, the signature (if
+ * saved or signed online) on the line, the signer's name in print below it, and
+ * the date. `person` is "Name, Title"; the title goes on its own line.
+ */
+function signatureBlock(title: string, ack: string, role: 'Client' | 'Designer', person: string, signature: string | undefined, date: string, note: string): Content {
+  const cut = person.indexOf(',');
+  const name = (cut > 0 ? person.slice(0, cut) : person).trim();
+  const role2 = cut > 0 ? person.slice(cut + 1).trim() : '';
   return {
     stack: [
       { text: title, bold: true, fontSize: 8.5 },
-      { text: ack, fontSize: 8, margin: [0, 2, 0, signature ? 0 : 22] },
-      ...(signature ? [{ image: signature, fit: [160, 46], margin: [6, 0, 0, -6] } as Content] : []),
+      { text: ack, fontSize: 8, margin: [0, 2, 0, signature ? 2 : 30] },
+      // The signature sits on the line, clear of the printed name below it.
+      ...(signature ? [{ image: signature, fit: [160, 46], margin: [6, 0, 0, 0] } as Content] : []),
       { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 220, y2: 0, lineWidth: 0.7, lineColor: MUTED }] },
-      { text: name, style: 'muted', margin: [0, 2, 0, 0] },
+      ...(name ? [{ text: name, bold: true, fontSize: 9.5, margin: [0, 4, 0, 0] } as Content] : []),
+      ...(role2 ? [{ text: role2, fontSize: 8, color: MUTED } as Content] : []),
+      { text: `${role} Name & Signature`, style: 'muted', fontSize: 7.5, margin: [0, name ? 1 : 3, 0, 0] },
       ...(note ? [{ text: note, style: 'muted', fontSize: 7, color: TEAL } as Content] : []),
       { text: date ? fmtIsoDate(date) : ' ', margin: [0, 8, 0, 0], fontSize: 9 },
       { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 140, y2: 0, lineWidth: 0.7, lineColor: MUTED }] },

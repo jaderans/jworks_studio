@@ -39,6 +39,14 @@ describe('studio email through the Gmail mailer', () => {
     const calls = mockMailer({ ok: true, remaining: 97 });
     const mail = contractEmail(DEFAULT_BUSINESS, { clientName: 'Kape Ilonggo', number: 'C-2026-001', title: 'Branding & Visual Identity Agreement', total: 350000, down: 175000 }, [gcash]);
     expect(mail.html).toContain('cid:qrpmgcash');
+    // Only the QR code goes out: never the account name or number, in the design or the text copy.
+    for (const secret of ['0917 000 0000', 'J. Ranin']) {
+      expect(mail.html).not.toContain(secret);
+      expect(mail.text).not.toContain(secret);
+    }
+    const noQr = contractEmail(DEFAULT_BUSINESS, { clientName: 'Kape', number: 'C-1', title: 'T', total: 1, down: 1 }, [{ ...gcash, id: 'pm-bank', label: 'UnionBank', qrImage: '' }]);
+    expect(noQr.html).not.toContain('UnionBank');
+    expect(noQr.html).not.toContain('Where to pay');
     const left = await sendEmail({ email: 'hello@kape.example', name: 'Kape' }, mail, { settings, attachments: [{ name: 'C-2026-001.pdf', blob: new Blob(['%PDF-1.7'], { type: 'application/pdf' }) }] });
     expect(left).toBe(97);
     expect(calls).toHaveLength(1);

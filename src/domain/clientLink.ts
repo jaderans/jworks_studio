@@ -52,6 +52,8 @@ export function linkSnapshot(o: Omit<LinkSnapshot, 'packages' | 'payments' | 'co
   void notes;
   return {
     ...rest,
+    // Anyone holding the link can read it: payment methods travel as QR codes only.
+    payMethods: rest.payMethods.filter((m) => m.on && m.qrImage).map((m) => ({ ...m, accountName: '', accountNumber: '' })),
     contract: { ...shown, notes: '' } as Contract,
     packages: packages.filter((p) => p.active === 1 && o.template.categories.includes(p.category ?? '')),
     payments: payments.map((p) => ({ kind: p.kind })),
