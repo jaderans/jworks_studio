@@ -3,7 +3,8 @@ import { SEED_TEMPLATES, STANDARD_TERMS } from '../src/domain/contractTemplates'
 import { V1, upgradeTemplate } from '../src/domain/contractTemplatesV1';
 import { answeredCount, earlierAnswers, parseQuestionnaire, questionsOf, setAnswer } from '../src/domain/questionnaire';
 import { completionDate, contractAudience, deliverablesOf, planMilestones, projectDays, turnaroundDays } from '../src/domain/contractPlan';
-import type { Package, ProposalItem } from '../src/db/types';
+import { applyLinkResponse, linkExpiry, linkSnapshot } from '../src/domain/clientLink';
+import type { Contract, ContractTemplate, Package, ProposalItem } from '../src/db/types';
 
 const branding = SEED_TEMPLATES.find((t) => t.id === 'tpl-branding-business')!;
 
@@ -113,5 +114,47 @@ describe('template upgrade', () => {
 
   it('leaves templates that are already current alone', () => {
     expect(upgradeTemplate(branding, branding)).toEqual({ patch: {}, edited: [] });
+  });
+});
+
+describe('client links', () => {
+  const base = {
+    id: 'c1', number: 'C-2026-001', clientId: null, proposalId: null, packageId: null, status: 'sent', fields: { 'client.name': 'Kape Ilonggo', signer: '' }, sections: [], signedAt: null, notes: 'studio only',
+    templateId: 'tpl-branding-business', brief: [{ q: 'What industry/field are you in?', a: '' }], createdAt: 1, updatedAt: 1, deleted: 0,
+    link: { token: 't1', kind: 'sign', status: 'open', url: 'https://x/#/c?d=…', createdAt: 1, expiresAt: 2 },
+  } as unknown as Contract;
+
+  it('merges answers and ticks, and a signature signs the contract', () => {
+    const r = { answers: [{ q: 'What industry/field are you in?', a: 'Coffee' }, { q: 'What file formats do you require?', a: '', picks: ['PNG', 'PDF'] }], name: 'Ana Reyes', signature: 'data:image/png;base64,AAA', agreed: true, device: 'phone' };
+    const next = applyLinkResponse(base, 'sign', r, 1000);
+    expect(next.brief).toEqual([{ q: 'What industry/field are you in?', a: 'Coffee' }, { q: 'What file formats do you require?', a: '', picks: ['PNG', 'PDF'] }]);
+    expect(next).toMatchObject({ status: 'signed', signedAt: 1000, clientSignature: 'data:image/png;base64,AAA', signedOnline: { name: 'Ana Reyes', at: 1000, device: 'phone' } });
+    expect(next.fields.signer).toBe('Ana Reyes');
+    expect(next.link).toMatchObject({ status: 'applied', respondedAt: 1000 });
+  });
+
+  it('a questionnaire answer never signs', () => {
+    const next = applyLinkResponse(base, 'questionnaire', { answers: [], name: 'X', signature: 'data:image/png;base64,AAA' }, 1000);
+    expect(next.status).toBe('sent');
+    expect(next.clientSignature).toBeUndefined();
+  });
+
+  it('shares only what the client should see', () => {
+    const tpl = SEED_TEMPLATES[0] as unknown as ContractTemplate;
+    const pkgs = [{ id: 'a', active: 1, category: 'Branding' }, { id: 'b', active: 1, category: 'Merch' }, { id: 'c', active: 0, category: 'Branding' }] as unknown as Package[];
+    const s = linkSnapshot({ contract: { ...base, clientSignature: 'x', _sync: 1 } as Contract, template: tpl, business: {} as never, payMethods: [], packages: pkgs, audience: 'business', payments: [{ kind: 'down', amount: 1 } as never] });
+    expect(s.packages.map((p) => p.id)).toEqual(['a']);
+    expect(s.contract.notes).toBe('');
+    expect(s.contract).not.toHaveProperty('link');
+    expect(s.contract).not.toHaveProperty('clientSignature');
+    expect(s.contract).not.toHaveProperty('_sync');
+    expect(s.payments).toEqual([{ kind: 'down' }]);
+  });
+
+  it('stays open a week past the prices, at least three days', () => {
+    const now = Date.parse('2026-10-21T10:00:00+08:00');
+    expect(linkExpiry('2026-11-04', now)).toBeGreaterThan(Date.parse('2026-11-11T00:00:00+08:00'));
+    expect(linkExpiry('', now)).toBe(now + 30 * 86_400_000);
+    expect(linkExpiry('2026-01-01', now)).toBe(now + 3 * 86_400_000);
   });
 });

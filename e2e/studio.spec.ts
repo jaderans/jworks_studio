@@ -273,3 +273,41 @@ test('filter bars show, hide and remember their filters', async ({ page }) => {
     await expect(page.locator('.filter-bar').first()).toBeVisible();
   }
 });
+
+// Client links: the page the client sees (previewed here, no cloud needed), and a broken link.
+test('client link pages: preview to sign, and a broken link', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-21T10:00:00+08:00') });
+  const errors = watchErrors(page);
+  await freshSetup(page);
+  await page.goto('/#/docs/contracts');
+  await page.getByRole('button', { name: 'New contract' }).first().click();
+  await page.getByRole('radio', { name: /Branding/ }).first().click();
+  await page.getByRole('button', { name: 'Make the contract' }).click();
+  await page.getByRole('dialog').first().getByRole('button', { name: /Client link/ }).click();
+  const share = page.getByRole('dialog', { name: 'Client link' });
+  await expect(share.getByText('Needs cloud sync')).toBeVisible();
+  await share.getByRole('button', { name: 'Preview the signing page' }).click();
+  const view = page.getByRole('dialog', { name: 'What the client sees' });
+  await expect(view.getByRole('heading', { name: 'Terms and conditions' })).toBeVisible();
+  await view.getByRole('button', { name: 'Modern & Minimalist', exact: true }).click();
+  await view.getByRole('button', { name: 'Sign the contract' }).click();
+  await expect(view.getByText(/tick that you have read/)).toBeVisible();
+  await view.getByLabel(/I have read, understood/).check();
+  await view.getByLabel('Your full name').fill('Ana Reyes');
+  const box = (await view.locator('.signature-pad canvas').boundingBox())!;
+  await page.mouse.move(box.x + 30, box.y + 100);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 120, box.y + 40, { steps: 6 });
+  await page.mouse.move(box.x + 220, box.y + 110, { steps: 6 });
+  await page.mouse.up();
+  await expect(view.getByText('Signed', { exact: true })).toBeVisible();
+  await view.getByRole('button', { name: 'Sign the contract' }).click();
+  await expect(view.getByText(/This is a preview: nothing was sent/)).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/client-link-preview.png` });
+  await page.keyboard.press('Escape');
+
+  // A partial or broken link explains itself instead of showing the studio app.
+  await page.goto('/#/c?d=not-a-link');
+  await expect(page.getByRole('heading', { name: /This link doesn’t work/ })).toBeVisible();
+  expect(errors).toEqual([]);
+});

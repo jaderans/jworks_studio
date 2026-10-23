@@ -407,6 +407,19 @@ export interface Contract extends Syncable {
   clientSignature?: string;
   /** When and how the client signed online. */
   signedOnline?: { name: string; at: number; device: string } | null;
+  /** The link the client answers the questionnaire or signs on (see sync/clientLinks.ts). */
+  link?: ClientLinkState | null;
+}
+
+export interface ClientLinkState {
+  token: string;
+  kind: 'questionnaire' | 'sign';
+  /** open → responded (client sent it) → applied (in this contract); off = turned off. */
+  status: 'open' | 'responded' | 'applied' | 'off';
+  url: string;
+  createdAt: number;
+  expiresAt: number;
+  respondedAt?: number;
 }
 
 export interface BriefAnswer {

@@ -92,9 +92,20 @@ async function teardown(signOutUser: boolean) {
   started = false;
 }
 
+/** Bumped whenever listeners stop, so a late async listener isn't kept for a signed-out user. */
+let listenerGen = 0;
+
 function stopListeners() {
+  listenerGen++;
   listeners.forEach((u) => u());
   listeners = [];
+}
+
+/** The live connection for features outside the synced tables (client links). Null when cloud sync isn't signed in. */
+export function cloudContext(): { fs: Firestore; cfg: CloudConfig; role: AppRole; uid: string } | null {
+  const uid = auth?.currentUser?.uid;
+  if (!fs || !cfg || !access || !uid) return null;
+  return { fs, cfg, role: access.role, uid };
 }
 
 export async function getCloudConfig(): Promise<CloudConfig | null> {
@@ -310,6 +321,17 @@ async function onUser(user: User | null) {
   if (a.role === 'designer') await purgeForDesigner(a.memberId);
   setSyncStatus({ access: a, message: 'Syncing…', refused: 0 });
   startListeners(a);
+  // Owner and managers: answers and signatures from client links come in live.
+  if (a.role !== 'designer') {
+    const gen = ++listenerGen;
+    void import('./clientLinks')
+      .then((m) => {
+        const stop = m.watchClientResponses();
+        if (gen === listenerGen && stop) listeners.push(stop);
+        else stop?.();
+      })
+      .catch(() => undefined);
+  }
   pendingSub?.unsubscribe();
   let lastCount = -1;
   pendingSub = liveQuery(countPending).subscribe({

@@ -47,7 +47,8 @@ export function usePwaUpdates() {
   toast.current = app.toast;
 
   useEffect(() => {
-    if (import.meta.env.DEV) return;
+    // Dev builds, and client links (a client signing a contract doesn't install the studio app).
+    if (import.meta.env.DEV || window.location.hash.startsWith('#/c?') || window.location.hash === '#/c') return;
     let cancelled = false;
     let timer: number | undefined;
     let idle: number | undefined;

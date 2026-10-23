@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Briefcase, FileDown, Mail, Plus, ReceiptText, RotateCcw, Trash2 } from 'lucide-react';
+import { Briefcase, FileDown, Link2, Mail, Plus, ReceiptText, RotateCcw, Trash2 } from 'lucide-react';
 import { useApp } from '../../app/AppContext';
 import { alive, db } from '../../db/db';
 import { Badge, Button, Callout, EmptyState, IconButton, PageHeader, Segmented, Toggle } from '../../components/ui';
@@ -28,6 +28,7 @@ import { FilterBar, PeriodSelect } from '../../components/FilterBar';
 import { safeFileName } from '../../lib/files';
 import { ContractEditor } from '../contracts/ContractsPage';
 import { InvoiceDialog } from '../money/InvoiceDialog';
+import { ClientLinkDialog } from './ClientLinkDialog';
 import type { Contract, ContractSection, Milestone, ProposalItem, StudioPayMethod } from '../../db/types';
 
 const RUSH_LABEL = 'Rush (3–5 day turnaround)';
@@ -264,14 +265,19 @@ function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: (
   const rows = useSettingRows();
   const business = settingValue(rows, 'business');
   const payMethods = settingValue(rows, 'payMethods');
+  const emailSettings = settingValue(rows, 'email');
   const stored = contracts.find((c) => c.id === id) ?? null;
   const [c, setC] = useState<Contract | null>(null);
   const [part, setPart] = useState<Part>('details');
   const [busy, setBusy] = useState<string | null>(null);
   const [invoiceId, setInvoiceId] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
   if (stored && (!c || c.id !== stored.id)) {
     setC({ ...stored });
     setPart('details');
+  } else if (stored && c && stored.link?.status === 'applied' && c.link?.status !== 'applied' && stored.link.token === c.link?.token) {
+    // The client answered or signed while this was open: take their part, keep the edits.
+    setC({ ...c, brief: stored.brief, clientSignature: stored.clientSignature, signedOnline: stored.signedOnline, status: stored.status, signedAt: stored.signedAt, link: stored.link, fields: { ...c.fields, signer: stored.fields.signer } });
   }
   if (!id && c) setC(null);
   const payments = useLiveQuery(async () => (c?.jobId ? alive(await db.payments.where('jobId').equals(c.jobId).toArray()) : []), [c?.jobId]) ?? [];
@@ -306,10 +312,17 @@ function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: (
   const contractPdf = () => buildTemplateContractPdf(c, tpl, { business, packages, payMethods, payments, audience, jobNumber: jobs.find((j) => j.id === c.jobId)?.number });
   const pdfName = `${safeFileName(`${c.number} ${c.fields['client.name'] || ''} ${tpl.name}`)}.pdf`;
 
+  /** Save the edits; an open client link then shows them too. */
+  const saveNow = async () => {
+    const saved = await saveContract(c);
+    if (saved.link?.status === 'open') void import('../../sync/clientLinks').then((m) => m.refreshClientLink(saved)).catch(() => undefined);
+    return saved;
+  };
+
   const run = async (label: string, fn: () => Promise<unknown>) => {
     setBusy(label);
     try {
-      await saveContract(c);
+      await saveNow();
       await fn();
     } catch (e) {
       app.toast(e instanceof Error ? e.message : 'Something went wrong', { tone: 'bad' });
@@ -345,6 +358,9 @@ function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: (
               <Trash2 size={16} /> Delete
             </Button>
             <span className="grow" />
+            <Button disabled={!!busy} onClick={() => setSharing(true)} title="Let the client answer the questionnaire or sign online">
+              <Link2 size={16} /> Client link{c.link?.status === 'open' ? ' · waiting' : ''}
+            </Button>
             <Button disabled={!!busy} onClick={() => run('pdf', async () => deliverPdf(await contractPdf(), pdfName))}>
               <FileDown size={16} /> {busy === 'pdf' ? 'Making…' : 'PDF'}
             </Button>
@@ -354,7 +370,7 @@ function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: (
               onClick={() =>
                 run('email', async () => {
                   const to = c.fields['client.email'] || client?.email || '';
-                  await sendEmail({ email: to, name: c.fields['client.contact'] }, contractEmail(business, { clientName: c.fields['client.contact'] || c.fields['client.name'], number: c.number, title: c.title || tpl.name, total: totals.net, down }, payMethods), { what: `contract ${c.number}`, attachments: [{ name: pdfName, blob: await renderPdf(await contractPdf()) }] });
+                  await sendEmail({ email: to, name: c.fields['client.contact'] }, contractEmail(business, { clientName: c.fields['client.contact'] || c.fields['client.name'], number: c.number, title: c.title || tpl.name, total: totals.net, down, signUrl: c.link?.status === 'open' && c.link.kind === 'sign' ? c.link.url : undefined }, payMethods), { what: `contract ${c.number}`, attachments: [{ name: pdfName, blob: await renderPdf(await contractPdf()) }] });
                   if (c.status === 'draft') await saveContract({ ...c, status: 'sent' });
                   app.toast(`Contract emailed to ${to}`, { tone: 'good' });
                 })
@@ -567,6 +583,19 @@ function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: (
         ) : null}
       </Dialog>
       <InvoiceDialog id={invoiceId} onClose={() => setInvoiceId(null)} />
+      <ClientLinkDialog
+        open={sharing}
+        onClose={() => setSharing(false)}
+        contract={c}
+        template={tpl}
+        business={business}
+        payMethods={payMethods}
+        email={emailSettings}
+        totals={{ net: totals.net, down }}
+        beforeShare={saveNow}
+        onChange={(next) => setC({ ...c, link: next.link, status: next.status })}
+        pdf={async () => ({ name: pdfName, blob: await renderPdf(await contractPdf()) })}
+      />
     </>
   );
 }

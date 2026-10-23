@@ -22,7 +22,7 @@ It is a web app that installs like a phone app (PWA). It works offline, keeps da
 - **Payouts**: each client payment releases every designer's share after the 5% deduction, so the team can be paid as the money comes in. Designers add where they want to be paid (GCash, bank, QR code) under **My pay**.
 - **Expenses, Reports and BIR**: the commission tracker's monthly and yearly summary, targets, top clients, and the 8% income tax estimate with the 1701Q/1701A schedule.
 
-**Documents**: quotes from the price list (business and student prices, add-ons, ownership buy-outs, the REPYOURORG15 code), the 13 v1.0 contract templates, and the team's rates. Quote → contract → job → invoice carries everything forward, so nothing is typed twice.
+**Documents**: quotes from the price list (business and student prices, add-ons, ownership buy-outs, the REPYOURORG15 code), the 13 v1.0 contract templates, and the team's rates. Quote → contract → job → invoice carries everything forward, so nothing is typed twice. Each contract carries the studio's questionnaire for its commission type, deliverables and milestones, terms on one page, and the owner's signature. A **client link** lets the client answer the questionnaire, or review and sign the contract, on their phone; their answers and signature come back into the contract by themselves (needs team sync).
 
 **Marketing**: the content calendar (weekly themes, break weeks, Philippine holidays), the board, ideas and carousel scripts, campaigns, trends, results, and the assistant.
 

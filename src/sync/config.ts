@@ -83,6 +83,25 @@ export function inviteLink(cfg: CloudConfig, email?: string, name?: string): str
   return `${base}#/join?i=${b64urlEncode(JSON.stringify(payload))}`;
 }
 
+/** A client link: the team's Firebase project, the workspace and the link's token. */
+export interface LinkData {
+  f: FirebaseSettings;
+  w: string;
+  t: string;
+}
+
+export const encodeLinkData = (d: LinkData) => b64urlEncode(JSON.stringify(d));
+
+export function readLinkData(param: string | null): LinkData | null {
+  if (!param) return null;
+  try {
+    const d = JSON.parse(b64urlDecode(param)) as LinkData;
+    return d?.f?.apiKey && d.f.projectId && d.w && d.t ? d : null;
+  } catch {
+    return null;
+  }
+}
+
 export function readInvite(param: string | null): InvitePayload | null {
   if (!param) return null;
   try {

@@ -2,7 +2,7 @@
 // Run from the project folder: npm run test:rules (starts the Firestore emulator; needs Java).
 import { readFileSync } from 'node:fs';
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore';
+import { Timestamp, collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 
 const env = await initializeTestEnvironment({
   projectId: 'demo-jwcamp',
@@ -90,6 +90,33 @@ await check('paused designer reads nothing', assertFails(getDoc(doc(off, `${W}/t
 await check('paused designer cannot read own pay', assertFails(getDocs(query(collection(off, `${W}/t_earnings`), where('memberId', '==', 'm-off')))));
 await check('unverified email reads nothing', assertFails(getDoc(doc(unverified, `${W}/t_jobs/x1`))));
 await check('nothing is hard-deleted', assertFails((await import('firebase/firestore')).deleteDoc(doc(owner, `${W}/t_jobs/x1`))));
+
+// Client links: anyone with the link reads it; an anonymous client sends their answers or signature once.
+const anon = env.unauthenticatedContext().firestore();
+await env.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore();
+  const base = { contractId: 'c1', snapshot: { title: 'Branding' }, createdAt: 1 };
+  const soon = Timestamp.fromMillis(Date.now() + 86_400_000);
+  await setDoc(doc(db, `${W}/share/tok-q`), { ...base, kind: 'questionnaire', status: 'open', expiresAt: soon });
+  await setDoc(doc(db, `${W}/share/tok-s`), { ...base, kind: 'sign', status: 'open', expiresAt: soon });
+  await setDoc(doc(db, `${W}/share/tok-old`), { ...base, kind: 'questionnaire', status: 'open', expiresAt: Timestamp.fromMillis(Date.now() - 1000) });
+  await setDoc(doc(db, `${W}/share/tok-done`), { ...base, kind: 'questionnaire', status: 'responded', expiresAt: soon });
+});
+const answers = { status: 'responded', respondedAt: serverTimestamp(), response: { answers: [{ q: 'What industry/field are you in?', a: 'Coffee' }], device: 'test' } };
+const signed = { ...answers, response: { ...answers.response, agreed: true, name: 'Kape Ilonggo', signature: `data:image/png;base64,${'A'.repeat(200)}` } };
+await check('anyone with the link reads it', assertSucceeds(getDoc(doc(anon, `${W}/share/tok-q`))));
+await check('nobody without an account lists links', assertFails(getDocs(collection(anon, `${W}/share`))));
+await check('designer cannot list links', assertFails(getDocs(collection(des, `${W}/share`))));
+await check('manager lists links', assertSucceeds(getDocs(collection(mgr, `${W}/share`))));
+await check('client cannot create a link', assertFails(setDoc(doc(anon, `${W}/share/tok-new`), { kind: 'sign', status: 'open' })));
+await check('client cannot change the contract', assertFails(updateDoc(doc(anon, `${W}/share/tok-q`), { ...answers, snapshot: { title: 'Changed' } })));
+await check('client cannot close a link', assertFails(updateDoc(doc(anon, `${W}/share/tok-q`), { status: 'applied' })));
+await check('signing needs the agreement, a name and a signature', assertFails(updateDoc(doc(anon, `${W}/share/tok-s`), answers)));
+await check('client cannot answer an expired link', assertFails(updateDoc(doc(anon, `${W}/share/tok-old`), answers)));
+await check('client cannot answer twice', assertFails(updateDoc(doc(anon, `${W}/share/tok-done`), answers)));
+await check('client sends questionnaire answers', assertSucceeds(updateDoc(doc(anon, `${W}/share/tok-q`), answers)));
+await check('client signs the contract', assertSucceeds(updateDoc(doc(anon, `${W}/share/tok-s`), signed)));
+await check('manager marks a response applied', assertSucceeds(updateDoc(doc(mgr, `${W}/share/tok-q`), { status: 'applied' })));
 
 await env.cleanup();
 console.log(`RULES: ${passed} passed, ${failures.length} failed`);

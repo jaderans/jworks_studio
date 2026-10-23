@@ -16,6 +16,8 @@ Sync runs on your own Firebase project, separate from JoshWorks POS, so the two 
 The `firebaseConfig` values aren't secret: they only say which project to talk to. The security rules decide who can read and write.
 
 > **Already set up?** After updating to JoshWorks Studio, publish the rules again (step 4). The new rules add jobs, payments, invoices and designer pay; until they're published, those don't sync.
+>
+> **October 2026 update:** publish the rules once more for **client links** (Documents → Contracts → Client link). They let a client open one contract with its link, answer the questionnaire and sign, and nothing else: no account, no other records, and only once before the link expires.
 
 ## 2. Make Firebase's emails look like JoshWorks
 

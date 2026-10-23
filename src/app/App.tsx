@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
-import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router';
+import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { AppProvider, useApp, type Permission } from './AppContext';
 import { Shell } from './Shell';
 import { SetupWizard } from '../features/setup/SetupWizard';
@@ -13,6 +13,7 @@ import { readAuthAction } from '../features/join/authAction';
 
 const JoinPage = lazy(() => import('../features/join/JoinPage').then((m) => ({ default: m.JoinPage })));
 const AuthActionPage = lazy(() => import('../features/join/AuthActionPage').then((m) => ({ default: m.AuthActionPage })));
+const ClientLinkPage = lazy(() => import('../features/clientlink/ClientLinkPage').then((m) => ({ default: m.ClientLinkPage })));
 const DashboardPage = lazy(() => import('../features/dashboard/DashboardPage'));
 const CalendarPage = lazy(() => import('../features/calendar/CalendarPage'));
 const BoardPage = lazy(() => import('../features/board/BoardPage'));
@@ -46,7 +47,18 @@ function Gate() {
   const [authAction] = useState(readAuthAction);
   const [done, setDone] = useState<boolean | null>(null);
   const location = useLocation();
+  const app = useApp();
+  const navigate = useNavigate();
   usePwaUpdates();
+  // A client answered or signed through their link (merged by sync/clientLinks.ts).
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ contractId: string; summary: string }>).detail;
+      app.toast(d.summary, { tone: 'good', ms: 15_000, action: { label: 'Open', onClick: () => navigate(`/docs/contracts?open=${d.contractId}`) } });
+    };
+    window.addEventListener('jw-client-response', on);
+    return () => window.removeEventListener('jw-client-response', on);
+  }, [app, navigate]);
   useEffect(() => {
     isSetupDone().then(setDone);
   }, []);
@@ -61,6 +73,13 @@ function Gate() {
     return (
       <Lazy>
         <AuthActionPage action={authAction} />
+      </Lazy>
+    );
+  // A client link (questionnaire or contract to sign): no account and no setup needed.
+  if (location.pathname === '/c')
+    return (
+      <Lazy>
+        <ClientLinkPage />
       </Lazy>
     );
   if (done === null) return <Loading />;

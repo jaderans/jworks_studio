@@ -237,6 +237,44 @@ service cloud.firestore {
         allow update: if isManager(ws) && notOlder();
         allow delete: if false;
       }
+
+      // Client links: a questionnaire or contract a client answers or signs online.
+      // The id is a long random token, so only someone holding the link can open
+      // it; nobody without an account can list them. The client may only send
+      // their answers (and, for a contract, their name, agreement and signature),
+      // once, while the link is open and not expired. Owner and managers make,
+      // refresh and close links.
+      match /share/{token} {
+        function response() {
+          return request.resource.data.response;
+        }
+        function clientAnswers() {
+          return resource.data.status == 'open'
+            && request.time < resource.data.expiresAt
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['response', 'status', 'respondedAt'])
+            && request.resource.data.status == 'responded'
+            && request.resource.data.respondedAt == request.time
+            && response() is map
+            && response().keys().hasOnly(['answers', 'name', 'signature', 'agreed', 'device'])
+            && response().get('answers', []) is list
+            && response().get('answers', []).size() <= 150
+            && response().get('device', '') is string
+            && response().get('device', '').size() <= 300
+            && (resource.data.kind != 'sign' || (
+              response().get('agreed', false) == true
+              && response().get('name', '') is string
+              && response().get('name', '').size() >= 2
+              && response().get('name', '').size() <= 120
+              && response().get('signature', '') is string
+              && response().get('signature', '').size() > 100
+              && response().get('signature', '').size() < 300000
+            ));
+        }
+        allow get: if true;
+        allow list: if isManager(ws);
+        allow create, delete: if isManager(ws);
+        allow update: if isManager(ws) || clientAnswers();
+      }
     }
   }
 }
