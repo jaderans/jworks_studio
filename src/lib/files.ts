@@ -22,6 +22,14 @@ export function readFileAsText(file: File): Promise<string> {
   });
 }
 
+/** The file's bytes as base64 (no "data:" prefix), e.g. to attach a PDF to an email. */
+export async function blobToBase64(blob: Blob): Promise<string> {
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
 export function readFileAsDataURL(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();

@@ -12,6 +12,8 @@ export interface EmailContent {
   subject: string;
   html: string;
   text: string;
+  /** Images shown inside the email (cid → data URL), e.g. the payment QR codes. */
+  inline?: Record<string, string>;
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
@@ -65,14 +67,22 @@ function layout(b: BusinessSettings, l: Layout): string {
         <a href="${esc(l.button.url)}" style="display:inline-block;padding:13px 26px;font:700 15px ${FONT};color:${INK};text-decoration:none;border-radius:999px">${esc(l.button.label)}</a>
       </td></tr></table>`
     : '';
-  const methods = l.methods?.filter((m) => m.on && (m.accountNumber || m.accountName)).length
+  const payable = payableMethods(l.methods);
+  const qrs = payable.filter((m) => m.qrImage);
+  const methods = payable.length
     ? `<div style="font:700 13px ${FONT};color:${TEAL};letter-spacing:.06em;text-transform:uppercase;margin:6px 0 8px">Where to pay</div>
-       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border-collapse:collapse">
-        ${l.methods
-          .filter((m) => m.on && (m.accountNumber || m.accountName))
+       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 ${qrs.length ? 12 : 18}px;border-collapse:collapse">
+        ${payable
           .map((m) => `<tr><td style="padding:8px 0;font:600 14px ${FONT};color:${INK};border-bottom:1px solid #EEF0F0">${esc(m.label)}</td><td align="right" style="padding:8px 0;font:14px ${FONT};color:#3A3536;border-bottom:1px solid #EEF0F0">${esc([m.accountName, m.accountNumber].filter(Boolean).join(' · '))}</td></tr>`)
           .join('')}
-       </table>`
+       </table>
+       ${
+         qrs.length
+           ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;background:#F1F8F9;border-radius:12px"><tr>${qrs
+               .map((m) => `<td align="center" valign="top" style="padding:14px 8px"><img src="cid:${qrCid(m)}" width="140" alt="${esc(m.label)} QR code" style="display:block;width:140px;max-width:100%;height:auto;border:4px solid #FFFFFF;border-radius:8px"><div style="font:700 12px ${FONT};color:${INK};margin-top:6px">Scan to pay · ${esc(m.label)}</div></td>`)
+               .join('')}</tr></table>`
+           : ''
+       }`
     : '';
   const contact = [b.address, b.email, b.website].filter(Boolean).map((x) => esc(x as string)).join(' &middot; ');
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"><title>${esc(l.heading)}</title></head>
@@ -119,19 +129,30 @@ function plain(l: Layout, b: BusinessSettings): string {
   ].join('\n');
 }
 
-const build = (b: BusinessSettings, subject: string, l: Layout): EmailContent => ({ subject, html: layout(b, l), text: plain(l, b) });
+/** Methods worth listing: turned on, with an account or a QR code. */
+function payableMethods(methods: StudioPayMethod[] | undefined): StudioPayMethod[] {
+  return (methods ?? []).filter((m) => m.on && (m.accountNumber || m.accountName || m.qrImage));
+}
+const qrCid = (m: StudioPayMethod) => `qr${m.id.replace(/[^a-z0-9]/gi, '')}`;
+
+const build = (b: BusinessSettings, subject: string, l: Layout): EmailContent => ({
+  subject,
+  html: layout(b, l),
+  text: plain(l, b),
+  inline: Object.fromEntries(payableMethods(l.methods).filter((m) => m.qrImage).map((m) => [qrCid(m), m.qrImage])),
+});
 
 // ----- the emails -----
 
 export function inviteEmail(b: BusinessSettings, o: { name: string; email: string; link: string; role: string; from: string }): EmailContent {
-  return build(b, `${o.from} invited you to JoshWorks Studio`, {
-    preheader: 'Join the JoshWorks team app: jobs, deadlines and your pay in one place.',
-    heading: `Hi ${o.name}, you’re invited to JoshWorks Studio`,
+  return build(b, `${o.from} invited you to JoshWorks Studio: approve your account`, {
+    preheader: 'Approve your JoshWorks Studio account: jobs, deadlines and your pay in one place.',
+    heading: `Hi ${o.name}, please approve your JoshWorks Studio account`,
     paragraphs: [
       `${esc(o.from)} added you to the JoshWorks team as <strong>${esc(o.role)}</strong>. The app keeps our jobs, deadlines, content calendar and your payouts in one place, on your phone or laptop.`,
-      `Open the link below, then sign in with Google, or with this email: <strong>${esc(o.email)}</strong>.`,
+      `To approve your account, open the link below and sign in with Google, or with this email: <strong>${esc(o.email)}</strong>. Your account is ready as soon as you sign in.`,
     ],
-    button: { label: 'Join the team', url: o.link },
+    button: { label: 'Approve and join', url: o.link },
     note: 'Tip: on your phone, add it to your home screen (Share → Add to Home Screen) so it opens like an app.',
     signoff: `See you inside,<br><strong>${esc(o.from)}</strong>`,
   });
@@ -160,7 +181,7 @@ export function invoiceEmail(b: BusinessSettings, inv: InvoiceEmailData, methods
       ...(inv.dueDate ? ([['Due by', fmtIsoDate(inv.dueDate)]] as [string, string][]) : []),
     ],
     methods,
-    note: `Please use <strong>${esc(inv.number)}</strong> as your payment reference and send us a screenshot of the receipt. Need the PDF copy? Just reply to this email.`,
+    note: `The invoice PDF is attached. Please use <strong>${esc(inv.number)}</strong> as your payment reference and send us a screenshot of the receipt.`,
   });
 }
 
@@ -191,7 +212,7 @@ export function receiptEmail(b: BusinessSettings, o: { clientName: string; amoun
       ...(o.forWhat ? ([['For', o.forWhat]] as [string, string][]) : []),
       ...(o.balanceAfter !== null ? ([['Remaining balance', o.balanceAfter > 0 ? peso(o.balanceAfter) : 'Fully paid']] as [string, string][]) : []),
     ],
-    note: 'This is an acknowledgment receipt for your records, not a BIR official receipt.',
+    note: 'The receipt PDF is attached. It is an acknowledgment receipt for your records, not a BIR official receipt.',
   });
 }
 
@@ -201,23 +222,44 @@ export function quoteEmail(b: BusinessSettings, o: { clientName: string; number:
     heading: 'Here’s your quote',
     paragraphs: [`Hi ${esc(o.clientName || 'there')}, thank you for reaching out. Here’s what we recommend and what it costs.`],
     rows: [...o.items.slice(0, 10).map((i) => [i.label, peso(i.amount)] as [string, string]), ['Total', peso(o.total)], [`${o.downPct}% down payment to start`, peso(Math.round((o.total * o.downPct) / 100))]],
-    note: `This quote is valid until ${fmtIsoDate(o.validUntil)}. Reply to this email to go ahead, and we’ll send the contract.`,
+    note: `The quotation PDF is attached. It is valid until ${fmtIsoDate(o.validUntil)}. Reply to this email to go ahead, and we’ll send the contract.`,
   });
 }
 
-export function contractEmail(b: BusinessSettings, o: { clientName: string; number: string; title: string; total: number; down: number }): EmailContent {
+export function contractEmail(
+  b: BusinessSettings,
+  o: { clientName: string; number: string; title: string; total: number; down: number; signUrl?: string },
+  methods: StudioPayMethod[] = [],
+): EmailContent {
   return build(b, `Your ${o.title} contract (${o.number})`, {
     preheader: `Your contract is ready. ${peso(o.down)} is due on signing.`,
     heading: 'Your contract is ready',
     paragraphs: [
-      `Hi ${esc(o.clientName || 'there')}, your ${esc(o.title)} contract is ready. We’ll send the PDF copy to sign; please read the terms and the payment schedule.`,
-      'Once it’s signed and the down payment is in, we start right away.',
+      `Hi ${esc(o.clientName || 'there')}, your ${esc(o.title)} contract is ready. The PDF is attached: please read the terms, the questionnaire and the payment schedule.`,
+      o.signUrl
+        ? 'You can answer the questionnaire and sign online with the button below, or print, sign and send back the PDF.'
+        : 'Please sign it and send it back (a clear photo or scan is fine). Once it’s signed and the down payment is in, we start right away.',
     ],
     rows: [
       ['Contract no.', o.number],
       ['Total project cost', peso(o.total)],
       ['Due on signing', peso(o.down)],
     ],
+    button: o.signUrl ? { label: 'Review and sign online', url: o.signUrl } : undefined,
+    methods,
+  });
+}
+
+/** The questionnaire on its own, sent before the contract with a link to answer it online. */
+export function questionnaireEmail(b: BusinessSettings, o: { clientName: string; title: string; url: string }): EmailContent {
+  return build(b, `A few questions about your project (${o.title})`, {
+    preheader: 'Answer the questionnaire online: it takes about 10 minutes.',
+    heading: 'Tell us about your project',
+    paragraphs: [
+      `Hi ${esc(o.clientName || 'there')}, thank you for choosing JoshWorks. Before we start, please answer the ${esc(o.title)} online. It takes about 10 minutes, and most questions are tick boxes.`,
+      'Your answers come straight to us and go into your contract, so we design with the right direction from day one.',
+    ],
+    button: { label: 'Answer the questionnaire', url: o.url },
   });
 }
 
@@ -227,7 +269,7 @@ export function testEmail(b: BusinessSettings, methods: StudioPayMethod[]): Emai
     preheader: 'Your studio emails are set up and on brand.',
     heading: 'Email is working',
     paragraphs: [
-      'This is how invoices, reminders, receipts and team invites will look when they reach your clients and designers.',
+      'Studio emails go out from this Gmail for two jobs: inviting designers to approve and join their account, and sending clients their contracts, invoices and quotations (with the PDF attached), plus receipts and payment reminders. This is how they look.',
       'If this landed in Spam, open it, mark it <strong>Not spam</strong>, and add the studio Gmail to your contacts. That teaches Gmail to trust it.',
     ],
     highlight: { label: 'Sample balance due', value: peso(175000) },
@@ -238,3 +280,31 @@ export function testEmail(b: BusinessSettings, methods: StudioPayMethod[]): Emai
     methods,
   });
 }
+
+// ----- previews (Settings → Email) -----
+
+export type SampleKind = 'invite' | 'contract' | 'invoice' | 'quote' | 'receipt';
+
+/** Sample emails with made-up numbers, to see the design without sending anything. */
+export function sampleEmail(kind: SampleKind, b: BusinessSettings, methods: StudioPayMethod[]): EmailContent {
+  const today = new Date().toISOString().slice(0, 10);
+  const items = [
+    { label: 'Essential Branding', amount: 350000 },
+    { label: 'Add-on: Rush (3–5 day turnaround)', amount: 87500 },
+  ];
+  switch (kind) {
+    case 'invite':
+      return inviteEmail(b, { name: 'Kaye', email: 'kaye@example.com', link: `${appBase()}#/join`, role: 'Designer', from: b.signatory?.split(',')[0] || 'Joshua' });
+    case 'contract':
+      return contractEmail(b, { clientName: 'Kape Ilonggo', number: 'C-2026-001', title: 'Branding & Visual Identity Agreement', total: 437500, down: 218750, signUrl: `${appBase()}#/c` }, methods);
+    case 'invoice':
+      return invoiceEmail(b, { number: 'JW-0032-2026', clientName: 'Kape Ilonggo', total: 437500, paid: 218750, balance: 218750, dueDate: today, items }, methods);
+    case 'quote':
+      return quoteEmail(b, { clientName: 'Kape Ilonggo', number: 'Q-2026-001', total: 437500, validUntil: today, items, downPct: 50 });
+    case 'receipt':
+      return receiptEmail(b, { clientName: 'Kape Ilonggo', amount: 218750, receiptNo: 'AR-0001-2026', date: today, method: 'GCash', forWhat: 'COM-001 · Logo and brand kit', balanceAfter: 218750 });
+  }
+}
+
+/** The email's HTML with its inline images (cid:) swapped for the images themselves, for an on-screen preview. */
+export const previewHtml = (mail: EmailContent) => mail.html.replace(/cid:([a-z0-9]+)/gi, (m, cid: string) => mail.inline?.[cid] ?? m);

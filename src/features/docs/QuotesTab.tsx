@@ -14,7 +14,7 @@ import { proposalTotals } from '../../domain/pricing';
 import { deleteProposal, newProposal, saveProposal } from '../../services/clients';
 import { jobFromQuote } from '../../services/documents';
 import { buildQuotePdf } from '../../reports/studioDocs';
-import { deliverPdf } from '../../reports/pdf';
+import { deliverPdf, renderPdf } from '../../reports/pdf';
 import { quoteEmail } from '../../email/templates';
 import { sendEmail } from '../../email/send';
 import { peso } from '../../lib/money';
@@ -209,7 +209,7 @@ function QuoteDialog({ id, onClose }: { id: string | null; onClose: () => void }
                 await sendEmail(
                   { email: client?.email ?? '', name: client?.contactName || p.clientName },
                   quoteEmail(business, { clientName: client?.contactName || p.clientName, number: p.number, total: t.invoice, validUntil: p.validUntil, items: t.lines.map((l) => ({ label: l.label, amount: l.amount })), downPct: money.downPct }),
-                  { what: `quote ${p.number}` },
+                  { what: `quote ${p.number}`, attachments: [{ name: `${safeFileName(`${p.number} ${p.clientName}`)}.pdf`, blob: await renderPdf(await buildQuotePdf(p, { business, rates, packages, payMethods, money })) }] },
                 );
                 setP({ ...p, status: p.status === 'draft' ? 'sent' : p.status });
                 await saveProposal({ ...p, status: p.status === 'draft' ? 'sent' : p.status });

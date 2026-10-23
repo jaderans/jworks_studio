@@ -798,13 +798,13 @@ export interface StudioPayMethod {
 }
 
 export interface EmailSettings {
-  /** EmailJS service, template and public key. */
-  serviceId: string;
-  templateId: string;
-  publicKey: string;
+  /** The studio Gmail's mailer: the Apps Script web app URL (apps-script/Mailer.gs). */
+  mailerUrl: string;
+  /** Shared secret the mailer checks (pasted into the script as KEY). */
+  mailerKey: string;
   fromName: string;
   replyTo: string;
-  /** Email the owner is copied on (BCC in the EmailJS template). */
+  /** Email the owner is copied on (Bcc). */
   copyTo: string;
 }
 

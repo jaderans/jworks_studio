@@ -194,3 +194,4 @@ body[data-dialog-open='true'] .toast:not(:last-child) { display: none; }
 }
 .signature-box { display: grid; place-items: center; width: 220px; height: 90px; border: 1px dashed var(--line-strong); border-radius: 12px; background: #fff; }
 .signature-box img { max-width: 200px; max-height: 76px; object-fit: contain; }
+.email-preview { width: 100%; height: min(70vh, 760px); border: 1px solid var(--line); border-radius: 12px; background: #EDF2F2; }

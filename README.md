@@ -34,7 +34,7 @@ It is a web app that installs like a phone app (PWA). It works offline, keeps da
 
 - **Local first.** Everything lives in the browser on each device (IndexedDB) and works offline. Export a backup from Settings any time.
 - **Team sync is optional.** It runs on your own Firebase project: [docs/CLOUD_SETUP.md](docs/CLOUD_SETUP.md). Designers never receive prices, quotes, contracts, invoices, client payments or other people's pay; the security rules enforce it.
-- **Branded email** goes out from the studio Gmail through EmailJS: [docs/EMAIL_SETUP.md](docs/EMAIL_SETUP.md).
+- **Studio email** (designer invites; client contracts, invoices and quotations with the PDF attached) goes out from the studio Gmail through a Google Apps Script in that account: [docs/EMAIL_SETUP.md](docs/EMAIL_SETUP.md).
 - **The Claude API key never leaves the device** where it was entered. Without one, the assistant works through Claude.ai: the app writes the prompt, you paste the answer back.
 - **Never store client passwords.** Ask clients for partner access in Meta Business Suite and TikTok Business Center instead.
 - **This repository is public.** The commission tracker, planners, client documents, brand fonts and payment QR codes are git-ignored or stay in the app's own database. Keep client data out of commits.

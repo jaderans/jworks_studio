@@ -19,7 +19,7 @@ import { deleteContract, saveContract } from '../../services/clients';
 import { jobFromContract, newTemplateContract, suggestTemplate } from '../../services/documents';
 import { invoiceForJob } from '../../services/money';
 import { buildTemplateContractPdf } from '../../reports/studioDocs';
-import { deliverPdf } from '../../reports/pdf';
+import { deliverPdf, renderPdf } from '../../reports/pdf';
 import { contractEmail } from '../../email/templates';
 import { sendEmail } from '../../email/send';
 import { peso } from '../../lib/money';
@@ -303,6 +303,9 @@ function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: (
     setC({ ...c, rush: on, items: on ? [...rest, line] : rest });
   };
 
+  const contractPdf = () => buildTemplateContractPdf(c, tpl, { business, packages, payMethods, payments, audience, jobNumber: jobs.find((j) => j.id === c.jobId)?.number });
+  const pdfName = `${safeFileName(`${c.number} ${c.fields['client.name'] || ''} ${tpl.name}`)}.pdf`;
+
   const run = async (label: string, fn: () => Promise<unknown>) => {
     setBusy(label);
     try {
@@ -342,7 +345,7 @@ function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: (
               <Trash2 size={16} /> Delete
             </Button>
             <span className="grow" />
-            <Button disabled={!!busy} onClick={() => run('pdf', async () => deliverPdf(await buildTemplateContractPdf(c, tpl, { business, packages, payMethods, payments, audience, jobNumber: jobs.find((j) => j.id === c.jobId)?.number }), `${safeFileName(`${c.number} ${c.fields['client.name'] || ''} ${tpl.name}`)}.pdf`))}>
+            <Button disabled={!!busy} onClick={() => run('pdf', async () => deliverPdf(await contractPdf(), pdfName))}>
               <FileDown size={16} /> {busy === 'pdf' ? 'Making…' : 'PDF'}
             </Button>
             <Button
@@ -351,7 +354,7 @@ function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: (
               onClick={() =>
                 run('email', async () => {
                   const to = c.fields['client.email'] || client?.email || '';
-                  await sendEmail({ email: to, name: c.fields['client.contact'] }, contractEmail(business, { clientName: c.fields['client.contact'] || c.fields['client.name'], number: c.number, title: c.title || tpl.name, total: totals.net, down }), { what: `contract ${c.number}` });
+                  await sendEmail({ email: to, name: c.fields['client.contact'] }, contractEmail(business, { clientName: c.fields['client.contact'] || c.fields['client.name'], number: c.number, title: c.title || tpl.name, total: totals.net, down }, payMethods), { what: `contract ${c.number}`, attachments: [{ name: pdfName, blob: await renderPdf(await contractPdf()) }] });
                   if (c.status === 'draft') await saveContract({ ...c, status: 'sent' });
                   app.toast(`Contract emailed to ${to}`, { tone: 'good' });
                 })

@@ -1,13 +1,16 @@
 import { useState } from 'react';
-import { Landmark, Mail, Plus, QrCode, Send, Trash2, Upload, Wallet } from 'lucide-react';
+import { Copy, Eye, KeyRound, Landmark, Mail, PlugZap, Plus, QrCode, Send, Trash2, Upload, Wallet } from 'lucide-react';
 import { useApp } from '../../app/AppContext';
-import { Button, Callout, IconButton, Toggle } from '../../components/ui';
+import { Button, Callout, IconButton, Segmented, Toggle } from '../../components/ui';
 import { Field, MoneyInput, NumberInput, TextArea, TextInput } from '../../components/form';
 import { useSettingRows } from '../../hooks/data';
 import { setSetting, settingValue } from '../../db/settings';
 import { formatInvoiceNo } from '../../domain/money';
-import { emailReady, sendEmail } from '../../email/send';
-import { testEmail } from '../../email/templates';
+import { checkMailer, emailReady, newMailerKey, sendEmail } from '../../email/send';
+import mailerScript from '../../../apps-script/Mailer.gs?raw';
+import { copyText } from '../../lib/text';
+import { previewHtml, sampleEmail, testEmail, type SampleKind } from '../../email/templates';
+import { Dialog } from '../../components/Dialog';
 import { CatalogBanner } from '../docs/CatalogBanner';
 import { compressImage, readFileAsDataURL } from '../../lib/files';
 import { peso } from '../../lib/money';
@@ -246,7 +249,7 @@ export function BirSection() {
   );
 }
 
-/** EmailJS keys, so invoices, receipts and invites go out from the studio Gmail. */
+/** The studio Gmail's mailer (Google Apps Script), so invites, contracts, invoices and quotations go out from the studio's own address. */
 export function EmailSection() {
   const app = useApp();
   const rows = useSettingRows();
@@ -255,35 +258,82 @@ export function EmailSection() {
   const methods = settingValue(rows, 'payMethods');
   const [e, setE, dirty, reset] = useDraft<EmailSettings>(stored);
   const [to, setTo] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<'' | 'test' | 'check'>('');
+  const [left, setLeft] = useState<number | null>(null);
+  const [preview, setPreview] = useState<SampleKind | null>(null);
   const ready = emailReady(e);
   const field = (k: keyof EmailSettings, label: string, hint?: string, placeholder?: string) => (
     <Field label={label} htmlFor={`em-${k}`} hint={hint}>
       <TextInput id={`em-${k}`} value={e[k]} placeholder={placeholder} autoComplete="off" spellCheck={false} onChange={(ev) => setE({ ...e, [k]: ev.target.value.trim() })} />
     </Field>
   );
+  const key = e.mailerKey || '';
+  const copyScript = async () => {
+    const k = key || newMailerKey();
+    if (!key) setE({ ...e, mailerKey: k });
+    const ok = await copyText(mailerScript.replace('PASTE-THE-KEY-FROM-THE-APP', k));
+    app.toast(ok ? 'Script copied, with your key already in it. Paste it into the Apps Script project, then press Save here.' : 'Couldn’t copy. Open apps-script/Mailer.gs in the repository instead.', { tone: ok ? 'good' : 'bad', ms: 8000 });
+  };
+  const run = async (what: 'test' | 'check', fn: () => Promise<number | undefined>) => {
+    setBusy(what);
+    try {
+      const n = await fn();
+      if (typeof n === 'number') setLeft(n);
+      return true;
+    } catch (err) {
+      app.toast(err instanceof Error ? err.message : 'That didn’t work', { tone: 'bad', ms: 9000 });
+      return false;
+    } finally {
+      setBusy('');
+    }
+  };
   return (
     <section id="s-email" className="card pad-lg" style={{ scrollMarginTop: 80 }}>
       <h2 className="row" style={{ gap: 8 }}>
         <Mail size={22} className="teal" /> Email
       </h2>
-      <p className="muted small">
-        Invoices, payment reminders, receipts, quotes and team invites go out from the studio Gmail through EmailJS (free for 200 emails a month), in the JoshWorks design.
+      <p className="small">
+        Studio emails go out from <b>{business.email || 'the studio Gmail'}</b> for two jobs: <b>designers</b> get their invite to approve and join their account, and <b>clients</b> get their contracts, invoices and quotations with the PDF attached (plus receipts and payment reminders). The app designs each email with the JoshWorks logo, colors and your GCash / Maya QR codes; a small Google Apps Script in the studio Gmail sends it. No other email service is involved. Gmail sends about 100 a day.
       </p>
       {!ready ? (
-        <Callout tone="info" title="Set it up once (about 10 minutes)">
-          <ol style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 4 }}>
-            <li>Sign up at emailjs.com with the studio Gmail, then Email Services → Add → Gmail → connect {business.email || 'the studio Gmail'}.</li>
-            <li>Email Templates → Create. Subject: <code>{'{{subject}}'}</code>. To email: <code>{'{{to_email}}'}</code>. From name: <code>{'{{from_name}}'}</code>. Reply to: <code>{'{{reply_to}}'}</code>. Bcc: <code>{'{{cc_email}}'}</code>.</li>
-            <li>In the template’s content, switch to the code view and put only <code>{'{{{html}}}'}</code> (three braces).</li>
-            <li>Copy the Service ID, Template ID and your Public key (Account → General) here. Full steps: docs/EMAIL_SETUP.md.</li>
+        <Callout tone="info" title="Connect the studio Gmail once (about 5 minutes)">
+          <ol style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 6 }}>
+            <li>
+              Press <b>Copy the script</b> below (your key is already in it).
+            </li>
+            <li>
+              Signed in as {business.email || 'the studio Gmail'}, open <b>script.google.com</b> → New project, delete what’s there, paste, and save.
+            </li>
+            <li>
+              Choose <b>authorize</b> next to Run, press <b>Run</b>, and allow it to send email as you.
+            </li>
+            <li>
+              <b>Deploy → New deployment</b> → type <b>Web app</b>. Execute as: <b>Me</b>. Who has access: <b>Anyone</b>. Deploy, then copy the <b>Web app URL</b> into Mailer link below and press Save.
+            </li>
           </ol>
+          <span className="tiny muted">Full steps and fixes: docs/EMAIL_SETUP.md in the app’s repository.</span>
         </Callout>
       ) : null}
+      <div className="row wrap" style={{ gap: 8 }}>
+        <Button onClick={copyScript}>
+          <Copy size={16} /> Copy the script
+        </Button>
+        <Button variant="ghost" onClick={() => setPreview('contract')}>
+          <Eye size={16} /> Preview the emails
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={async () => {
+            if (key && !(await app.confirm({ title: 'Make a new key?', message: 'The mailer stops sending until you copy the script again (or paste the new key into its KEY line) and deploy a new version.', confirmLabel: 'New key' }))) return;
+            setE({ ...e, mailerKey: newMailerKey() });
+          }}
+        >
+          <KeyRound size={16} /> {key ? 'New key' : 'Make a key'}
+        </Button>
+      </div>
       <div className="form-grid">
-        {field('serviceId', 'Service ID', undefined, 'service_xxxxxxx')}
-        {field('templateId', 'Template ID', undefined, 'template_xxxxxxx')}
-        {field('publicKey', 'Public key', 'EmailJS → Account → General.')}
+        {field('mailerUrl', 'Mailer link', 'The Web app URL from Apps Script → Deploy.', 'https://script.google.com/macros/s/…/exec')}
+        {field('mailerKey', 'Mailer key', 'The same key as the KEY line in the script.')}
         {field('fromName', 'Sender name', 'What people see in their inbox.', 'JoshWorks Studio')}
         {field('replyTo', 'Replies go to', undefined, business.email)}
         {field('copyTo', 'Send me a copy at', 'Optional. A copy of every email (Bcc).')}
@@ -301,25 +351,45 @@ export function EmailSection() {
         <Field label="Send a test to" htmlFor="em-test" className="grow">
           <TextInput id="em-test" type="email" value={to} placeholder={business.email} onChange={(ev) => setTo(ev.target.value.trim())} />
         </Field>
+        <Button disabled={!ready || !!busy} onClick={() => run('check', () => checkMailer(e)).then((ok) => ok && app.toast('The mailer is connected.', { tone: 'good' }))}>
+          <PlugZap size={16} /> {busy === 'check' ? 'Checking…' : 'Check the connection'}
+        </Button>
         <Button
           variant="teal"
-          disabled={!ready || busy}
+          disabled={!ready || !!busy}
           onClick={async () => {
-            setBusy(true);
-            try {
-              const address = to || business.email;
-              await sendEmail({ email: address, name: business.name }, testEmail(business, methods), { settings: e, what: 'a test email' });
-              app.toast(`Test sent to ${address}. Check the inbox (and Spam, the first time).`, { tone: 'good' });
-            } catch (err) {
-              app.toast(err instanceof Error ? err.message : 'The test didn’t send', { tone: 'bad' });
-            } finally {
-              setBusy(false);
-            }
+            const address = to || business.email;
+            const ok = await run('test', () => sendEmail({ email: address, name: business.name }, testEmail(business, methods), { settings: e, what: 'a test email' }));
+            if (ok) app.toast(`Test sent to ${address}. Check the inbox (and Spam, the first time).`, { tone: 'good' });
           }}
         >
-          <Send size={16} /> {busy ? 'Sending…' : 'Send a test'}
+          <Send size={16} /> {busy === 'test' ? 'Sending…' : 'Send a test'}
         </Button>
       </div>
+      {left !== null ? <p className="tiny muted">Gmail can send {left} more email{left === 1 ? '' : 's'} today.</p> : null}
+      <Dialog open={!!preview} onClose={() => setPreview(null)} title="How the emails look" size="wide" fullPhone>
+        {preview ? (
+          <div className="stack">
+            <Segmented<SampleKind>
+              label="Email"
+              value={preview}
+              onChange={setPreview}
+              options={[
+                { value: 'invite', label: 'Designer invite' },
+                { value: 'contract', label: 'Contract' },
+                { value: 'invoice', label: 'Invoice' },
+                { value: 'quote', label: 'Quotation' },
+                { value: 'receipt', label: 'Receipt' },
+              ]}
+            />
+            <p className="small muted">
+              Subject: <b>{sampleEmail(preview, business, methods).subject}</b>
+              {preview === 'invite' ? '' : ' · the PDF is attached'}
+            </p>
+            <iframe className="email-preview" title="Email preview" sandbox="" srcDoc={previewHtml(sampleEmail(preview, business, methods))} />
+          </div>
+        ) : null}
+      </Dialog>
     </section>
   );
 }

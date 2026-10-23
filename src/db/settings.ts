@@ -30,9 +30,8 @@ export const DEFAULT_BUSINESS: BusinessSettings = {
 };
 
 export const DEFAULT_EMAIL: EmailSettings = {
-  serviceId: '',
-  templateId: '',
-  publicKey: '',
+  mailerUrl: '',
+  mailerKey: '',
   fromName: 'JoshWorks Studio',
   replyTo: 'jworks1505@gmail.com',
   copyTo: '',
