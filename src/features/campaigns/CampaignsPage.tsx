@@ -4,6 +4,7 @@ import { Megaphone, Plus, Rocket, Trash2, Wand2 } from 'lucide-react';
 import { useApp } from '../../app/AppContext';
 import { Badge, Button, Callout, EmptyState, PageHeader, Tabs } from '../../components/ui';
 import { Field, MoneyInput, Select, TextArea, TextInput } from '../../components/form';
+import { FilterBar } from '../../components/FilterBar';
 import { Dialog } from '../../components/Dialog';
 import { FunnelChart, Meter } from '../../components/charts';
 import { MemberDots, StatusBadge, useMemberMap } from '../../components/people';
@@ -65,46 +66,85 @@ function CampaignList({ onNew }: { onNew: () => void }) {
   const metrics = useMetrics() ?? [];
   const clients = useClients() ?? [];
   const [open, setOpen] = useState<string | null>(null);
-  const list = (campaigns ?? []).filter((c) => app.inScope(c.clientId));
+  const [q, setQ] = useState('');
+  const [status, setStatus] = useState<'' | Campaign['status']>('');
+  const [goal, setGoal] = useState<'' | CampaignGoal>('');
+  const all = (campaigns ?? []).filter((c) => app.inScope(c.clientId));
+  const needle = q.trim().toLowerCase();
+  const list = all.filter(
+    (c) =>
+      (!status || c.status === status) &&
+      (!goal || c.goal === goal) &&
+      (!needle || `${c.name} ${c.offer} ${clients.find((x) => x.id === c.clientId)?.name ?? ''}`.toLowerCase().includes(needle)),
+  );
   if (!campaigns) return null;
-  if (!list.length)
+  if (!all.length)
     return (
       <EmptyState icon={<Megaphone size={40} />} title="No campaigns yet" action={app.can('editCampaigns') ? <Button variant="primary" onClick={onNew}>Plan one from a template</Button> : undefined}>
         Pick a template (rebrand month, merch drop, Paskua giveaways, your SMM launch…) and the posts land on the calendar.
       </EmptyState>
     );
   return (
-    <div className="trend-grid">
-      {list.map((c) => {
-        const mine = posts.filter((p) => p.campaignId === c.id);
-        const done = mine.filter((p) => p.status === 'posted').length;
-        const res = totals(metrics.filter((m) => m.postId && mine.some((p) => p.id === m.postId)));
-        const client = clients.find((x) => x.id === c.clientId);
-        return (
-          <button key={c.id} type="button" className="card trend-card" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setOpen(c.id)}>
-            <div className="row between top">
-              <h3>{c.name}</h3>
-              <Badge tone={c.status === 'active' ? 'good' : c.status === 'draft' ? 'teal' : undefined}>{c.status}</Badge>
-            </div>
-            <span className="small muted">
-              {client ? `${client.name} · ` : ''}
-              {fmtDateRange(c.startDate, c.endDate)} · {GOAL_LABEL[c.goal]}
-            </span>
-            {c.offer ? (
-              <span className="small">
-                <b>Offer:</b> {c.offer}
+    <div className="stack">
+      <FilterBar
+        id="campaigns"
+        search={{ value: q, onChange: setQ, placeholder: 'Search campaigns, offers or clients' }}
+        active={(status ? 1 : 0) + (goal ? 1 : 0)}
+        onClear={() => {
+          setQ('');
+          setStatus('');
+          setGoal('');
+        }}
+      >
+        <Select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
+          <option value="">All statuses</option>
+          <option value="draft">Draft</option>
+          <option value="active">Active</option>
+          <option value="paused">Paused</option>
+          <option value="done">Done</option>
+        </Select>
+        <Select aria-label="Goal" value={goal} onChange={(e) => setGoal(e.target.value as typeof goal)}>
+          <option value="">Every goal</option>
+          {(Object.keys(GOAL_LABEL) as CampaignGoal[]).map((g) => (
+            <option key={g} value={g}>
+              {GOAL_LABEL[g]}
+            </option>
+          ))}
+        </Select>
+      </FilterBar>
+      {list.length === 0 ? <EmptyState title="Nothing matches" /> : null}
+      <div className="trend-grid">
+        {list.map((c) => {
+          const mine = posts.filter((p) => p.campaignId === c.id);
+          const done = mine.filter((p) => p.status === 'posted').length;
+          const res = totals(metrics.filter((m) => m.postId && mine.some((p) => p.id === m.postId)));
+          const client = clients.find((x) => x.id === c.clientId);
+          return (
+            <button key={c.id} type="button" className="card trend-card" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setOpen(c.id)}>
+              <div className="row between top">
+                <h3>{c.name}</h3>
+                <Badge tone={c.status === 'active' ? 'good' : c.status === 'draft' ? 'teal' : undefined}>{c.status}</Badge>
+              </div>
+              <span className="small muted">
+                {client ? `${client.name} · ` : ''}
+                {fmtDateRange(c.startDate, c.endDate)} · {GOAL_LABEL[c.goal]}
               </span>
-            ) : null}
-            {c.ctaKeyword ? <Badge tone="yellow">DM “{c.ctaKeyword}”</Badge> : null}
-            <div className="prog" aria-label={`${done} of ${mine.length} posts posted`}>
-              <span style={{ width: `${mine.length ? (done / mine.length) * 100 : 0}%` }} />
-            </div>
-            <span className="tiny muted">
-              {done}/{mine.length} posted · {compactNumber(res.views)} views · {compactNumber(res.shares)} shares · {res.leads} leads
-            </span>
-          </button>
-        );
-      })}
+              {c.offer ? (
+                <span className="small">
+                  <b>Offer:</b> {c.offer}
+                </span>
+              ) : null}
+              {c.ctaKeyword ? <Badge tone="yellow">DM “{c.ctaKeyword}”</Badge> : null}
+              <div className="prog" aria-label={`${done} of ${mine.length} posts posted`}>
+                <span style={{ width: `${mine.length ? (done / mine.length) * 100 : 0}%` }} />
+              </div>
+              <span className="tiny muted">
+                {done}/{mine.length} posted · {compactNumber(res.views)} views · {compactNumber(res.shares)} shares · {res.leads} leads
+              </span>
+            </button>
+          );
+        })}
+      </div>
       <CampaignDetail id={open} onClose={() => setOpen(null)} />
     </div>
   );

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router';
-import { Download, FileSpreadsheet, Lock, Megaphone, Palette, Plus, Smartphone, Store, Trash2, Upload, CalendarRange, ListChecks } from 'lucide-react';
+import { Download, FileSpreadsheet, Lock, Megaphone, Palette, Plus, RefreshCw, Smartphone, Store, Trash2, Upload, CalendarRange, ListChecks } from 'lucide-react';
 import { useApp } from '../../app/AppContext';
+import { applyUpdate, checkForUpdate, usePwaUpdateReady } from '../../app/usePwa';
+import { APP_VERSION } from '../../app/version';
 import { Button, Callout, PageHeader, Toggle } from '../../components/ui';
 import { Field, Select, TextArea, TextInput } from '../../components/form';
 import { useSettingRows } from '../../hooks/data';
@@ -12,7 +14,7 @@ import { PLATFORMS, PLATFORM_ORDER } from '../../domain/platforms';
 import { backupBlob, backupFileName, exportAll, mergeBackup, parseBackup } from '../../services/backup';
 import { setOwnerPin } from '../../services/team';
 import { downloadBlob, readFileAsText } from '../../lib/files';
-import { DOW_NAMES } from '../../lib/time';
+import { DOW_NAMES, fmtDateTime } from '../../lib/time';
 import { ImportSection } from './ImportSection';
 import { TrackerImport } from './TrackerImport';
 import { CloudSection } from './CloudSection';
@@ -396,6 +398,39 @@ function PinSection() {
   );
 }
 
+/** Which build this device runs, and a way to fetch the newest one now. */
+function UpdateCheck() {
+  const app = useApp();
+  const ready = usePwaUpdateReady();
+  const [busy, setBusy] = useState(false);
+  const built = APP_VERSION.built ? fmtDateTime(Date.parse(APP_VERSION.built)) : 'this computer';
+  return (
+    <div className="row wrap between" style={{ gap: 8 }}>
+      <span className="small muted">
+        Version <b className="mono">{APP_VERSION.commit}</b> · built {built}
+      </span>
+      {ready ? (
+        <Button size="sm" variant="primary" onClick={applyUpdate}>
+          <RefreshCw size={15} /> Reload to update
+        </Button>
+      ) : (
+        <Button
+          size="sm"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            const found = await checkForUpdate();
+            setBusy(false);
+            if (!found) app.toast('You’re on the latest version.', { tone: 'good' });
+          }}
+        >
+          <RefreshCw size={15} /> {busy ? 'Checking…' : 'Check for updates'}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function InstallSection() {
   return (
     <section className="card pad-lg">
@@ -413,7 +448,8 @@ function InstallSection() {
           <b>Laptop (Chrome or Edge):</b> the install icon at the right of the address bar.
         </li>
       </ul>
-      <Callout tone="info">It works offline once installed. New versions arrive the next time it’s online; it asks before reloading.</Callout>
+      <Callout tone="info">It works offline once installed. When a new version arrives, “Update ready” shows at the top until you reload; it also updates by itself while the app sits in the background.</Callout>
+      <UpdateCheck />
       <p className="tiny muted">
         <Palette size={12} /> Light, dark or auto: profile menu at the top right.
       </p>

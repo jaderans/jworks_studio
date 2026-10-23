@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { Link2, Mail, Pencil, Plus, Trash2, UserPlus } from 'lucide-react';
 import { useApp } from '../../app/AppContext';
-import { Badge, Button, Callout, IconButton, Loading, PageHeader, Segmented } from '../../components/ui';
-import { Field, TextArea, TextInput } from '../../components/form';
+import { Badge, Button, Callout, IconButton, Loading, PageHeader, Segmented, Toggle } from '../../components/ui';
+import { Field, Select, TextArea, TextInput } from '../../components/form';
+import { FilterBar } from '../../components/FilterBar';
 import { Dialog } from '../../components/Dialog';
 import { MemberDot } from '../../components/people';
 import { useJobs, useMembers } from '../../hooks/data';
@@ -26,6 +27,9 @@ export default function TeamPage() {
   const cloudOwner = sync.access?.role === 'owner';
   const [editing, setEditing] = useState<Partial<Member> | null>(null);
   const [access, setAccess] = useState<AccessRow[] | null>(null);
+  const [q, setQ] = useState('');
+  const [role, setRole] = useState<'' | AppRole>('');
+  const [inactive, setInactive] = useState(false);
 
   const loadAccess = useCallback(async () => {
     if (!cloudOwner) return;
@@ -73,6 +77,10 @@ export default function TeamPage() {
 
   if (!members) return <Loading />;
   const accessByEmail = new Map((access ?? []).map((a) => [a.email, a]));
+  const needle = q.trim().toLowerCase();
+  const shown = members.filter(
+    (m) => (inactive || m.active === 1) && (!role || m.appRole === role) && (!needle || `${m.name} ${m.roleLabel} ${m.email ?? ''}`.toLowerCase().includes(needle)),
+  );
   return (
     <div className="page">
       <PageHeader
@@ -91,9 +99,29 @@ export default function TeamPage() {
       ) : !cloudOwner ? (
         <Callout tone="warn">Sign in as the owner (Settings → Cloud sync) to send invites.</Callout>
       ) : null}
+      <FilterBar
+        id="team"
+        search={{ value: q, onChange: setQ, placeholder: 'Find a person' }}
+        active={(role ? 1 : 0) + (inactive ? 1 : 0)}
+        onClear={() => {
+          setQ('');
+          setRole('');
+          setInactive(false);
+        }}
+      >
+        <Select aria-label="Access" value={role} onChange={(e) => setRole(e.target.value as typeof role)}>
+          <option value="">Every role</option>
+          {(['owner', 'manager', 'designer'] as AppRole[]).map((r) => (
+            <option key={r} value={r}>
+              {ROLE_LABEL[r]}
+            </option>
+          ))}
+        </Select>
+        <Toggle id="team-inactive" checked={inactive} onChange={setInactive} label="Show inactive" />
+      </FilterBar>
       <div className="card flush">
         <div className="list">
-          {members.map((m) => {
+          {shown.map((m) => {
             const open = jobs.filter((j) => isOpen(j) && (j.designers.includes(m.id) || j.lead === m.id)).length;
             const acc = m.email ? accessByEmail.get(m.email) : undefined;
             return (

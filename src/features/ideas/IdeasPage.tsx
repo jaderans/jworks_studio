@@ -3,7 +3,8 @@ import { Route, Routes, useNavigate } from 'react-router';
 import { ArrowDown, ArrowUp, Bot, CalendarPlus, Copy, Hash, Lightbulb, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useApp } from '../../app/AppContext';
 import { Badge, Button, Callout, EmptyState, IconButton, PageHeader, Tabs } from '../../components/ui';
-import { Field, SearchInput, Select, TextArea, TextInput } from '../../components/form';
+import { Field, Select, TextArea, TextInput } from '../../components/form';
+import { FilterBar } from '../../components/FilterBar';
 import { Dialog } from '../../components/Dialog';
 import { MemberDots, MemberPicker, useMemberMap } from '../../components/people';
 import { useIdeas, useMembers, usePosts, useSettingRows, useSnippets } from '../../hooks/data';
@@ -58,8 +59,18 @@ function IdeaBank({ kinds, onEdit, onSchedule }: { kinds: IdeaKind[]; onEdit: (i
   const ideas = useIdeas();
   const memberMap = useMemberMap();
   const [q, setQ] = useState('');
-  const [show, setShow] = useState<'open' | 'all'>('open');
-  const list = (ideas ?? []).filter((i) => kinds.includes(i.kind) && (show === 'all' || i.status === 'idea') && (!q.trim() || `${i.title} ${i.category} ${i.angle}`.toLowerCase().includes(q.toLowerCase())));
+  const [show, setShow] = useState<'open' | 'all' | Idea['status']>('open');
+  const [cat, setCat] = useState('');
+  const [who, setWho] = useState('');
+  const mine = (ideas ?? []).filter((i) => kinds.includes(i.kind));
+  const cats = [...new Set(mine.map((i) => i.category || 'Other'))].sort();
+  const list = mine.filter(
+    (i) =>
+      (show === 'all' || (show === 'open' ? i.status === 'idea' : i.status === show)) &&
+      (!cat || (i.category || 'Other') === cat) &&
+      (!who || i.bestFor.includes(who)) &&
+      (!q.trim() || `${i.title} ${i.category} ${i.angle}`.toLowerCase().includes(q.toLowerCase())),
+  );
   const groups = useMemo(() => {
     const m = new Map<string, Idea[]>();
     for (const i of list) m.set(i.category || 'Other', [...(m.get(i.category || 'Other') ?? []), i]);
@@ -68,19 +79,41 @@ function IdeaBank({ kinds, onEdit, onSchedule }: { kinds: IdeaKind[]; onEdit: (i
   if (!ideas) return null;
   return (
     <div className="stack">
-      <div className="filter-row">
-        <div style={{ minWidth: 220, flex: 1 }}>
-          <SearchInput value={q} onChange={setQ} placeholder="Search ideas" />
-        </div>
-        <div className="seg" role="group" aria-label="Show">
-          <button type="button" aria-pressed={show === 'open'} onClick={() => setShow('open')}>
-            Open
-          </button>
-          <button type="button" aria-pressed={show === 'all'} onClick={() => setShow('all')}>
-            All
-          </button>
-        </div>
-      </div>
+      <FilterBar
+        id="ideas"
+        search={{ value: q, onChange: setQ, placeholder: 'Search ideas' }}
+        active={(show !== 'open' ? 1 : 0) + (cat ? 1 : 0) + (who ? 1 : 0)}
+        onClear={() => {
+          setQ('');
+          setShow('open');
+          setCat('');
+          setWho('');
+        }}
+      >
+        <Select aria-label="Show" value={show} onChange={(e) => setShow(e.target.value as typeof show)}>
+          <option value="open">Open ideas</option>
+          <option value="scheduled">Scheduled</option>
+          <option value="used">Used</option>
+          <option value="archived">Archived</option>
+          <option value="all">All</option>
+        </Select>
+        <Select aria-label="Category" value={cat} onChange={(e) => setCat(e.target.value)}>
+          <option value="">Every category</option>
+          {cats.map((c) => (
+            <option key={c}>{c}</option>
+          ))}
+        </Select>
+        <Select aria-label="Best for" value={who} onChange={(e) => setWho(e.target.value)}>
+          <option value="">Anyone</option>
+          {[...memberMap.values()]
+            .filter((m) => m.active === 1)
+            .map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+        </Select>
+      </FilterBar>
       {groups.length === 0 ? (
         <EmptyState icon={<Lightbulb size={40} />} title="No ideas here yet">
           Import your content planner in Settings, or add ideas as they come.

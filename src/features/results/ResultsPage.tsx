@@ -3,6 +3,7 @@ import { Download, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useApp } from '../../app/AppContext';
 import { Badge, Button, EmptyState, IconButton, PageHeader, Segmented, Stat } from '../../components/ui';
 import { Field, NumberInput, Select, TextInput } from '../../components/form';
+import { FilterBar } from '../../components/FilterBar';
 import { Dialog } from '../../components/Dialog';
 import { BarList, ChartFrame, WeekColumns } from '../../components/charts';
 import { MemberDot, useMemberMap } from '../../components/people';
@@ -28,6 +29,7 @@ export default function ResultsPage() {
   const [period, setPeriod] = useState<Period>('all');
   const [platform, setPlatform] = useState<PlatformKey | ''>('');
   const [who, setWho] = useState('');
+  const [q, setQ] = useState('');
   const [measure, setMeasure] = useState<MetricKey>('views');
   const [edit, setEdit] = useState<Partial<Metric> | null>(null);
   const today = todayISO();
@@ -40,9 +42,10 @@ export default function ResultsPage() {
           app.inScope(m.clientId) &&
           (period === 'all' || m.date >= addDays(today, -Number(period))) &&
           (!platform || m.platform === platform) &&
-          (!who || m.memberIds.includes(who)),
+          (!who || m.memberIds.includes(who)) &&
+          (!q.trim() || m.title.toLowerCase().includes(q.trim().toLowerCase())),
       ),
-    [metrics, app, period, platform, who, today],
+    [metrics, app, period, platform, who, q, today],
   );
   const t = totals(rows);
   const out = useMemo(() => outliers((metrics ?? []).filter((m) => app.inScope(m.clientId))), [metrics, app]);
@@ -96,17 +99,28 @@ export default function ResultsPage() {
           </>
         }
       />
-      <div className="filter-row">
-        <Segmented<Period>
-          label="Period"
-          value={period}
-          onChange={setPeriod}
-          options={[
-            { value: '30', label: '30 days' },
-            { value: '90', label: '90 days' },
-            { value: 'all', label: 'All' },
-          ]}
-        />
+      <FilterBar
+        id="results"
+        lead={
+          <Segmented<Period>
+            label="Period"
+            value={period}
+            onChange={setPeriod}
+            options={[
+              { value: '30', label: '30 days' },
+              { value: '90', label: '90 days' },
+              { value: 'all', label: 'All' },
+            ]}
+          />
+        }
+        search={{ value: q, onChange: setQ, placeholder: 'Search post titles' }}
+        active={(platform ? 1 : 0) + (who ? 1 : 0)}
+        onClear={() => {
+          setQ('');
+          setPlatform('');
+          setWho('');
+        }}
+      >
         <Select aria-label="Platform" value={platform} onChange={(e) => setPlatform(e.target.value as PlatformKey | '')}>
           <option value="">All platforms</option>
           {PLATFORM_ORDER.map((k) => (
@@ -123,7 +137,7 @@ export default function ResultsPage() {
             </option>
           ))}
         </Select>
-      </div>
+      </FilterBar>
 
       {rows.length === 0 ? (
         <EmptyState title="No results for this selection">Open a posted post → Publish &amp; results, or press Log results. Importing the planner brings in its Performance Tracker too.</EmptyState>

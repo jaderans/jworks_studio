@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import {
   Briefcase, ChevronDown, ChevronsLeft, ChevronsRight, CloudUpload, Contact, FileSignature, History, LayoutGrid, Layers, ListChecks, Megaphone, Menu, Monitor,
-  Moon, Settings, Sun, Users, Wallet, WifiOff, type LucideIcon,
+  Moon, RefreshCw, Settings, Sun, Users, Wallet, WifiOff, type LucideIcon,
 } from 'lucide-react';
 import mark from '../assets/brand/mark.png';
 import lockupLight from '../assets/brand/lockup-on-light.png';
 import lockupDark from '../assets/brand/lockup-on-dark.png';
 import { useApp, type Permission } from './AppContext';
+import { applyUpdate, usePwaUpdateReady } from './usePwa';
 import { useAudit, useClients, useMembers, usePendingCount, usePosts, useSettingRows } from '../hooks/data';
 import { settingValue } from '../db/settings';
 import { setLocal } from '../db/local';
@@ -142,12 +143,11 @@ function writePref(key: string, value: string) {
 function Brand({ compact }: { compact?: boolean }) {
   return (
     <span className="brand-lockup">
-      <img className="brand-mark" src={mark} alt="" width={36} height={36} />
+      <img className="brand-mark" src={mark} alt="" width={44} height={44} />
       {compact ? null : (
         <span className="brand-words">
           <img className="lockup only-light" src={lockupLight} alt="JoshWorks" />
           <img className="lockup only-dark" src={lockupDark} alt="" aria-hidden="true" />
-          <span className="brand-sub">Studio</span>
         </span>
       )}
     </span>
@@ -242,6 +242,7 @@ export function Shell() {
           <span className="topbar-title">{current?.label ?? 'JoshWorks Studio'}</span>
         )}
         <div className="spacer" />
+        <UpdatePill />
         <ConnectionPill />
         {app.can('activity') ? <ActivityMenu /> : null}
         <Popover
@@ -407,6 +408,20 @@ function ActivityMenu() {
         </div>
       )}
     </Popover>
+  );
+}
+
+/** Stays in the top bar until the new version is loaded. */
+function UpdatePill() {
+  const ready = usePwaUpdateReady();
+  if (!ready) return null;
+  return (
+    <button type="button" className="status-pill update" onClick={applyUpdate} title="A new version of the app is ready. Reload to use it.">
+      <RefreshCw size={14} aria-hidden="true" />
+      <span>
+        Update<span className="hide-phone"> ready · Reload</span>
+      </span>
+    </button>
   );
 }
 

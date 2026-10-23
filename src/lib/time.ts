@@ -154,3 +154,32 @@ export const fmtDowShort = (iso: string): string => dowShortFmt.format(dayStart(
 
 export const DOW_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 export const DOW_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** Date ranges the list pages filter by ('' = any time). */
+export type Period = '' | 'month' | 'last30' | 'last90' | 'year' | 'lastYear';
+export const PERIOD_LABEL: Record<Exclude<Period, ''>, string> = {
+  month: 'This month',
+  last30: 'Last 30 days',
+  last90: 'Last 3 months',
+  year: 'This year',
+  lastYear: 'Last year',
+};
+
+export function inPeriod(iso: string, period: Period, today: string = todayISO()): boolean {
+  if (!period) return true;
+  if (!iso) return false;
+  const day = iso.slice(0, 10);
+  const year = today.slice(0, 4);
+  switch (period) {
+    case 'month':
+      return day.slice(0, 7) === today.slice(0, 7);
+    case 'last30':
+      return day > addDays(today, -30) && day <= today;
+    case 'last90':
+      return day > addDays(today, -91) && day <= today;
+    case 'year':
+      return day.slice(0, 4) === year;
+    case 'lastYear':
+      return day.slice(0, 4) === String(Number(year) - 1);
+  }
+}

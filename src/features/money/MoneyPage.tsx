@@ -3,14 +3,15 @@ import { Navigate, Route, Routes, useSearchParams } from 'react-router';
 import { BellRing, FileDown, Mail, Plus, ReceiptText, Trash2, Wallet } from 'lucide-react';
 import { useApp } from '../../app/AppContext';
 import { Badge, Button, EmptyState, IconButton, PageHeader, Stat } from '../../components/ui';
-import { Field, MoneyInput, SearchInput, Select, TextInput } from '../../components/form';
+import { Field, MoneyInput, Select, TextInput } from '../../components/form';
+import { FilterBar, PeriodSelect } from '../../components/FilterBar';
 import { Dialog } from '../../components/Dialog';
 import { BarList, ChartFrame } from '../../components/charts';
 import { useExpenses, useJobs, usePayments, useSettingRows } from '../../hooks/data';
 import { settingValue } from '../../db/settings';
 import { deleteExpense, deletePayment, newInvoice, saveExpense } from '../../services/money';
 import { peso } from '../../lib/money';
-import { addDays, fmtIsoDate, todayISO } from '../../lib/time';
+import { addDays, fmtIsoDate, inPeriod, todayISO, type Period } from '../../lib/time';
 import { InvoiceDialog, invoiceBadge } from './InvoiceDialog';
 import { useInvoiceRows } from '../../hooks/money';
 import { PaymentDialog } from './PaymentDialog';
@@ -49,6 +50,7 @@ function Invoices() {
   }, [params, setParams]);
   const [filter, setFilter] = useState<'open' | 'all' | 'overdue' | 'paid' | 'draft' | 'void'>('open');
   const [q, setQ] = useState('');
+  const [period, setPeriod] = useState<Period>('');
   const [sending, setSending] = useState<string | null>(null);
   if (!rows) return null;
   const live = rows.filter((r) => r.inv.status !== 'void');
@@ -64,7 +66,7 @@ function Invoices() {
       (filter === 'paid' && r.t.state === 'paid' && r.inv.status !== 'void') ||
       (filter === 'draft' && r.inv.status === 'draft') ||
       (filter === 'void' && r.inv.status === 'void');
-    return ok && (!needle || `${r.inv.number} ${r.inv.billTo.name}`.toLowerCase().includes(needle));
+    return ok && inPeriod(r.inv.issueDate, period) && (!needle || `${r.inv.number} ${r.inv.billTo.name}`.toLowerCase().includes(needle));
   });
   const remind = async (id: string) => {
     setSending(id);
@@ -118,8 +120,16 @@ function Invoices() {
           ))}
         </section>
       ) : null}
-      <div className="filters">
-        <SearchInput value={q} onChange={setQ} placeholder="Search invoice no. or client" />
+      <FilterBar
+        id="invoices"
+        search={{ value: q, onChange: setQ, placeholder: 'Search invoice no. or client' }}
+        active={(filter !== 'open' ? 1 : 0) + (period ? 1 : 0)}
+        onClear={() => {
+          setQ('');
+          setFilter('open');
+          setPeriod('');
+        }}
+      >
         <Select aria-label="Show" value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
           <option value="open">With a balance</option>
           <option value="overdue">Overdue</option>
@@ -128,7 +138,8 @@ function Invoices() {
           <option value="void">Void</option>
           <option value="all">All</option>
         </Select>
-      </div>
+        <PeriodSelect value={period} onChange={setPeriod} label="Invoice date" />
+      </FilterBar>
       {rows.length === 0 ? (
         <EmptyState title="No invoices yet" icon={<ReceiptText size={40} />}>
           Make one from a job (Money tab → Make an invoice), or start a blank one.
@@ -175,9 +186,20 @@ function Payments() {
   const [paying, setPaying] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [month, setMonth] = useState(todayISO().slice(0, 7));
+  const [q, setQ] = useState('');
+  const [method, setMethod] = useState('');
   if (!payments) return null;
   const jobOf = new Map(jobs.map((j) => [j.id, j]));
-  const inMonth = payments.filter((p) => !month || p.date.startsWith(month));
+  const methods = [...new Set(payments.map((p) => p.method).filter(Boolean))].sort();
+  const needle = q.trim().toLowerCase();
+  const inMonth = payments.filter((p) => {
+    const j = p.jobId ? jobOf.get(p.jobId) : undefined;
+    return (
+      (!month || p.date.startsWith(month)) &&
+      (!method || p.method === method) &&
+      (!needle || `${p.receiptNo} ${p.reference} ${p.note} ${j?.number ?? ''} ${j?.clientName ?? ''} ${j?.title ?? ''}`.toLowerCase().includes(needle))
+    );
+  });
   const total = inMonth.reduce((a, p) => a + p.amount, 0);
   const byMethod = new Map<string, number>();
   for (const p of inMonth) byMethod.set(p.method, (byMethod.get(p.method) ?? 0) + p.amount);
@@ -202,12 +224,23 @@ function Payments() {
           </Button>
         }
       />
-      <div className="row wrap">
-        <input type="month" className="input" style={{ width: 'auto' }} aria-label="Month" value={month} onChange={(e) => setMonth(e.target.value)} />
-        <Button size="sm" variant="ghost" onClick={() => setMonth('')}>
-          All time
-        </Button>
-      </div>
+      <FilterBar
+        id="payments"
+        lead={<MonthPick value={month} onChange={setMonth} />}
+        search={{ value: q, onChange: setQ, placeholder: 'Search receipt, job, client or reference' }}
+        active={method ? 1 : 0}
+        onClear={() => {
+          setQ('');
+          setMethod('');
+        }}
+      >
+        <Select aria-label="Payment method" value={method} onChange={(e) => setMethod(e.target.value)}>
+          <option value="">Every method</option>
+          {methods.map((m) => (
+            <option key={m}>{m}</option>
+          ))}
+        </Select>
+      </FilterBar>
       <div className="grid-2">
         <Stat label={month ? 'Received this month' : 'Received (all time)'} value={peso(total)} hint={`${inMonth.length} payment${inMonth.length === 1 ? '' : 's'}`} hero />
         <section className="card">
@@ -285,14 +318,30 @@ function Payments() {
   );
 }
 
+/** A month picker with an "All time" switch; the page's totals follow it. */
+function MonthPick({ value, onChange }: { value: string; onChange: (m: string) => void }) {
+  return (
+    <span className="row" style={{ gap: 6, flex: 'none' }}>
+      <input type="month" className="input" style={{ width: 'auto' }} aria-label="Month" value={value} onChange={(e) => onChange(e.target.value)} />
+      <Button size="sm" variant="ghost" aria-pressed={!value} onClick={() => onChange(value ? '' : todayISO().slice(0, 7))}>
+        {value ? 'All time' : 'This month'}
+      </Button>
+    </span>
+  );
+}
+
 function Expenses() {
   const app = useApp();
   const expenses = useExpenses();
   const money = settingValue(useSettingRows(), 'money');
   const [editing, setEditing] = useState<Partial<Expense> | null>(null);
   const [month, setMonth] = useState(todayISO().slice(0, 7));
+  const [q, setQ] = useState('');
+  const [cat, setCat] = useState('');
   if (!expenses) return null;
-  const shown = expenses.filter((x) => !month || x.date.startsWith(month));
+  const needle = q.trim().toLowerCase();
+  const cats = [...new Set([...money.expenseCategories, ...expenses.map((x) => x.category)])];
+  const shown = expenses.filter((x) => (!month || x.date.startsWith(month)) && (!cat || x.category === cat) && (!needle || `${x.vendor} ${x.note} ${x.category}`.toLowerCase().includes(needle)));
   const byCat = new Map<string, number>();
   for (const x of shown) byCat.set(x.category, (byCat.get(x.category) ?? 0) + x.amount);
   return (
@@ -306,12 +355,23 @@ function Expenses() {
           </Button>
         }
       />
-      <div className="row wrap">
-        <input type="month" className="input" style={{ width: 'auto' }} aria-label="Month" value={month} onChange={(e) => setMonth(e.target.value)} />
-        <Button size="sm" variant="ghost" onClick={() => setMonth('')}>
-          All time
-        </Button>
-      </div>
+      <FilterBar
+        id="expenses"
+        lead={<MonthPick value={month} onChange={setMonth} />}
+        search={{ value: q, onChange: setQ, placeholder: 'Search vendor or note' }}
+        active={cat ? 1 : 0}
+        onClear={() => {
+          setQ('');
+          setCat('');
+        }}
+      >
+        <Select aria-label="Category" value={cat} onChange={(e) => setCat(e.target.value)}>
+          <option value="">Every category</option>
+          {cats.map((c) => (
+            <option key={c}>{c}</option>
+          ))}
+        </Select>
+      </FilterBar>
       <div className="grid-2">
         <Stat label={month ? 'Spent this month' : 'Spent (all time)'} value={peso(shown.reduce((a, x) => a + x.amount, 0))} hero />
         <section className="card">

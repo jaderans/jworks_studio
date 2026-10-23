@@ -14,7 +14,8 @@ import { buildPayoutStatementPdf } from '../../reports/studioDocs';
 import { deliverPdf } from '../../reports/pdf';
 import { compressImage, readFileAsDataURL, safeFileName } from '../../lib/files';
 import { peso } from '../../lib/money';
-import { fmtIsoDate, todayISO } from '../../lib/time';
+import { fmtIsoDate, inPeriod, todayISO, type Period } from '../../lib/time';
+import { FilterBar, PeriodSelect } from '../../components/FilterBar';
 import type { Member, Payout, PayoutAccount } from '../../db/types';
 
 export const PAYOUT_METHODS = ['GCash', 'Maya', 'Mari Bank', 'Union Bank', 'BPI', 'BDO', 'Cash', 'Other'];
@@ -35,12 +36,18 @@ export function PayoutsTab() {
   const navigate = useNavigate();
   const [paying, setPaying] = useState<Partial<Payout> | null>(null);
   const [editingAccount, setEditingAccount] = useState<Member | null>(null);
+  const [who, setWho] = useState('');
+  const [period, setPeriod] = useState<Period>('');
+  const [q, setQ] = useState('');
   if (!earnings || !payouts) return null;
   const summary = payoutSummary(earnings, payouts);
   const people = members.filter((m) => m.active === 1 || summary.has(m.id));
   const unsplit = jobMoney && payments ? unsplitJobs(jobMoney, payments) : [];
   const owedTotal = [...summary.values()].reduce((a, s) => a + Math.max(0, s.owed), 0);
   const account = (id: string) => accounts.find((a) => a.id === id) ?? null;
+  const needle = q.trim().toLowerCase();
+  const nameOf = (id: string) => members.find((m) => m.id === id)?.name ?? '';
+  const history = payouts.filter((p) => (!who || p.memberId === who) && inPeriod(p.date, period) && (!needle || `${nameOf(p.memberId)} ${p.method} ${p.reference} ${p.note}`.toLowerCase().includes(needle)));
   const statement = async (m: Member) => {
     const jobsById = new Map(jobs.map((j) => [j.id, { number: j.number, title: j.title }]));
     await deliverPdf(
@@ -119,8 +126,32 @@ export function PayoutsTab() {
       </div>
       <section className="stack tight">
         <h2 className="dot-title">Payout history</h2>
+        {payouts.length ? (
+          <FilterBar
+            id="payouts"
+            search={{ value: q, onChange: setQ, placeholder: 'Search person, method or reference' }}
+            active={(who ? 1 : 0) + (period ? 1 : 0)}
+            onClear={() => {
+              setQ('');
+              setWho('');
+              setPeriod('');
+            }}
+          >
+            <Select aria-label="Person" value={who} onChange={(e) => setWho(e.target.value)}>
+              <option value="">Everyone</option>
+              {people.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </Select>
+            <PeriodSelect value={period} onChange={setPeriod} />
+          </FilterBar>
+        ) : null}
         {payouts.length === 0 ? (
           <EmptyState title="No payouts recorded yet" />
+        ) : history.length === 0 ? (
+          <EmptyState title="Nothing matches" />
         ) : (
           <div className="table-wrap">
             <table className="table cards-on-phone">
@@ -135,7 +166,7 @@ export function PayoutsTab() {
                 </tr>
               </thead>
               <tbody>
-                {payouts.map((p) => (
+                {history.map((p) => (
                   <tr key={p.id}>
                     <td data-label="Date" className="nowrap">{fmtIsoDate(p.date)}</td>
                     <td data-label="Person">{members.find((m) => m.id === p.memberId)?.name ?? '—'}</td>

@@ -238,3 +238,27 @@ test('dialogs never draw fields over each other', async ({ page }) => {
   }
   expect(found).toEqual([]);
 });
+
+// List pages: the Filters button shows and hides compact dropdowns, and remembers the choice.
+test('filter bars show, hide and remember their filters', async ({ page }) => {
+  await freshSetup(page);
+  await page.goto('/#/jobs/list');
+  const status = page.getByRole('combobox', { name: 'Status' });
+  await expect(status).toBeHidden();
+  await page.getByRole('button', { name: 'Filters' }).click();
+  await expect(status).toBeVisible();
+  // Sized to its options, not stretched across the page.
+  expect((await status.boundingBox())?.width ?? 999).toBeLessThan(300);
+  await status.selectOption('all');
+  await expect(page.getByRole('button', { name: /Filters\s*1/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Clear' }).click();
+  await expect(status).toHaveValue('open');
+  await page.reload();
+  await expect(page.getByRole('combobox', { name: 'Status' })).toBeVisible();
+  await page.getByRole('button', { name: 'Filters' }).click();
+  await expect(page.getByRole('combobox', { name: 'Status' })).toBeHidden();
+  for (const path of ['/docs/prices', '/money/payments', '/money/expenses', '/team', '/activity']) {
+    await page.goto(`/#${path}`);
+    await expect(page.locator('.filter-bar').first()).toBeVisible();
+  }
+});

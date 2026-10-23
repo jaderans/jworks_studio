@@ -4,7 +4,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { Bot, Briefcase, CalendarDays, FileDown, FileSignature, FileText, Inbox, Loader2, Megaphone, Plus, Repeat, ShieldAlert, Trash2 } from 'lucide-react';
 import { useApp } from '../../app/AppContext';
 import { Badge, Button, Callout, EmptyState, PageHeader, Segmented, Stat } from '../../components/ui';
-import { Check, Field, SearchInput, Select, TextArea, TextInput } from '../../components/form';
+import { Check, Field, Select, TextArea, TextInput } from '../../components/form';
+import { FilterBar } from '../../components/FilterBar';
 import { Dialog } from '../../components/Dialog';
 import { StatusBadge } from '../../components/people';
 import { useClients, useContracts, useInvoices, useJobMoney, useJobs, useMetrics, usePackages, usePayments, usePosts, useProposals, useSettingRows } from '../../hooks/data';
@@ -105,17 +106,27 @@ export default function ClientsPage() {
           </>
         }
       />
-      <div className="filters">
-        <Segmented
-          label="View"
-          value={view}
-          onChange={setView}
-          options={[
-            { value: 'pipeline', label: 'Pipeline' },
-            { value: 'all', label: 'All clients' },
-          ]}
-        />
-        <Select aria-label="Kind of client" style={{ width: 'auto' }} value={kind} onChange={(e) => setKind(e.target.value as ClientKind | '')}>
+      <FilterBar
+        id="clients"
+        lead={
+          <Segmented
+            label="View"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: 'pipeline', label: 'Pipeline' },
+              { value: 'all', label: 'All clients' },
+            ]}
+          />
+        }
+        search={{ value: q, onChange: setQ, placeholder: 'Find a client' }}
+        active={kind ? 1 : 0}
+        onClear={() => {
+          setQ('');
+          setKind('');
+        }}
+      >
+        <Select aria-label="Kind of client" value={kind} onChange={(e) => setKind(e.target.value as ClientKind | '')}>
           <option value="">Every kind</option>
           {CLIENT_KINDS.map((k) => (
             <option key={k.key} value={k.key}>
@@ -123,8 +134,7 @@ export default function ClientsPage() {
             </option>
           ))}
         </Select>
-        <SearchInput value={q} onChange={setQ} placeholder="Find a client" />
-      </div>
+      </FilterBar>
       {clients.length === 0 ? (
         <EmptyState icon={<Briefcase size={40} />} title="No clients yet" action={<Button variant="primary" onClick={() => setCreating(true)}>Add your first client</Button>}>
           Add people as soon as they message. The pipeline keeps every next step in view.

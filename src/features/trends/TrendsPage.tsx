@@ -4,6 +4,7 @@ import { Bookmark, Bot, CalendarPlus, Copy, ExternalLink, Flame, Loader2, PenLin
 import { useApp } from '../../app/AppContext';
 import { Badge, Button, Callout, EmptyState, IconButton, PageHeader, Tabs } from '../../components/ui';
 import { Field, NumberInput, Select, TextArea, TextInput } from '../../components/form';
+import { FilterBar } from '../../components/FilterBar';
 import { Dialog } from '../../components/Dialog';
 import { StreakHeat } from '../../components/charts';
 import { MemberDot } from '../../components/people';
@@ -55,9 +56,17 @@ function ThisWeek() {
   const hasKey = useLiveQuery(() => getApiKey().then((k) => !!k), []);
   const ai = settingValue(useSettingRows(), 'ai');
   const [pick, setPick] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const [platform, setPlatform] = useState('');
+  const [kind, setKind] = useState('');
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const report = (reports ?? []).find((r) => r.id === pick) ?? reports?.[0];
+  const kinds = [...new Set((report?.items ?? []).map((it) => it.kind).filter(Boolean))].sort();
+  const needle = q.trim().toLowerCase();
+  const items = (report?.items ?? []).filter(
+    (it) => (!platform || it.platform === platform) && (!kind || it.kind === kind) && (!needle || `${it.title} ${it.what} ${it.howJoshWorks}`.toLowerCase().includes(needle)),
+  );
   const [pasting, setPasting] = useState(false);
   const [pasted, setPasted] = useState('');
   const researchInClaude = async () => {
@@ -177,8 +186,35 @@ function ThisWeek() {
             </span>
             <p>{report.summary}</p>
           </section>
+          <FilterBar
+            id="trends"
+            search={{ value: q, onChange: setQ, placeholder: 'Search this week’s trends' }}
+            active={(platform ? 1 : 0) + (kind ? 1 : 0)}
+            onClear={() => {
+              setQ('');
+              setPlatform('');
+              setKind('');
+            }}
+          >
+            <Select aria-label="Platform" value={platform} onChange={(e) => setPlatform(e.target.value)}>
+              <option value="">All platforms</option>
+              <option value="any">Any platform</option>
+              {PLATFORM_ORDER.map((k) => (
+                <option key={k} value={k}>
+                  {PLATFORMS[k].label}
+                </option>
+              ))}
+            </Select>
+            <Select aria-label="Kind" value={kind} onChange={(e) => setKind(e.target.value)}>
+              <option value="">Every kind</option>
+              {kinds.map((k) => (
+                <option key={k}>{k}</option>
+              ))}
+            </Select>
+          </FilterBar>
+          {items.length === 0 ? <EmptyState title="Nothing matches" /> : null}
           <div className="trend-grid">
-            {report.items.map((it) => (
+            {items.map((it) => (
               <article key={it.id} className="card trend-card">
                 <div className="row wrap">
                   <Badge tone="teal">{platformLabel(it.platform)}</Badge>

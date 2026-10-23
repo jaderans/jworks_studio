@@ -1,11 +1,22 @@
+import { execSync } from 'node:child_process';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+
+// Shown in Settings so anyone can tell which version their device is running.
+const commit = (() => {
+  try {
+    return execSync('git rev-parse --short HEAD').toString().trim();
+  } catch {
+    return process.env.GITHUB_SHA?.slice(0, 7) ?? 'dev';
+  }
+})();
 
 // base './' keeps every asset path relative, so the same build works on
 // GitHub Pages (a sub-folder), Cloudflare Pages, or any static host.
 export default defineConfig({
   base: './',
+  define: { __APP_VERSION__: JSON.stringify({ commit, built: new Date().toISOString() }) },
   plugins: [
     react(),
     VitePWA({

@@ -21,6 +21,15 @@
 .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
 .filters .search { flex: 1 1 220px; min-width: 0; }
 .filters > .input, .filters > select { flex: 0 1 auto; max-width: 100%; }
+/* Dropdowns in a filter bar fit their longest option instead of filling the row. */
+.filters > .select { width: auto; min-width: 0; }
+.filter-bar { display: grid; gap: 8px; min-width: 0; }
+.filter-panel { padding: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--sunk); }
+.filter-panel .select { height: 40px; }
+.filter-panel .toggle { min-height: 40px; }
+.filter-toggle { flex: none; }
+.filter-toggle.on { border-color: var(--teal-track); color: var(--teal); }
+.filter-count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--teal); color: #fff; font-size: 0.72rem; font-weight: 800; }
 
 .attention { border-color: var(--yellow); box-shadow: inset 4px 0 0 var(--yellow); }
 .actions-cell { white-space: nowrap; text-align: right; width: 1%; }

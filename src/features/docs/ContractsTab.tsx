@@ -21,7 +21,8 @@ import { deliverPdf } from '../../reports/pdf';
 import { contractEmail } from '../../email/templates';
 import { sendEmail } from '../../email/send';
 import { peso } from '../../lib/money';
-import { fmtIsoDate } from '../../lib/time';
+import { fmtIsoDate, inPeriod, type Period } from '../../lib/time';
+import { FilterBar, PeriodSelect } from '../../components/FilterBar';
 import { safeFileName } from '../../lib/files';
 import { ContractEditor } from '../contracts/ContractsPage';
 import { InvoiceDialog } from '../money/InvoiceDialog';
@@ -33,8 +34,13 @@ export function ContractsTab() {
   const [params, setParams] = useSearchParams();
   const contracts = useContracts();
   const clients = useClients() ?? [];
+  const templates = useContractTemplates() ?? [];
   const [open, setOpen] = useState<string | null>(null);
   const [picking, setPicking] = useState<{ clientId: string | null; jobId: string | null; proposalId: string | null } | null>(null);
+  const [q, setQ] = useState('');
+  const [status, setStatus] = useState<'' | Contract['status']>('');
+  const [kind, setKind] = useState('');
+  const [period, setPeriod] = useState<Period>('');
   useEffect(() => {
     const jobId = params.get('job');
     const proposalId = params.get('proposal');
@@ -51,6 +57,16 @@ export function ContractsTab() {
   if (!contracts) return null;
   const clientName = (c: Contract) => c.fields['client.name'] || clients.find((x) => x.id === c.clientId)?.name || '—';
   const openOne = contracts.find((c) => c.id === open);
+  const dateOf = (c: Contract) => c.fields.date || new Date(c.createdAt).toISOString().slice(0, 10);
+  const kinds = [...new Set(templates.map((t) => t.name))];
+  const needle = q.trim().toLowerCase();
+  const shown = contracts.filter(
+    (c) =>
+      (!status || c.status === status) &&
+      (!kind || (c.title || templates.find((t) => t.id === c.templateId)?.name) === kind) &&
+      inPeriod(dateOf(c), period) &&
+      (!needle || `${c.number} ${c.title ?? ''} ${clientName(c)}`.toLowerCase().includes(needle)),
+  );
   return (
     <div className="stack loose">
       <PageHeader
@@ -62,8 +78,38 @@ export function ContractsTab() {
           </Button>
         }
       />
+      {contracts.length ? (
+        <FilterBar
+          id="contracts"
+          search={{ value: q, onChange: setQ, placeholder: 'Search contract no., client or title' }}
+          active={(status ? 1 : 0) + (kind ? 1 : 0) + (period ? 1 : 0)}
+          onClear={() => {
+            setQ('');
+            setStatus('');
+            setKind('');
+            setPeriod('');
+          }}
+        >
+          <Select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
+            <option value="">All statuses</option>
+            <option value="draft">Draft</option>
+            <option value="sent">Sent</option>
+            <option value="signed">Signed</option>
+            <option value="ended">Ended</option>
+          </Select>
+          <Select aria-label="Contract type" value={kind} onChange={(e) => setKind(e.target.value)}>
+            <option value="">Every contract type</option>
+            {kinds.map((k) => (
+              <option key={k}>{k}</option>
+            ))}
+          </Select>
+          <PeriodSelect value={period} onChange={setPeriod} />
+        </FilterBar>
+      ) : null}
       {contracts.length === 0 ? (
         <EmptyState title="No contracts yet">Make one here, from a won quote, or from a job.</EmptyState>
+      ) : shown.length === 0 ? (
+        <EmptyState title="Nothing matches" />
       ) : (
         <div className="table-wrap">
           <table className="table cards-on-phone">
@@ -78,7 +124,7 @@ export function ContractsTab() {
               </tr>
             </thead>
             <tbody>
-              {contracts.map((c) => (
+              {shown.map((c) => (
                 <tr key={c.id} className="click" onClick={() => setOpen(c.id)}>
                   <td data-label="No." className="mono">{c.number}</td>
                   <td data-label="Contract">{c.title || 'SMM agreement (first version)'}</td>

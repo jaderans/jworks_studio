@@ -18,7 +18,8 @@ import { deliverPdf } from '../../reports/pdf';
 import { quoteEmail } from '../../email/templates';
 import { sendEmail } from '../../email/send';
 import { peso } from '../../lib/money';
-import { addDays, fmtIsoDate } from '../../lib/time';
+import { addDays, fmtIsoDate, inPeriod, type Period } from '../../lib/time';
+import { FilterBar, PeriodSelect } from '../../components/FilterBar';
 import { safeFileName } from '../../lib/files';
 import type { Proposal } from '../../db/types';
 
@@ -30,6 +31,9 @@ export function QuotesTab() {
   const clients = useClients() ?? [];
   const rates = settingValue(useSettingRows(), 'rates');
   const [open, setOpen] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const [status, setStatus] = useState<'' | Proposal['status']>('');
+  const [period, setPeriod] = useState<Period>('');
   useEffect(() => {
     const openId = params.get('open');
     if (openId) {
@@ -47,6 +51,8 @@ export function QuotesTab() {
   if (!proposals) return null;
   const won = proposals.filter((p) => p.status === 'won').length;
   const decided = proposals.filter((p) => p.status === 'won' || p.status === 'lost').length;
+  const needle = q.trim().toLowerCase();
+  const shown = proposals.filter((p) => (!status || p.status === status) && inPeriod(p.date, period) && (!needle || `${p.number} ${p.clientName}`.toLowerCase().includes(needle)));
   return (
     <div className="stack loose">
       <PageHeader
@@ -64,8 +70,31 @@ export function QuotesTab() {
           </Button>
         }
       />
+      {proposals.length ? (
+        <FilterBar
+          id="quotes"
+          search={{ value: q, onChange: setQ, placeholder: 'Search quote no. or client' }}
+          active={(status ? 1 : 0) + (period ? 1 : 0)}
+          onClear={() => {
+            setQ('');
+            setStatus('');
+            setPeriod('');
+          }}
+        >
+          <Select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
+            <option value="">All statuses</option>
+            <option value="draft">Draft</option>
+            <option value="sent">Sent</option>
+            <option value="won">Won</option>
+            <option value="lost">Lost</option>
+          </Select>
+          <PeriodSelect value={period} onChange={setPeriod} />
+        </FilterBar>
+      ) : null}
       {proposals.length === 0 ? (
         <EmptyState title="No quotes yet">Start one here, or from a client.</EmptyState>
+      ) : shown.length === 0 ? (
+        <EmptyState title="Nothing matches" />
       ) : (
         <div className="table-wrap">
           <table className="table cards-on-phone">
@@ -79,7 +108,7 @@ export function QuotesTab() {
               </tr>
             </thead>
             <tbody>
-              {proposals.map((p) => {
+              {shown.map((p) => {
                 const t = proposalTotals(p, rates);
                 return (
                   <tr key={p.id} className="click" onClick={() => setOpen(p.id)}>

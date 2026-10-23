@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router';
-import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { FilterBar } from '../../components/FilterBar';
 import { useApp } from '../../app/AppContext';
 import { Badge, Button, EmptyState, IconButton, PageHeader, Segmented, Toggle } from '../../components/ui';
 import { Field, Select, TextArea, TextInput } from '../../components/form';
@@ -63,11 +64,16 @@ function Prices() {
         }
       />
       <CatalogBanner />
-      <div className="filters">
-        <div className="search">
-          <Search size={18} aria-hidden="true" />
-          <input className="input" type="search" aria-label="Search the price list" placeholder="Search the price list" value={q} onChange={(e) => setQ(e.target.value)} />
-        </div>
+      <FilterBar
+        id="prices"
+        search={{ value: q, onChange: setQ, placeholder: 'Search the price list' }}
+        active={(cat ? 1 : 0) + (showArchived ? 1 : 0)}
+        onClear={() => {
+          setQ('');
+          setCat('');
+          setShowArchived(false);
+        }}
+      >
         <Select aria-label="Section" value={cat} onChange={(e) => setCat(e.target.value)}>
           <option value="">All sections</option>
           {cats.map((c) => (
@@ -75,7 +81,7 @@ function Prices() {
           ))}
         </Select>
         <Toggle id="pl-arch" checked={showArchived} onChange={setShowArchived} label="Show archived" />
-      </div>
+      </FilterBar>
       {groups.length === 0 ? <EmptyState title="Nothing matches" /> : null}
       {groups.map((g) => (
         <section key={g.c} className="stack tight">
@@ -123,14 +129,46 @@ function Prices() {
 function Templates() {
   const templates = useContractTemplates();
   const [open, setOpen] = useState<ContractTemplate | null>(null);
+  const [q, setQ] = useState('');
+  const [audience, setAudience] = useState('');
+  const [archived, setArchived] = useState(false);
   if (!templates) return null;
+  const needle = q.trim().toLowerCase();
+  const shown = templates.filter(
+    (t) =>
+      (archived || t.active === 1) &&
+      (!audience || t.audience === audience) &&
+      (!needle || `${t.name} ${t.subtitle} ${t.tagline}`.toLowerCase().includes(needle)),
+  );
   return (
     <div className="stack loose">
       <PageHeader title="Contract templates" subtitle="The v1.0 contract set. Edits here apply to new contracts; contracts already made keep their own copy." />
       <CatalogBanner />
-      {templates.length === 0 ? <EmptyState title="No templates yet">Load them with the button above.</EmptyState> : null}
+      {templates.length === 0 ? (
+        <EmptyState title="No templates yet">Load them with the button above.</EmptyState>
+      ) : (
+        <FilterBar
+          id="templates"
+          search={{ value: q, onChange: setQ, placeholder: 'Find a template' }}
+          active={(audience ? 1 : 0) + (archived ? 1 : 0)}
+          onClear={() => {
+            setQ('');
+            setAudience('');
+            setArchived(false);
+          }}
+        >
+          <Select aria-label="For" value={audience} onChange={(e) => setAudience(e.target.value)}>
+            <option value="">Every client type</option>
+            <option value="business">Business</option>
+            <option value="student">Student / school org</option>
+            <option value="any">Universal</option>
+          </Select>
+          <Toggle id="tpl-arch" checked={archived} onChange={setArchived} label="Show turned-off" />
+        </FilterBar>
+      )}
+      {templates.length && !shown.length ? <EmptyState title="Nothing matches" /> : null}
       <div className="template-grid">
-        {templates.map((t) => (
+        {shown.map((t) => (
           <button key={t.id} type="button" className={`template-card ${t.active ? '' : 'muted'}`} onClick={() => setOpen(t)}>
             <b>{t.name}</b>
             <span className="tiny strong teal">{t.subtitle}</span>

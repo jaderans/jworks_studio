@@ -3,7 +3,8 @@ import { Route, Routes, useSearchParams } from 'react-router';
 import { AlertTriangle, Inbox, Plus, Zap } from 'lucide-react';
 import { useApp } from '../../app/AppContext';
 import { Badge, Button, EmptyState, PageHeader } from '../../components/ui';
-import { SearchInput, Select } from '../../components/form';
+import { Select } from '../../components/form';
+import { FilterBar } from '../../components/FilterBar';
 import { BarList } from '../../components/charts';
 import { MemberDot, MemberDots, useMemberMap } from '../../components/people';
 import { useJobMoney, useJobs, usePayments } from '../../hooks/data';
@@ -201,8 +202,17 @@ function List({ onOpen }: { onOpen: (id: string) => void }) {
   const money = app.can('money');
   return (
     <div className="stack">
-      <div className="filters">
-        <SearchInput value={q} onChange={setQ} placeholder="Search jobs, clients, COM numbers" />
+      <FilterBar
+        id="jobs"
+        search={{ value: q, onChange: setQ, placeholder: 'Search jobs, clients, COM numbers' }}
+        active={(status !== 'open' ? 1 : 0) + (type ? 1 : 0) + (who ? 1 : 0)}
+        onClear={() => {
+          setQ('');
+          setStatus('open');
+          setType('');
+          setWho('');
+        }}
+      >
         <Select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
           <option value="open">Open and inquiries</option>
           <option value="all">All statuses</option>
@@ -228,7 +238,7 @@ function List({ onOpen }: { onOpen: (id: string) => void }) {
               </option>
             ))}
         </Select>
-      </div>
+      </FilterBar>
       <p className="muted small">{shown.length} of {jobs.length} jobs</p>
       <div className="table-wrap">
         <table className="table cards-on-phone">
