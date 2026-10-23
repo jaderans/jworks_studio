@@ -270,6 +270,8 @@ export interface Client extends Syncable {
   email: string;
   phone: string;
   location: string;
+  /** Tax ID of a business client (they withhold tax and issue BIR Form 2307). */
+  tin?: string;
   stage: ClientStage | LegacyClientStage;
   /** Where they found us: Messenger, Facebook, referral, walk-in… */
   source: string;
@@ -391,12 +393,34 @@ export interface Contract extends Syncable {
   /** The chosen package(s) and add-ons, priced like a quote. */
   items?: ProposalItem[];
   discountAmount?: Cents;
-  /** Answers to the template's brief or questionnaire. */
-  brief?: { q: string; a: string }[];
+  /** Answers to the template's brief or questionnaire; `picks` are the ticked boxes of a tick-box question. */
+  brief?: BriefAnswer[];
   rush?: boolean;
   /** Percent of the total due on signing (50 by default). */
   downPct?: number;
   jobId?: string | null;
+  /** Deliverables & milestones: what the client gets and by when. */
+  milestones?: Milestone[];
+  /** Print the owner's saved signature on the designer line (on unless turned off). */
+  useSignature?: boolean;
+  /** The client's own signature (PNG data URL) when they signed online. */
+  clientSignature?: string;
+  /** When and how the client signed online. */
+  signedOnline?: { name: string; at: number; device: string } | null;
+}
+
+export interface BriefAnswer {
+  q: string;
+  a: string;
+  picks?: string[];
+}
+
+export interface Milestone {
+  title: string;
+  /** YYYY-MM-DD, or '' when not set yet. */
+  date: string;
+  /** What the client receives at this point. */
+  what: string;
 }
 
 /** A contract type from the studio's v1.0 contract set, e.g. "Merch Design". */
@@ -635,6 +659,12 @@ export interface BusinessSettings {
   paymentDetails: string;
   /** Person who signs documents for the studio, e.g. "Joshua David G. Ranin, Head Designer". */
   signatory?: string;
+  /** The signatory's signature, a transparent PNG data URL printed on contracts. */
+  signature?: string;
+  /** Contract defaults for "Communication & delivery". */
+  channel?: string;
+  hours?: string;
+  delivery?: string;
 }
 
 export interface BrandVoice {
@@ -741,6 +771,8 @@ export interface MoneySettings {
   expenseCategories: string[];
   /** Set once the price list has been moved to the studio catalog. */
   catalogVersion: number;
+  /** The contract templates' questionnaire and terms version on this studio (1 = first set). */
+  templateVersion?: number;
 }
 
 export interface BirSettings {

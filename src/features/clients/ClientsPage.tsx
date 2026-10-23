@@ -465,6 +465,11 @@ function ClientDialog({ id, onClose }: { id: string | null; onClose: () => void 
             <Field label="Address" htmlFor="cl-loc">
               <TextInput id="cl-loc" value={c.location} onChange={(e) => set('location', e.target.value)} />
             </Field>
+            {CLIENT_KINDS.find((k) => k.key === (c.kind ?? 'business'))?.audience !== 'student' ? (
+              <Field label="TIN" htmlFor="cl-tin" hint="For BIR Form 2307 when they withhold tax; printed on contracts.">
+                <TextInput id="cl-tin" value={c.tin ?? ''} onChange={(e) => set('tin', e.target.value)} inputMode="numeric" placeholder="000-000-000-000" />
+              </Field>
+            ) : null}
             <Field label="How they found us" htmlFor="cl-src">
               <TextInput id="cl-src" list="client-sources" value={c.source} onChange={(e) => set('source', e.target.value)} />
             </Field>

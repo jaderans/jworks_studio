@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { latestTemplate, upgradeTemplates } from '../../services/catalog';
+import { questionsOf } from '../../domain/questionnaire';
 import { FilterBar } from '../../components/FilterBar';
 import { useApp } from '../../app/AppContext';
 import { Badge, Button, EmptyState, IconButton, PageHeader, Segmented, Toggle } from '../../components/ui';
@@ -18,6 +20,17 @@ import { CatalogBanner } from './CatalogBanner';
 import type { ContractTemplate, FrameKey, Package } from '../../db/types';
 
 export default function DocsPage() {
+  const app = useApp();
+  const canEdit = app.can('money');
+  // Once per studio: move loaded templates to the new questionnaires and terms (edited parts are kept).
+  useEffect(() => {
+    if (!canEdit) return;
+    upgradeTemplates()
+      .then((r) => {
+        if (r.updated) app.toast(`Contract templates updated: the original questionnaires and the new terms${r.edited.length ? '. Edited parts were kept (Contract templates → Reset to the latest version)' : ''}.`, { tone: 'good', ms: 9000 });
+      })
+      .catch(() => undefined);
+  }, [canEdit]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="page wide">
       <Routes>
@@ -174,12 +187,36 @@ function Templates() {
             <span className="tiny strong teal">{t.subtitle}</span>
             <span className="small muted">{t.tagline}</span>
             <span className="tiny muted">
-              {t.phases.length} phases · {t.brief.length} brief questions · {t.sections.filter((s) => s.on).length} terms
+              {t.phases.length} phases · {questionsOf(t.brief).length} questions · {t.sections.filter((s) => s.on).length} terms
             </span>
           </button>
         ))}
       </div>
       <TemplateEditor value={open} onClose={() => setOpen(null)} />
+    </div>
+  );
+}
+
+/** Puts the shipped questionnaire, terms and agreement back on an edited template. */
+function ResetToLatest({ t, onReset }: { t: ContractTemplate; onReset: (t: ContractTemplate) => void }) {
+  const app = useApp();
+  const latest = latestTemplate(t.id);
+  if (!latest) return null;
+  const same = JSON.stringify([t.brief, t.briefTitle, t.sections, t.agreement]) === JSON.stringify([latest.brief, latest.briefTitle, latest.sections, latest.agreement]);
+  if (same) return <p className="tiny muted">This template has the latest questionnaire, terms and agreement.</p>;
+  return (
+    <div className="row wrap between">
+      <span className="small muted">This template’s questionnaire, terms or agreement differ from the latest version.</span>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={async () => {
+          if (!(await app.confirm({ title: 'Use the latest version?', message: 'Replaces this template’s questionnaire, terms and agreement with the current ones. Contracts already made keep their own copy. Press Save to keep it.', confirmLabel: 'Use the latest' }))) return;
+          onReset({ ...t, brief: latest.brief, briefTitle: latest.briefTitle, sections: latest.sections.map((s) => ({ ...s })), agreement: latest.agreement });
+        }}
+      >
+        <RotateCcw size={15} /> Reset to the latest version
+      </Button>
     </div>
   );
 }
@@ -227,7 +264,7 @@ function TemplateEditor({ value, onClose }: { value: ContractTemplate | null; on
         options={[
           { value: 'about', label: 'About' },
           { value: 'process', label: 'Process' },
-          { value: 'brief', label: 'Brief & agreement' },
+          { value: 'brief', label: 'Questionnaire & agreement' },
           { value: 'terms', label: 'Terms' },
         ]}
       />
@@ -236,7 +273,7 @@ function TemplateEditor({ value, onClose }: { value: ContractTemplate | null; on
           <Field label="Name" htmlFor="te-name">
             <TextInput id="te-name" value={t.name} onChange={(e) => setT({ ...t, name: e.target.value })} />
           </Field>
-          <Field label="Pricing tier line" htmlFor="te-sub">
+          <Field label="Rate line" htmlFor="te-sub" hint="Shown in the app to tell versions apart; not printed.">
             <TextInput id="te-sub" value={t.subtitle} onChange={(e) => setT({ ...t, subtitle: e.target.value })} />
           </Field>
           <Field label="Tagline" htmlFor="te-tag" className="span-2">
@@ -303,13 +340,18 @@ function TemplateEditor({ value, onClose }: { value: ContractTemplate | null; on
           </Field>
         </div>
       ) : null}
+      {part === 'brief' || part === 'terms' ? <ResetToLatest t={t} onReset={setT} /> : null}
       {part === 'brief' ? (
         <div className="stack">
-          <Field label="Brief title" htmlFor="te-bt">
+          <Field label="Questionnaire title" htmlFor="te-bt">
             <TextInput id="te-bt" value={t.briefTitle} onChange={(e) => setT({ ...t, briefTitle: e.target.value })} />
           </Field>
-          <Field label="Questions (one per line)" htmlFor="te-bq">
-            <TextArea id="te-bq" rows={8} value={t.brief.join('\n')} onChange={(e) => setT({ ...t, brief: lines(e.target.value) })} />
+          <Field
+            label={`Questionnaire · ${questionsOf(t.brief).length} questions`}
+            htmlFor="te-bq"
+            hint="One per line. “## Heading” starts a section, “> text” is the intro, and “Question? :: A | B | Other:” makes tick boxes (an option ending in “:” gets a line to write on)."
+          >
+            <TextArea id="te-bq" rows={16} value={t.brief.join('\n')} onChange={(e) => setT({ ...t, brief: lines(e.target.value) })} />
           </Field>
           <Field label="Client agreement statement (one point per line)" htmlFor="te-ag">
             <TextArea id="te-ag" rows={10} value={t.agreement.join('\n')} onChange={(e) => setT({ ...t, agreement: lines(e.target.value) })} />

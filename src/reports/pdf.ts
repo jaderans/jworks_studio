@@ -208,6 +208,28 @@ export async function renderPdf(doc: TDocumentDefinitions): Promise<Blob> {
   return pdfMake.createPdf(doc).getBlob();
 }
 
+/**
+ * Lays the document out once and returns the pages each node with an `id`
+ * spans, e.g. to check that the terms fit on one page before saving.
+ */
+export async function nodePages(doc: TDocumentDefinitions): Promise<Map<string, number[]>> {
+  const pdfMake = await load();
+  const pages = new Map<string, number[]>();
+  const inner = doc.pageBreakBefore;
+  await pdfMake
+    .createPdf({
+      ...doc,
+      content: copyContent(doc.content),
+      pageBreakBefore: (node, q) => {
+        const id = (node as { id?: string }).id;
+        if (id) pages.set(id, [...node.pageNumbers]);
+        return inner ? inner(node, q) : false;
+      },
+    })
+    .getBuffer();
+  return pages;
+}
+
 /** Save a PDF straight to the browser's downloads (no share sheet). */
 export async function deliverPdf(doc: TDocumentDefinitions, filename: string): Promise<void> {
   downloadBlob(await renderPdf(doc), filename);
@@ -281,8 +303,19 @@ export function barChartSvg(data: { label: string; value: number }[], width = 52
 
 const escapeXml = (s: string) => s.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c] as string);
 
-export function signatureLine(label: string): Content {
-  return { columns: [{ stack: [{ text: ' ', margin: [0, 16, 0, 0] }, { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 170, y2: 0, lineWidth: 0.6, lineColor: MUTED }] }, { text: label, style: 'muted', margin: [0, 3, 0, 0] }] }] } as Content;
+/** A line to sign on; with `signature` (a PNG data URL) the saved signature sits on the line. */
+export function signatureLine(label: string, signature?: string): Content {
+  return {
+    columns: [
+      {
+        stack: [
+          signature ? { image: signature, fit: [150, 44], margin: [6, 0, 0, -8] } : { text: ' ', margin: [0, 16, 0, 0] },
+          { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 170, y2: 0, lineWidth: 0.6, lineColor: MUTED }] },
+          { text: label, style: 'muted', margin: [0, 3, 0, 0] },
+        ],
+      },
+    ],
+  } as Content;
 }
 
 export async function logo(): Promise<string> {

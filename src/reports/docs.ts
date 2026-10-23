@@ -92,7 +92,7 @@ export async function buildContractPdf(c: Contract, business: BusinessSettings) 
     { text: 'Signed by the parties on the dates below.', style: 'muted' },
     {
       columns: [
-        { stack: [signatureLine(`For ${c.fields['studio.name'] || business.name}: ${c.fields['studio.signatory'] || ''}`), signatureLine('Date')] },
+        { stack: [signatureLine(`For ${c.fields['studio.name'] || business.name}: ${c.fields['studio.signatory'] || ''}`, c.useSignature !== false ? business.signature : undefined), signatureLine('Date')] },
         { stack: [signatureLine(`For ${c.fields['client.name'] || 'the Client'}: ${c.fields['client.contact'] || ''}`), signatureLine('Date')] },
       ],
       margin: [0, 18, 0, 0],

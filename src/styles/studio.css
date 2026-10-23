@@ -21,6 +21,15 @@
 .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
 .filters .search { flex: 1 1 220px; min-width: 0; }
 .filters > .input, .filters > select { flex: 0 1 auto; max-width: 100%; }
+.milestone-row { display: grid; grid-template-columns: minmax(0, 1fr) 160px minmax(0, 1.3fr) auto; gap: 8px; align-items: center; }
+@media (max-width: 720px) {
+  .milestone-row { grid-template-columns: minmax(0, 1fr) auto; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .milestone-row > :nth-child(2), .milestone-row > :nth-child(3) { grid-column: 1; }
+  .milestone-row > :nth-child(4) { grid-column: 2; grid-row: 1; }
+}
+.questionnaire .q-section { margin: 10px 0 0; font-size: 0.95rem; color: var(--teal); text-transform: uppercase; letter-spacing: 0.04em; }
+.questionnaire .q-section:first-of-type { margin-top: 0; }
+
 /* Dropdowns in a filter bar fit their longest option instead of filling the row. */
 .filters > .select { width: auto; min-width: 0; }
 .filter-bar { display: grid; gap: 8px; min-width: 0; }
@@ -183,3 +192,5 @@ body[data-dialog-open='true'] .toast:not(:last-child) { display: none; }
   .target-row { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
   .target-row > input[type='month'] { grid-column: 1 / -1; }
 }
+.signature-box { display: grid; place-items: center; width: 220px; height: 90px; border: 1px dashed var(--line-strong); border-radius: 12px; background: #fff; }
+.signature-box img { max-width: 200px; max-height: 76px; object-fit: contain; }

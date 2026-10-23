@@ -1,14 +1,16 @@
 import type { Content, TableCell } from 'pdfmake/interfaces';
-import { frame, kpis, table, td, th, waterfall, INK, LINE, MUTED, TEAL } from './pdf';
+import { frame, kpis, nodePages, table, td, th, waterfall, INK, LINE, MUTED, TEAL } from './pdf';
 import { docTotals, proposalTotals } from '../domain/pricing';
 import { invoiceTotals, type MonthRow } from '../domain/money';
 import { AUTHORITY_STATEMENT, BINDING, CLIENT_ACK, DESIGNER_ACK, OUR_GOAL, WHAT_WE_DO } from '../domain/contractTemplates';
 import { UNIT_LABEL } from '../domain/packages';
 import { fillTemplate } from '../domain/contract';
+import { contractAudience, deliverablesOf } from '../domain/contractPlan';
+import { answerFor, parseQuestionnaire } from '../domain/questionnaire';
 import { peso } from '../lib/money';
-import { fmtIsoDate, fmtMonth } from '../lib/time';
+import { fmtDateTime, fmtIsoDate, fmtMonth, isoDate } from '../lib/time';
 import type {
-  BusinessSettings, Contract, ContractTemplate, Earning, Invoice, Member, MoneySettings, Package, Payment, Payout, PayoutAccount, Proposal, RateSettings, StudioPayMethod,
+  BusinessSettings, Contract, ContractSection, ContractTemplate, Earning, Invoice, Member, MoneySettings, Package, Payment, Payout, PayoutAccount, Proposal, RateSettings, StudioPayMethod,
 } from '../db/types';
 
 /**
@@ -318,6 +320,84 @@ export interface ContractCtx {
   packages: Package[];
   payMethods: StudioPayMethod[];
   payments: Payment[];
+  /** Business or student prices (the editor works it out from the contract, template and client). */
+  audience?: 'business' | 'student';
+  /** The job's COM number, for the header. */
+  jobNumber?: string;
+}
+
+const LINE_W = 470;
+const answerLine = (): Content => ({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: LINE_W, y2: 0, lineWidth: 0.6, lineColor: '#9FB4B7' }], margin: [14, 2, 0, 6] });
+
+/** The questionnaire as the studio prints it: numbered questions with lines to write on, tick-box grids, answers already given filled in. */
+function questionnaireBlock(title: string, lines: readonly string[], answers: Contract['brief']): Content[] {
+  const out: Content[] = [{ text: (title || 'Project questionnaire').toUpperCase(), font: 'Sora', fontSize: 12, alignment: 'center', margin: [0, 0, 0, 6], pageBreak: 'before' }];
+  for (const it of parseQuestionnaire(lines)) {
+    if (it.kind === 'intro') out.push({ text: it.text, fontSize: 9, margin: [0, 0, 0, 8] });
+    else if (it.kind === 'section') out.push({ text: it.title, bold: true, fontSize: 9.5, margin: [0, 8, 0, 4], headlineLevel: 1 } as Content);
+    else {
+      const a = answerFor(answers, it.q);
+      out.push({ text: `${it.n}.  ${it.q}`, fontSize: 8.8, margin: [0, 4, 0, 2] });
+      if (it.kind === 'open') {
+        if (a?.a.trim()) out.push({ text: a.a.trim(), fontSize: 9, color: TEAL, margin: [14, 2, 0, 0] });
+        else out.push({ text: ' ', fontSize: 9, margin: [0, 6, 0, 0] });
+        out.push(answerLine());
+        continue;
+      }
+      // Options in their written order: plain ones fill rows, an "Other:"-style option gets a row of its own with a line.
+      const rows: TableCell[][] = [];
+      let row: TableCell[] = [];
+      const flush = () => {
+        if (!row.length) return;
+        while (row.length < it.cols) row.push({ text: '' });
+        rows.push(row);
+        row = [];
+      };
+      for (const o of it.options) {
+        const on = !!a?.picks?.includes(o.label);
+        if (!o.fill) {
+          row.push(box(on, o.label) as TableCell);
+          if (row.length === it.cols) flush();
+          continue;
+        }
+        flush();
+        rows.push([
+          {
+            colSpan: it.cols,
+            columns: [
+              { width: 'auto', ...(box(on, o.label) as object) },
+              on && a?.a.trim() ? { text: a.a.trim(), color: TEAL, fontSize: 8.5, margin: [6, 1, 0, 0] } : { canvas: [{ type: 'line', x1: 6, y1: 10, x2: 260, y2: 10, lineWidth: 0.6, lineColor: '#9FB4B7' }] },
+            ],
+          } as TableCell,
+          ...Array.from({ length: it.cols - 1 }, () => ({}) as TableCell),
+        ]);
+      }
+      flush();
+      out.push({ table: { widths: Array.from({ length: it.cols }, () => '*'), body: rows, dontBreakRows: true }, layout: { ...gridLayout, paddingTop: () => 3, paddingBottom: () => 3 }, margin: [14, 2, 0, 6] } as Content);
+    }
+  }
+  return out;
+}
+
+/** Terms and conditions as one block, so a layout pass can check it sits on a single page. */
+function termsBlock(sections: ContractSection[], fields: Record<string, string>, size: number, twoCols: boolean): Content[] {
+  const on = sections.filter((s) => s.on);
+  const gap = size >= 8.5 ? 5 : size >= 8 ? 4 : 3;
+  const part = (list: ContractSection[], from: number): Content[] =>
+    list.map((s, i) => ({
+      stack: [
+        { text: `${from + i + 1}. ${s.title}`, bold: true, fontSize: size + 0.6, margin: [0, i || from ? gap : 0, 0, 1] },
+        { ul: fillTemplate(s.body, fields).split('\n').filter(Boolean), fontSize: size, lineHeight: 1.12 },
+      ],
+    }));
+  const half = Math.ceil(on.length / 2);
+  const body: Content = twoCols
+    ? { columns: [{ stack: part(on.slice(0, half), 0) }, { stack: part(on.slice(half), half) }], columnGap: 16 }
+    : { stack: part(on, 0) };
+  return [
+    { text: 'TERMS AND CONDITIONS', style: 'section', pageBreak: 'before', margin: [0, 0, 0, 6] },
+    { ...(body as object), id: 'terms' } as Content,
+  ];
 }
 
 /** A v1.0 contract, filled in: the studio's own contract layout, on the matching letterhead. */
@@ -327,12 +407,15 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
   const totals = docTotals(items, c.discountAmount ?? 0);
   const down = Math.round((totals.net * (c.downPct ?? 50)) / 100);
   const chosen = new Set(items.map((i) => i.packageId).filter(Boolean));
-  const audience = tpl.audience === 'student' || /student/i.test(tpl.subtitle) ? 'student' : 'business';
+  const audience = ctx.audience ?? contractAudience(f.rates, tpl.audience, 'business');
   const blank = (v?: string) => (v && v.trim() ? v.trim() : '______________________');
   const mainCats = tpl.categories.filter((x) => x !== 'Add-ons' && x !== 'Ownership');
   const pkgs = ctx.packages.filter((p) => p.active === 1 && p.kind !== 'addon' && mainCats.includes(p.category ?? ''));
   const addOns = ctx.packages.filter((p) => p.active === 1 && p.kind === 'addon' && tpl.categories.includes(p.category ?? ''));
   const priceOf = (p: Package) => (p.unit === 'percent' ? `+${p.price / 100}% of package price` : `${peso(audience === 'student' && p.studentPrice ? p.studentPrice : p.price)} ${UNIT_LABEL[p.unit]}`.trim());
+  const made = f.date || new Date(c.createdAt).toISOString().slice(0, 10);
+  const dateText = (iso?: string) => (iso ? fmtIsoDate(iso) : '');
+  const label = (text: string) => ({ text, bold: true, fontSize: 8.5 });
 
   const content: Content[] = [
     { text: 'JOSHWORKS', font: 'Sora', fontSize: 22, color: INK, alignment: 'center' },
@@ -341,10 +424,11 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
     {
       table: {
         dontBreakRows: true,
-        widths: ['*', '*', '*'],
+        widths: ['*', '*', '*', '*'],
         body: [
-          [th('Contract no.'), th('Date made'), th('Pricing tier')],
-          [{ text: c.number, bold: true }, { text: f.date ? fmtIsoDate(f.date) : fmtIsoDate(new Date(c.createdAt).toISOString().slice(0, 10)) }, { text: c.subtitle || tpl.subtitle }],
+          [th('Contract no.'), th('Job no.'), th('Date made'), th('Prices valid until')],
+          [{ text: c.number, bold: true }, { text: ctx.jobNumber || '—' }, { text: fmtIsoDate(made) }, { text: f.validUntil ? fmtIsoDate(f.validUntil) : '—' }],
+          [{ ...(th('Prepared for') as object), fillColor: '#FFFFFF' }, { text: f['client.name'] || '', bold: true, colSpan: 3 }, {}, {}],
         ] as TableCell[][],
       },
       layout: gridLayout,
@@ -355,6 +439,7 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
     { text: [{ text: 'What We Do: ', bold: true }, WHAT_WE_DO], fontSize: 9, margin: [0, 0, 0, 4] },
     { text: [{ text: 'Our Goal: ', bold: true }, OUR_GOAL], fontSize: 9, margin: [0, 0, 0, 4] },
     { text: [{ text: 'This Agreement Covers: ', bold: true }, tpl.covers], fontSize: 9, margin: [0, 0, 0, 4] },
+    ...(f.scope?.trim() ? [{ text: [{ text: 'This Project: ', bold: true }, f.scope.trim()], fontSize: 9, margin: [0, 0, 0, 4] } as Content] : []),
     sectionTitle('Our process — project phases'),
     {
       table: {
@@ -375,11 +460,12 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
         dontBreakRows: true,
         widths: [118, '*', 70, 110],
         body: [
-          [{ text: 'Client Name / Organization:', bold: true, fontSize: 8.5 }, { text: f['client.name'] || '', fontSize: 9 }, { text: 'Date:', bold: true, fontSize: 8.5 }, { text: f.date ? fmtIsoDate(f.date) : '' }],
-          [{ text: 'Contact Person:', bold: true, fontSize: 8.5 }, { text: f['client.contact'] || '', colSpan: 3 }, {}, {}],
-          [{ text: 'Email:', bold: true, fontSize: 8.5 }, { text: f['client.email'] || '' }, { text: 'Phone Number:', bold: true, fontSize: 8.5 }, { text: f['client.phone'] || '' }],
-          [{ text: 'Address:', bold: true, fontSize: 8.5 }, { text: f['client.address'] || '', colSpan: 3 }, {}, {}],
-          [{ text: 'Website / Social Media:', bold: true, fontSize: 8.5 }, { text: f['client.web'] || '', colSpan: 3 }, {}, {}],
+          [label('Client Name / Organization:'), { text: f['client.name'] || '', fontSize: 9 }, label('Date:'), { text: dateText(made) }],
+          [label('Contact Person:'), { text: f['client.contact'] || '', colSpan: 3 }, {}, {}],
+          [label('Email:'), { text: f['client.email'] || '' }, label('Phone Number:'), { text: f['client.phone'] || '' }],
+          [label('Address:'), { text: f['client.address'] || '', colSpan: 3 }, {}, {}],
+          [label('Website / Social Media:'), { text: f['client.web'] || '', colSpan: 3 }, {}, {}],
+          ...(audience === 'business' ? [[label('TIN:'), { text: f['client.tin'] || '', colSpan: 3 }, {}, {}]] : []),
         ] as TableCell[][],
       },
       layout: gridLayout,
@@ -443,93 +529,118 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
     margin: [0, 6, 0, 6],
   } as Content);
 
-  if (tpl.brief.length) {
-    content.push(sectionTitle(tpl.briefTitle || 'Project brief'));
-    const answers = new Map((c.brief ?? []).map((b) => [b.q, b.a]));
-    for (const q of tpl.brief) {
-      const a = answers.get(q)?.trim();
-      content.push({ text: q, bold: true, fontSize: 8.5, margin: [0, 4, 0, 2] });
-      content.push({ table: { widths: ['*'], body: [[{ text: a || ' \n ', fontSize: 9 }]] }, layout: gridLayout } as Content);
-    }
+  // What the client receives and by when.
+  const deliverables = deliverablesOf(items, ctx.packages);
+  const milestones = (c.milestones ?? []).filter((m) => m.title.trim());
+  if (deliverables.length || milestones.length) {
+    content.push(sectionTitle('Deliverables & milestones'));
+    if (deliverables.length) content.push({ text: 'You will receive:', bold: true, fontSize: 8.5, margin: [0, 0, 0, 2] }, { ul: deliverables, fontSize: 8.5, margin: [0, 0, 0, 6] } as Content);
+    if (milestones.length)
+      content.push({
+        table: {
+          dontBreakRows: true,
+          headerRows: 1,
+          widths: ['*', 92, '*'],
+          body: [
+            [th('Milestone'), th('Target date'), th('What you receive')],
+            ...milestones.map((m) => [{ text: m.title, bold: true, fontSize: 8.5 }, { text: m.date ? fmtIsoDate(m.date) : '', fontSize: 8.5 }, { text: m.what, fontSize: 8.5 }]),
+          ] as TableCell[][],
+        },
+        layout: gridLayout,
+        margin: [0, 0, 0, 4],
+      } as Content);
+    content.push({ text: 'Dates assume the down payment and complete materials arrive on the start date, and replies within the agreed time.', style: 'muted' });
   }
 
-  content.push(sectionTitle('Terms and conditions'));
-  tpl.sections
-    .filter((s) => s.on)
-    .forEach((s, i) => {
-      const body = fillTemplate(s.body, f);
-      content.push({ text: `${i + 1}. ${s.title}`, bold: true, margin: [0, 6, 0, 2] }, { ul: body.split('\n').filter(Boolean), fontSize: 8.5 } as Content);
-    });
+  if (tpl.brief.length) content.push(...questionnaireBlock(tpl.briefTitle, tpl.brief, c.brief));
 
-  content.push(
+  // Agreement, schedule and signatures share one page; where to pay (with the QR codes) follows.
+  const tight = { ...gridLayout, paddingTop: () => 3, paddingBottom: () => 3 };
+  const afterTerms: Content[] = [
     { text: 'CLIENT AGREEMENT STATEMENT', style: 'section', pageBreak: 'before' },
-    { text: [{ text: 'By signing below, I, ' }, { text: blank(f.signer || f['client.contact']), bold: true }, { text: ', acknowledge and agree to the following:' }], margin: [0, 0, 0, 6] },
-    { ul: tpl.agreement.map((a) => ({ text: a, fontSize: 8.5 })), margin: [0, 0, 0, 6] } as Content,
-    { text: AUTHORITY_STATEMENT, bold: true, fontSize: 8.5, margin: [0, 0, 0, 8] },
-    sectionTitle('Project timeline'),
+    { text: [{ text: 'By signing below, I, ' }, { text: blank(f.signer || f['client.contact']), bold: true }, { text: ', acknowledge and agree to the following:' }], fontSize: 9, margin: [0, 0, 0, 4] },
+    { ul: tpl.agreement.map((a) => ({ text: a, fontSize: 8.2 })), lineHeight: 1.12, margin: [0, 0, 0, 4] } as Content,
+    { text: AUTHORITY_STATEMENT, bold: true, fontSize: 8.2, margin: [0, 0, 0, 4] },
+    sectionTitle('Project timeline & payment schedule'),
+    {
+      table: {
+        dontBreakRows: true,
+        widths: [150, '*', 110, '*'],
+        body: [
+          [label('Project Start Date:'), { text: dateText(f.startDate) }, label('Expected Completion:'), { text: dateText(f.endDate) }],
+          [label('Rush Service (+25% of package)?'), { columns: [box(!!c.rush, 'Yes'), box(!c.rush, 'No')], columnGap: 8 }, label('Payment Method:'), { text: f.paymentMethod || '' }],
+          [label('Initial Payment Due:'), { text: `${peso(down)} (upon signing)` }, label('Final Payment Due:'), { text: `${peso(totals.net - down)} (before file delivery)` }],
+          [
+            label('Payment Received:'),
+            {
+              colSpan: 3,
+              columns: [box(ctx.payments.some((p) => p.kind === 'down' || p.kind === 'full' || p.kind === 'partial'), 'Initial Payment'), box(ctx.payments.some((p) => p.kind === 'final' || p.kind === 'full'), 'Final Payment')],
+              columnGap: 8,
+            },
+            {},
+            {},
+          ],
+        ] as TableCell[][],
+      },
+      layout: tight,
+      margin: [0, 0, 0, 4],
+    } as Content,
+    sectionTitle('Communication & delivery'),
     {
       table: {
         dontBreakRows: true,
         widths: [150, '*'],
         body: [
-          [{ text: 'Project Start Date:', bold: true }, { text: f.startDate ? fmtIsoDate(f.startDate) : '' }],
-          [{ text: 'Expected Completion Date:', bold: true }, { text: f.endDate ? fmtIsoDate(f.endDate) : '' }],
+          [label('Official channel:'), { text: f.channel || '', fontSize: 9 }],
+          [label('Reply time & working hours:'), { text: f.hours || '', fontSize: 9 }],
+          [label('How files are delivered:'), { text: f.delivery || '', fontSize: 9 }],
         ] as TableCell[][],
       },
-      layout: gridLayout,
+      layout: tight,
+      margin: [0, 0, 0, 4],
     } as Content,
-    sectionTitle('Payment schedule'),
     {
-      table: {
-        dontBreakRows: true,
-        widths: [190, '*'],
-        body: [
-          [{ text: 'Rush Service Requested (+25% of package price)?', bold: true, fontSize: 8.5 }, { columns: [box(!!c.rush, 'Yes'), box(!c.rush, 'No')], columnGap: 8 }],
-          [{ text: 'Payment Method:', bold: true, fontSize: 8.5 }, { text: f.paymentMethod || '' }],
-          [{ text: 'Initial Payment Due:', bold: true, fontSize: 8.5 }, { text: `${peso(down)}  (due upon signing)` }],
-          [{ text: 'Final Payment Due:', bold: true, fontSize: 8.5 }, { text: `${peso(totals.net - down)}  (due before file delivery)` }],
-          [
-            { text: 'Payment Received:', bold: true, fontSize: 8.5 },
-            {
-              columns: [box(ctx.payments.some((p) => p.kind === 'down' || p.kind === 'full' || p.kind === 'partial'), 'Initial Payment'), box(ctx.payments.some((p) => p.kind === 'final' || p.kind === 'full'), 'Final Payment')],
-              columnGap: 8,
-            },
+      unbreakable: true,
+      stack: [
+        sectionTitle('Signatures'),
+        {
+          columns: [
+            signatureBlock('CLIENT ACKNOWLEDGMENT', CLIENT_ACK, `Client Name & Signature${f.signer ? `: ${f.signer}` : ''}`, c.clientSignature, c.signedOnline ? isoDate(c.signedOnline.at) : '', c.signedOnline ? `Signed online by ${c.signedOnline.name} · ${fmtDateTime(c.signedOnline.at)}` : ''),
+            signatureBlock('DESIGNER ACKNOWLEDGMENT', DESIGNER_ACK, `Designer Name & Signature${f.designer ? `: ${f.designer}` : ''}`, c.useSignature !== false ? ctx.business.signature : undefined, c.useSignature !== false && ctx.business.signature ? made : '', ''),
           ],
-        ] as TableCell[][],
-      },
-      layout: gridLayout,
-      margin: [0, 0, 0, 6],
+          columnGap: 24,
+        },
+        { text: BINDING, style: 'muted', margin: [0, 10, 0, 0] },
+      ],
     } as Content,
     ...paymentDetails(ctx.payMethods, ctx.business.paymentDetails),
-    sectionTitle('Signatures'),
-    {
-      columns: [
-        {
-          stack: [
-            { text: 'CLIENT ACKNOWLEDGMENT', bold: true, fontSize: 8.5 },
-            { text: CLIENT_ACK, fontSize: 8, margin: [0, 2, 0, 26] },
-            { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 220, y2: 0, lineWidth: 0.7, lineColor: MUTED }] },
-            { text: `Client Name & Signature${f.signer ? `: ${f.signer}` : ''}`, style: 'muted', margin: [0, 2, 0, 18] },
-            { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 140, y2: 0, lineWidth: 0.7, lineColor: MUTED }] },
-            { text: 'Date', style: 'muted', margin: [0, 2, 0, 0] },
-          ],
-        },
-        {
-          stack: [
-            { text: 'DESIGNER ACKNOWLEDGMENT', bold: true, fontSize: 8.5 },
-            { text: DESIGNER_ACK, fontSize: 8, margin: [0, 2, 0, 26] },
-            { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 220, y2: 0, lineWidth: 0.7, lineColor: MUTED }] },
-            { text: `Designer Name & Signature${f.designer ? `: ${f.designer}` : ''}`, style: 'muted', margin: [0, 2, 0, 18] },
-            { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 140, y2: 0, lineWidth: 0.7, lineColor: MUTED }] },
-            { text: 'Date', style: 'muted', margin: [0, 2, 0, 0] },
-          ],
-        },
-      ],
-      columnGap: 24,
-    } as Content,
-    { text: BINDING, style: 'muted', margin: [0, 18, 0, 0] },
-  );
-  return frame({ title: `${c.title || tpl.name} ${c.number}`, business: ctx.business.name, footerNote: c.number, letterhead: { frame: c.frame ?? tpl.frame } }, content);
+  ];
+
+  const doc = (size: number, twoCols: boolean) =>
+    frame({ title: `${c.title || tpl.name} ${c.number}`, business: ctx.business.name, footerNote: c.number, letterhead: { frame: c.frame ?? tpl.frame } }, [...content, ...termsBlock(c.sections, f, size, twoCols), ...afterTerms]);
+  // The terms always fit on one page: try the house size first, then tighter, then two columns.
+  for (const [size, two] of [[8.5, false], [8, false], [7.5, false], [8, true], [7.5, true]] as [number, boolean][]) {
+    const d = await doc(size, two);
+    if ((await nodePages(d)).get('terms')?.length === 1) return d;
+  }
+  return doc(7.5, true);
+}
+
+/** One side of the signature block: who, the acknowledgment, the signature (if saved or signed online) on the line, and the date. */
+function signatureBlock(title: string, ack: string, name: string, signature: string | undefined, date: string, note: string): Content {
+  return {
+    stack: [
+      { text: title, bold: true, fontSize: 8.5 },
+      { text: ack, fontSize: 8, margin: [0, 2, 0, signature ? 0 : 22] },
+      ...(signature ? [{ image: signature, fit: [160, 46], margin: [6, 0, 0, -6] } as Content] : []),
+      { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 220, y2: 0, lineWidth: 0.7, lineColor: MUTED }] },
+      { text: name, style: 'muted', margin: [0, 2, 0, 0] },
+      ...(note ? [{ text: note, style: 'muted', fontSize: 7, color: TEAL } as Content] : []),
+      { text: date ? fmtIsoDate(date) : ' ', margin: [0, 8, 0, 0], fontSize: 9 },
+      { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 140, y2: 0, lineWidth: 0.7, lineColor: MUTED }] },
+      { text: 'Date', style: 'muted', margin: [0, 2, 0, 0] },
+    ],
+  };
 }
 
 // ----- payout statement (for a designer) -----

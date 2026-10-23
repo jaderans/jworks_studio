@@ -6,7 +6,10 @@ import { CLIENT_KINDS } from '../domain/clients';
 import { nextNumber, setClientStage } from './clients';
 import { newJob } from './jobs';
 import { saveJobMoney } from './money';
-import { todayISO } from '../lib/time';
+import { addDays, todayISO } from '../lib/time';
+import { PRICES_HOLD_DAYS } from '../domain/contractTemplates';
+import { completionDate, planMilestones } from '../domain/contractPlan';
+import { questionsOf } from '../domain/questionnaire';
 import type { Contract, ContractTemplate, Job, ProposalItem } from '../db/types';
 
 /**
@@ -40,14 +43,18 @@ export function suggestTemplate(templates: ContractTemplate[], o: { jobType?: Jo
 export async function newTemplateContract(opts: { templateId: string; clientId?: string | null; jobId?: string | null; proposalId?: string | null }): Promise<Contract> {
   const tpl = await db.contractTemplates.get(opts.templateId);
   if (!tpl) throw new Error('That contract template no longer exists.');
-  const [business, money] = await Promise.all([getSetting('business'), getSetting('money')]);
+  const [business, money, payMethods] = await Promise.all([getSetting('business'), getSetting('money'), getSetting('payMethods')]);
   const job = opts.jobId ? await db.jobs.get(opts.jobId) : undefined;
   const jm = opts.jobId ? await db.jobMoney.get(opts.jobId) : undefined;
   const quote = opts.proposalId ? await db.proposals.get(opts.proposalId) : undefined;
   const clientId = opts.clientId ?? job?.clientId ?? quote?.clientId ?? null;
   const client = clientId ? await db.clients.get(clientId) : undefined;
   const owner = alive(await db.members.toArray()).find((m) => m.appRole === 'owner');
+  const packages = alive(await db.packages.toArray());
   const items: ProposalItem[] = jm?.items.length ? jm.items : (quote?.items ?? []);
+  const today = todayISO();
+  const startDate = job?.startDate ?? '';
+  const endDate = job?.dueDate || completionDate(startDate, items, packages, job?.rush);
   const fields: Record<string, string> = {
     'client.name': client?.name ?? job?.clientName ?? quote?.clientName ?? '',
     'client.contact': client?.contactName ?? '',
@@ -55,13 +62,20 @@ export async function newTemplateContract(opts: { templateId: string; clientId?:
     'client.phone': client?.phone ?? '',
     'client.address': client?.location ?? '',
     'client.web': client ? Object.values(client.handles ?? {}).filter(Boolean).join(' · ') : '',
-    date: todayISO(),
-    startDate: job?.startDate ?? '',
-    endDate: job?.dueDate ?? '',
-    paymentMethod: '',
+    'client.tin': client?.tin ?? '',
+    scope: job?.title ?? '',
+    date: today,
+    validUntil: addDays(today, PRICES_HOLD_DAYS),
+    startDate,
+    endDate,
+    paymentMethod: payMethods.find((m) => m.on)?.label ?? 'GCash',
     signer: client?.contactName ?? '',
     designer: business.signatory || (owner ? `${owner.name}, ${owner.roleLabel.split(' · ')[0] || 'Head Designer'}` : ''),
+    channel: business.channel ?? '',
+    hours: business.hours ?? '',
+    delivery: business.delivery ?? '',
   };
+  const nameQuestion = questionsOf(tpl.brief).find((x) => /^What is (your|the) (business\/organization|organization\/event|candidate)/i.test(x.q));
   const rec = await create<Contract>(db.contracts, {
     number: await nextNumber('C', 'contracts'),
     clientId,
@@ -78,10 +92,12 @@ export async function newTemplateContract(opts: { templateId: string; clientId?:
     frame: tpl.frame,
     items,
     discountAmount: jm?.discountAmount ?? quote?.discountAmount ?? 0,
-    brief: tpl.brief.map((q) => ({ q, a: q.startsWith('What is your business') ? (client?.name ?? '') : '' })),
+    brief: nameQuestion && client?.name ? [{ q: nameQuestion.q, a: client.name }] : [],
     rush: job?.rush ?? false,
     downPct: money.downPct,
     jobId: job?.id ?? null,
+    milestones: planMilestones(tpl.phases, startDate, endDate),
+    useSignature: true,
   });
   await audit('create', 'contract', rec.id, `Drafted ${tpl.name} ${rec.number}${fields['client.name'] ? ` for ${fields['client.name']}` : ''}`);
   return rec;

@@ -4,13 +4,15 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { Briefcase, FileDown, Mail, Plus, ReceiptText, RotateCcw, Trash2 } from 'lucide-react';
 import { useApp } from '../../app/AppContext';
 import { alive, db } from '../../db/db';
-import { Badge, Button, Callout, EmptyState, PageHeader, Segmented, Toggle } from '../../components/ui';
+import { Badge, Button, Callout, EmptyState, IconButton, PageHeader, Segmented, Toggle } from '../../components/ui';
 import { Field, MoneyInput, NumberInput, Select, TextArea, TextInput } from '../../components/form';
+import { QuestionnaireForm } from '../../components/QuestionnaireForm';
 import { Dialog } from '../../components/Dialog';
 import { PriceLinesEditor, TotalsCard } from '../../components/PriceLines';
 import { useClients, useContracts, useContractTemplates, useJobs, usePackages, useSettingRows } from '../../hooks/data';
 import { settingValue } from '../../db/settings';
-import { CLIENT_FIELDS } from '../../domain/contractTemplates';
+import { CONTRACT_FIELD_GROUPS } from '../../domain/contractTemplates';
+import { completionDate, contractAudience, deliverablesOf, planMilestones, projectDays } from '../../domain/contractPlan';
 import { CLIENT_KINDS } from '../../domain/clients';
 import { docTotals } from '../../domain/pricing';
 import { deleteContract, saveContract } from '../../services/clients';
@@ -21,14 +23,16 @@ import { deliverPdf } from '../../reports/pdf';
 import { contractEmail } from '../../email/templates';
 import { sendEmail } from '../../email/send';
 import { peso } from '../../lib/money';
-import { fmtIsoDate, inPeriod, type Period } from '../../lib/time';
+import { fmtIsoDate, inPeriod, todayISO, type Period } from '../../lib/time';
 import { FilterBar, PeriodSelect } from '../../components/FilterBar';
 import { safeFileName } from '../../lib/files';
 import { ContractEditor } from '../contracts/ContractsPage';
 import { InvoiceDialog } from '../money/InvoiceDialog';
-import type { Contract, ProposalItem } from '../../db/types';
+import type { Contract, ContractSection, Milestone, ProposalItem, StudioPayMethod } from '../../db/types';
 
 const RUSH_LABEL = 'Rush (3–5 day turnaround)';
+
+const sameTerms = (a: ContractSection[], b: ContractSection[]) => JSON.stringify(a.map((s) => [s.id, s.title, s.body, s.on])) === JSON.stringify(b.map((s) => [s.id, s.title, s.body, s.on]));
 
 export function ContractsTab() {
   const [params, setParams] = useSearchParams();
@@ -241,7 +245,13 @@ function TemplatePicker({ value, onClose, onMade }: { value: { clientId: string 
   );
 }
 
-type Part = 'details' | 'price' | 'brief' | 'terms';
+type Part = 'details' | 'price' | 'schedule' | 'brief' | 'terms';
+
+/** The payment method choices: the studio's methods from Settings, then cash and "any". */
+function payChoices(methods: StudioPayMethod[], current: string): string[] {
+  const list = [...methods.filter((m) => m.on).map((m) => m.label), 'Cash', 'Any of the above'];
+  return current && !list.includes(current) ? [current, ...list] : list;
+}
 
 function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: () => void }) {
   const app = useApp();
@@ -250,6 +260,7 @@ function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: (
   const templates = useContractTemplates() ?? [];
   const packages = usePackages() ?? [];
   const clients = useClients() ?? [];
+  const jobs = useJobs() ?? [];
   const rows = useSettingRows();
   const business = settingValue(rows, 'business');
   const payMethods = settingValue(rows, 'payMethods');
@@ -268,11 +279,24 @@ function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: (
   const tpl = templates.find((t) => t.id === c.templateId);
   if (!tpl) return null;
   const client = clients.find((x) => x.id === c.clientId);
-  const audience = /student/i.test(c.subtitle ?? tpl.subtitle) || CLIENT_KINDS.find((k) => k.key === client?.kind)?.audience === 'student' ? 'student' : 'business';
+  const clientAudience = CLIENT_KINDS.find((k) => k.key === client?.kind)?.audience ?? 'business';
+  const audience = contractAudience(c.fields.rates, tpl.audience, clientAudience);
   const items = c.items ?? [];
   const totals = docTotals(items, c.discountAmount ?? 0);
   const down = Math.round((totals.net * (c.downPct ?? 50)) / 100);
-  const setF = (key: string, v: string) => setC({ ...c, fields: { ...c.fields, [key]: v } });
+  const setF = (key: string, v: string) => {
+    const fields = { ...c.fields, [key]: v };
+    // A start date with no finish yet: finish when the package turnaround says.
+    if (key === 'startDate' && v && !c.fields.endDate) fields.endDate = completionDate(v, items, packages, c.rush);
+    setC({ ...c, fields });
+  };
+  const replan = () => {
+    const start = c.fields.startDate || todayISO();
+    const end = completionDate(start, items, packages, c.rush) || c.fields.endDate;
+    setC({ ...c, fields: { ...c.fields, startDate: start, endDate: end }, milestones: planMilestones(tpl.phases, start, end) });
+  };
+  const milestones = c.milestones ?? planMilestones(tpl.phases, c.fields.startDate ?? '', c.fields.endDate ?? '');
+  const setMilestones = (m: Milestone[]) => setC({ ...c, milestones: m });
   const setRush = (on: boolean) => {
     const rest = items.filter((i) => i.label !== RUSH_LABEL);
     const line: ProposalItem = { packageId: 'cat-add-ons-rush-3-5-day-turnaround', label: RUSH_LABEL, qty: 1, unitPrice: 2500, unit: 'percent', months: 1 };
@@ -318,7 +342,7 @@ function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: (
               <Trash2 size={16} /> Delete
             </Button>
             <span className="grow" />
-            <Button disabled={!!busy} onClick={() => run('pdf', async () => deliverPdf(await buildTemplateContractPdf(c, tpl, { business, packages, payMethods, payments }), `${safeFileName(`${c.number} ${c.fields['client.name'] || ''} ${tpl.name}`)}.pdf`))}>
+            <Button disabled={!!busy} onClick={() => run('pdf', async () => deliverPdf(await buildTemplateContractPdf(c, tpl, { business, packages, payMethods, payments, audience, jobNumber: jobs.find((j) => j.id === c.jobId)?.number }), `${safeFileName(`${c.number} ${c.fields['client.name'] || ''} ${tpl.name}`)}.pdf`))}>
               <FileDown size={16} /> {busy === 'pdf' ? 'Making…' : 'PDF'}
             </Button>
             <Button
@@ -373,7 +397,8 @@ function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: (
             options={[
               { value: 'details', label: 'Client & dates' },
               { value: 'price', label: 'Package & price' },
-              { value: 'brief', label: tpl.briefTitle || 'Brief' },
+              { value: 'schedule', label: 'Schedule' },
+              { value: 'brief', label: tpl.briefTitle || 'Questionnaire' },
               { value: 'terms', label: 'Terms' },
             ]}
           />
@@ -389,27 +414,102 @@ function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: (
         </div>
 
         {part === 'details' ? (
-          <div className="form-grid">
-            {CLIENT_FIELDS.map((f) => (
-              <Field key={f.key} label={f.label} htmlFor={`ct-${f.key}`}>
-                {['date', 'startDate', 'endDate'].includes(f.key) ? (
-                  <input id={`ct-${f.key}`} type="date" className="input" value={c.fields[f.key] ?? ''} onChange={(e) => setF(f.key, e.target.value)} />
-                ) : (
-                  <TextInput id={`ct-${f.key}`} value={c.fields[f.key] ?? ''} onChange={(e) => setF(f.key, e.target.value)} />
-                )}
-              </Field>
+          <div className="stack loose">
+            {CONTRACT_FIELD_GROUPS.map((g) => (
+              <section key={g.title} className="stack tight">
+                <span className="eyebrow">{g.title}</span>
+                <div className="form-grid">
+                  {g.fields
+                    .filter((f) => !f.business || audience === 'business')
+                    .map((f) => (
+                      <Field key={f.key} label={f.label} htmlFor={`ct-${f.key}`} hint={f.hint} className={f.kind === 'long' ? 'span-2' : ''}>
+                        {f.kind === 'date' ? (
+                          <input id={`ct-${f.key}`} type="date" className="input" value={c.fields[f.key] ?? ''} onChange={(e) => setF(f.key, e.target.value)} />
+                        ) : f.kind === 'payment' ? (
+                          <Select id={`ct-${f.key}`} value={c.fields[f.key] ?? ''} onChange={(e) => setF(f.key, e.target.value)}>
+                            <option value="">Choose a payment method</option>
+                            {payChoices(payMethods, c.fields[f.key] ?? '').map((m) => (
+                              <option key={m}>{m}</option>
+                            ))}
+                          </Select>
+                        ) : (
+                          <TextInput id={`ct-${f.key}`} value={c.fields[f.key] ?? ''} onChange={(e) => setF(f.key, e.target.value)} />
+                        )}
+                      </Field>
+                    ))}
+                </div>
+              </section>
             ))}
-            <Field label="Pricing tier line" htmlFor="ct-tier">
-              <TextInput id="ct-tier" value={c.subtitle ?? ''} onChange={(e) => setC({ ...c, subtitle: e.target.value })} />
-            </Field>
-            <Field label="Letterhead" htmlFor="ct-frame" hint="The brand-kit frame the PDF is printed on.">
-              <Select id="ct-frame" value={c.frame ?? tpl.frame} onChange={(e) => setC({ ...c, frame: e.target.value as Contract['frame'] })}>
-                <option value="general">Commission contract</option>
-                <option value="logo">Logo and branding</option>
-                <option value="merch">Merchandise design</option>
-                <option value="web">Web design</option>
-              </Select>
-            </Field>
+            <section className="stack tight">
+              <span className="eyebrow">Printing</span>
+              <div className="form-grid">
+                <Field label="Rates" htmlFor="ct-rates" hint="Which prices the package list shows. Not printed.">
+                  <Select id="ct-rates" value={c.fields.rates ?? ''} onChange={(e) => setF('rates', e.target.value)}>
+                    <option value="">{tpl.audience === 'any' ? `By client (${clientAudience === 'student' ? 'student' : 'business'})` : `Template (${tpl.audience})`}</option>
+                    <option value="business">Business prices</option>
+                    <option value="student">Student prices</option>
+                  </Select>
+                </Field>
+                <Field label="Letterhead" htmlFor="ct-frame" hint="The brand-kit frame the PDF is printed on.">
+                  <Select id="ct-frame" value={c.frame ?? tpl.frame} onChange={(e) => setC({ ...c, frame: e.target.value as Contract['frame'] })}>
+                    <option value="general">Commission contract</option>
+                    <option value="logo">Logo and branding</option>
+                    <option value="merch">Merchandise design</option>
+                    <option value="web">Web design</option>
+                  </Select>
+                </Field>
+                <div className="field span-2">
+                  <Toggle id="ct-sig" checked={c.useSignature !== false} onChange={(v) => setC({ ...c, useSignature: v })} label="Sign with my saved signature" />
+                  <span className="hint">
+                    {business.signature ? 'Your signature prints above the “Signing for JoshWorks” line.' : 'No signature saved yet: add it in Settings → Business.'}
+                  </span>
+                </div>
+              </div>
+            </section>
+          </div>
+        ) : null}
+
+        {part === 'schedule' ? (
+          <div className="stack loose">
+            <section className="stack tight">
+              <span className="eyebrow">Deliverables</span>
+              {deliverablesOf(items, packages).length ? (
+                <ul className="small" style={{ margin: 0, paddingLeft: 18 }}>
+                  {deliverablesOf(items, packages).map((d) => (
+                    <li key={d}>{d}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="small muted">Pick a package under Package & price; what it includes is listed here and on the contract.</p>
+              )}
+            </section>
+            <section className="stack tight">
+              <div className="row wrap between">
+                <span className="eyebrow">Milestones</span>
+                <Button size="sm" variant="ghost" onClick={replan}>
+                  <RotateCcw size={15} /> Fill from the package and dates
+                </Button>
+              </div>
+              <p className="tiny muted">
+                {c.fields.startDate ? `Start ${fmtIsoDate(c.fields.startDate)}` : 'No start date yet'} · {c.fields.endDate ? `finish ${fmtIsoDate(c.fields.endDate)}` : 'no finish date yet'}
+                {projectDays(items, packages, c.rush) ? ` · package turnaround ${projectDays(items, packages, c.rush)} days` : ''}
+              </p>
+              {milestones.map((m, i) => (
+                <div key={i} className="milestone-row">
+                  <TextInput aria-label={`Milestone ${i + 1}`} value={m.title} onChange={(e) => setMilestones(milestones.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))} />
+                  <input aria-label={`Milestone ${i + 1} date`} type="date" className="input" value={m.date} onChange={(e) => setMilestones(milestones.map((x, j) => (j === i ? { ...x, date: e.target.value } : x)))} />
+                  <TextInput aria-label={`What the client receives at milestone ${i + 1}`} placeholder="What the client receives" value={m.what} onChange={(e) => setMilestones(milestones.map((x, j) => (j === i ? { ...x, what: e.target.value } : x)))} />
+                  <IconButton label={`Remove milestone ${i + 1}`} size="sm" plain onClick={() => setMilestones(milestones.filter((_, j) => j !== i))}>
+                    <Trash2 size={14} />
+                  </IconButton>
+                </div>
+              ))}
+              <div>
+                <Button size="sm" variant="ghost" onClick={() => setMilestones([...milestones, { title: '', date: '', what: '' }])}>
+                  <Plus size={15} /> Add a milestone
+                </Button>
+              </div>
+            </section>
           </div>
         ) : null}
 
@@ -438,19 +538,18 @@ function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: (
 
         {part === 'brief' ? (
           <div className="stack">
-            {(c.brief ?? tpl.brief.map((q) => ({ q, a: '' }))).map((b, i) => (
-              <Field key={i} label={b.q} htmlFor={`ct-brief-${i}`}>
-                <TextArea id={`ct-brief-${i}`} rows={2} value={b.a} onChange={(e) => setC({ ...c, brief: (c.brief ?? tpl.brief.map((q) => ({ q, a: '' }))).map((x, j) => (j === i ? { ...x, a: e.target.value } : x)) })} />
-              </Field>
-            ))}
-            <p className="tiny muted">Leave answers empty to print blank boxes the client fills in by hand.</p>
+            <p className="tiny muted">Fill in what the client already told you. Anything left empty prints as lines and tick boxes they fill in by hand.</p>
+            <QuestionnaireForm lines={tpl.brief} answers={c.brief} onChange={(brief) => setC({ ...c, brief })} idPrefix="ct-q" />
           </div>
         ) : null}
 
         {part === 'terms' ? (
           <div className="stack">
+            {!sameTerms(c.sections, tpl.sections) ? (
+              <Callout tone="info">This contract has its own copy of the terms, different from the template’s current ones (for example, made before the October 2026 terms). Press Reset to the template to use the current terms.</Callout>
+            ) : null}
             <div className="row between wrap">
-              <p className="muted small">The standard terms 1–10. Untick a section to leave it out, or edit its points (one per line).</p>
+              <p className="muted small">The standard terms. Untick a section to leave it out, or edit its points (one per line).</p>
               <Button size="sm" variant="ghost" onClick={() => setC({ ...c, sections: tpl.sections.map((s) => ({ ...s })) })}>
                 <RotateCcw size={15} /> Reset to the template
               </Button>

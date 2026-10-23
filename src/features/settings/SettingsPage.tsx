@@ -13,7 +13,7 @@ import { DEFAULT_CHECKLIST } from '../../domain/checklist';
 import { PLATFORMS, PLATFORM_ORDER } from '../../domain/platforms';
 import { backupBlob, backupFileName, exportAll, mergeBackup, parseBackup } from '../../services/backup';
 import { setOwnerPin } from '../../services/team';
-import { downloadBlob, readFileAsText } from '../../lib/files';
+import { compressImage, downloadBlob, readFileAsDataURL, readFileAsText } from '../../lib/files';
 import { DOW_NAMES, fmtDateTime } from '../../lib/time';
 import { ImportSection } from './ImportSection';
 import { TrackerImport } from './TrackerImport';
@@ -72,6 +72,47 @@ function useDraft<T>(value: T): [T, (v: T) => void, boolean, () => void] {
   return [draft ?? value, (v: T) => setDraft(v), draft !== null, () => setDraft(null)];
 }
 
+/** The signatory's signature for contracts: a transparent PNG, shrunk so it stays small in the database. */
+function SignaturePicker({ value, onChange }: { value: string; onChange: (dataUrl: string) => void }) {
+  const app = useApp();
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <div className="field">
+      <span className="label">Your signature</span>
+      <div className="row wrap" style={{ gap: 12 }}>
+        <div className="signature-box">{value ? <img src={value} alt="Your saved signature" /> : <span className="small muted">No signature yet</span>}</div>
+        <div className="stack tight">
+          <Button size="sm" onClick={() => input.current?.click()}>
+            <Upload size={15} /> {value ? 'Replace' : 'Upload a PNG'}
+          </Button>
+          {value ? (
+            <Button size="sm" variant="ghost" onClick={() => onChange('')}>
+              <Trash2 size={15} /> Remove
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      <span className="hint">A PNG with a transparent background prints neatly on the line. It goes on every contract unless you switch it off in that contract. Press Save after choosing it.</span>
+      <input
+        ref={input}
+        type="file"
+        accept="image/png,image/webp,image/jpeg"
+        hidden
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (!file) return;
+          try {
+            onChange(await readFileAsDataURL(await compressImage(file, 600, 1, 'image/png')));
+          } catch (err) {
+            app.toast(err instanceof Error ? err.message : 'Could not read that image', { tone: 'bad' });
+          }
+        }}
+      />
+    </div>
+  );
+}
+
 function BusinessSection() {
   const app = useApp();
   const stored = settingValue(useSettingRows(), 'business');
@@ -95,6 +136,13 @@ function BusinessSection() {
         {field('email', 'Email')}
         {field('website', 'Website')}
         {field('signatory', 'Signs documents as', 'e.g. Joshua Ranin, Head Designer')}
+      </div>
+      <SignaturePicker value={b.signature ?? ''} onChange={(signature) => setB({ ...b, signature })} />
+      <span className="eyebrow">Contract defaults: communication & delivery</span>
+      <div className="form-grid">
+        {field('channel', 'Official channel', 'Where clients send feedback and approvals.')}
+        {field('hours', 'Reply time & working hours')}
+        {field('delivery', 'How files are delivered')}
       </div>
       <Field label="Our pages" hint="Handles or links; used in reports and by the assistant.">
         <div className="form-grid">

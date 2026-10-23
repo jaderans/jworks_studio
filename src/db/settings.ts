@@ -23,6 +23,10 @@ export const DEFAULT_BUSINESS: BusinessSettings = {
   handles: { tiktok: '@joshworks_onart', facebook: '@artsbyjosh' },
   paymentDetails: '',
   signatory: '',
+  signature: '',
+  channel: 'Facebook Messenger (JoshWorks page) and email',
+  hours: 'Replies within 1 business day · Monday to Saturday, 9:00 AM–6:00 PM',
+  delivery: 'Google Drive link sent by email or Messenger',
 };
 
 export const DEFAULT_EMAIL: EmailSettings = {

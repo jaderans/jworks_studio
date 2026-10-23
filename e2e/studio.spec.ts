@@ -110,9 +110,20 @@ test('owner runs a job from inquiry to paid, with invoice, receipt, contract and
   await page.getByLabel('For a job (optional)').selectOption({ index: 1 });
   await page.getByRole('radio', { name: /Branding/ }).first().click();
   await page.getByRole('button', { name: 'Make the contract' }).click();
-  await expect(page.getByRole('dialog').first()).toBeVisible();
+  const ct = page.getByRole('dialog').first();
+  await expect(ct).toBeVisible();
+  // Payment method is a dropdown of the studio's methods; the questionnaire is the studio's own 22 questions.
+  await expect(ct.getByLabel('Payment method')).toHaveJSProperty('tagName', 'SELECT');
+  await expect(ct.getByLabel('Prices valid until')).toHaveValue('2026-11-04');
   await page.screenshot({ path: `${SHOTS}/studio-contract.png` });
-  await pdf(page, () => page.getByRole('dialog').getByRole('button', { name: 'PDF' }).click(), /\.pdf$/);
+  await ct.getByRole('button', { name: 'Schedule', exact: true }).click();
+  await expect(ct.getByText('3 logo concepts')).toBeVisible();
+  await ct.getByRole('button', { name: 'Branding Questionnaire', exact: true }).click();
+  await expect(ct.getByText('of 22 answered')).toBeVisible();
+  await ct.getByRole('button', { name: 'Modern & Minimalist', exact: true }).click();
+  await expect(ct.getByText('2 of 22 answered')).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/studio-contract-questionnaire.png` });
+  await pdf(page, () => ct.locator('.dialog-foot').getByRole('button', { name: 'PDF' }).click(), /\.pdf$/);
   await page.keyboard.press('Escape');
   for (const tab of ['Quotes', 'Price list', 'Contract templates', 'Team rates']) {
     await page.getByRole('link', { name: tab, exact: true }).click();
