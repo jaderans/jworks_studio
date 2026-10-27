@@ -108,6 +108,19 @@ describe('campaigns', () => {
   });
 });
 
+describe('video series campaign', () => {
+  it('puts the ten videos on the calendar at 7:00 PM from the week of Nov 16', async () => {
+    await setup();
+    const t = CAMPAIGN_TEMPLATES.find((x) => x.id === 'video-series')!;
+    const rows = planTemplatePosts(t, '2026-11-16', DEFAULT_CADENCE).map((r) => ({ ...r, include: true, assignees: [] }));
+    const c = await launchCampaign({ ...blankCampaign(), name: t.name, startDate: '2026-11-16', endDate: rows[rows.length - 1].date, ctaKeyword: t.ctaKeyword, offer: t.offer }, rows, t.funnelTemplateId);
+    const posts = alive(await db.posts.where('campaignId').equals(c.id).toArray()).sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''));
+    expect(posts).toHaveLength(10);
+    expect(posts.every((p) => p.time === '19:00' && p.format === 'Reel')).toBe(true);
+    expect(posts[0]).toMatchObject({ date: '2026-11-16', title: 'Vector fisheye text in 10 seconds' });
+  });
+});
+
 describe('clients, proposals and contracts', () => {
   it('numbers proposals and fills a contract from the client and package', async () => {
     await setup();

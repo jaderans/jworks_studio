@@ -1,5 +1,6 @@
 import { addDays, mondayOf } from '../lib/time';
 import { isBreak } from './calendar';
+import { isHoliday } from './seasons';
 import type { CadenceSettings, CampaignGoal, FunnelStage, Kpi, Persona, ServiceKey } from '../db/types';
 
 /**
@@ -18,6 +19,8 @@ export interface TemplatePost {
   stage: FunnelStage;
   brief: string;
   series?: string;
+  /** Posting time, HH:MM (else the platform's default time). */
+  time?: string;
 }
 
 export interface CampaignTemplate {
@@ -38,6 +41,8 @@ export interface CampaignTemplate {
   posts: TemplatePost[];
   /** A fixed rhythm (e.g. every two weeks): a break week moves that post and every later one, so the gaps stay the same. */
   keepRhythm?: boolean;
+  /** Suggested first day (YYYY-MM-DD), used while it's still ahead. */
+  startOn?: string;
 }
 
 const persona = (name: string, who: string, pains: string, wants: string, objections: string, whereTheyAre: string, triggers: string): Persona => ({ name, who, pains, wants, objections, whereTheyAre, triggers });
@@ -220,7 +225,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     service: 'illustration',
     goal: 'awareness',
     description:
-      'Ten short design videos in five drops: two videos in week 1, a two-week rest, then two more, for ten weeks. Each video opens on the finished result, teaches one trick fast, and ends on a loop or a question so people rewatch, save and comment. Start it on a Monday.',
+      'Ten short design videos in five drops, Monday and Thursday at 7:00 PM, then two weeks before the next drop. Planned from the week of Nov 16, 2026: break weeks pause the series without breaking the rhythm, holidays move a video to the nearest free day, and each drop fits its season (Christmas, new year, Dinagyang). Each video opens on the finished result and ends on a loop or a question.',
     offer: 'Free logo fix: send your logo, we may fix it on video',
     keyMessage: 'Real design, made by a person, fast enough to watch twice.',
     ctaKeyword: 'FIX',
@@ -235,10 +240,12 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     audience: DESIGN_LEARNERS,
     funnelTemplateId: 'studio-leads',
     keepRhythm: true,
+    startOn: '2026-11-16',
     posts: [
       {
         week: 0,
         dow: 1,
+        time: '19:00',
         title: 'Vector fisheye text in 10 seconds',
         format: 'Reel',
         stage: 'awareness',
@@ -250,12 +257,14 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
           'END: the last frame matches the first, so it loops.',
           'CAPTION: Fisheye text in Illustrator, fully vector, no CapCut needed. Save this for your next pubmat. #illustratortutorial #graphicdesign #typography #fisheyetext #JoshWorks',
           'SAY AND SHOW the keywords “Illustrator”, “fisheye text”, “vector” (TikTok search reads speech and on-screen text).',
+          'TIMING: opens the series; a quick, satisfying tutorial people save.',
           'WHY: fisheye text is a trend people already search for; the vector version stands out from the CapCut ones.',
         ),
       },
       {
         week: 0,
         dow: 4,
+        time: '19:00',
         title: 'Sketch to vector: trust the process',
         format: 'Reel',
         stage: 'awareness',
@@ -267,77 +276,14 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
           'END: loop back to the sketch.',
           'SOUND: use a reveal sound that is trending that week (on a business account, only sounds marked “Approved for Business Use” in TikTok’s Creative Center).',
           'CAPTION: The sketch always looks like this first. Logo design, start to finish. #logodesign #processvideo #graphicdesigner #iloilo #JoshWorks',
+          'TIMING: the second video of the first drop shows the real work behind a logo, while the first video is still being shown to new people.',
           'WHY: the before-and-after reveal is watched to the end and rewatched; it also shows clients the real work behind a logo.',
         ),
       },
       {
         week: 2,
         dow: 1,
-        title: 'Puffy sticker text with Inflate',
-        format: 'Reel',
-        stage: 'awareness',
-        series: 'Illustrator in seconds',
-        brief: lines(
-          'HOOK (0–2s): squish the finished puffy word with the cursor on screen. On screen: “Make your text look squishy.”',
-          'ALT HOOKS to test: “3D bubble text without Blender.” · “Your text, but make it a sticker.”',
-          'BEATS: 2–8s bold rounded type · 8–18s Effect > 3D and Materials > Inflate, soft plastic material · 18–26s Appearance panel: a thick white stroke behind it for the sticker outline · 26–30s it on a sticker sheet mockup.',
-          'END: cut back to the squish so it loops.',
-          'CAPTION: Puffy 3D sticker text in Illustrator. Which word should I make next? #illustrator #3Dtext #stickerdesign #typography #JoshWorks',
-          'WHY: puffy, bubbly lettering is on every 2026 trend list; asking “which word next” brings comments, which become the next videos.',
-        ),
-      },
-      {
-        week: 2,
-        dow: 4,
-        title: 'Me vs Illustrator’s AI',
-        format: 'Reel',
-        stage: 'interest',
-        series: 'Illustrator in seconds',
-        brief: lines(
-          'HOOK (0–2s): split screen of both finished icons. On screen: “Same icon. One made by AI, one made by me. Which one’s better?”',
-          'ALT HOOKS to test: “I raced Illustrator’s AI.” · “Can you tell which one a human made?”',
-          'BEATS: left: Text to Vector Graphic with the prompt on screen · right: built by hand with Shape Builder, sped up · 30–40s zoom into the details (clean curves vs extra anchor points).',
-          'END: “Comment LEFT or RIGHT.” Reveal which is which in a reply video to the top comment.',
-          'CAPTION: AI or human? Vote in the comments. #designer #illustrator #aiart #graphicdesign #JoshWorks',
-          'WHY: a fair, friendly debate drives comments and shares, and it shows clients why hand-made design is worth paying for (it matches the contract’s “original human work” promise).',
-        ),
-      },
-      {
-        week: 4,
-        dow: 1,
-        title: 'Jeepney sign lettering, fully vector',
-        format: 'Reel',
-        stage: 'awareness',
-        series: 'Illustrator in seconds',
-        brief: lines(
-          'HOOK (0–2s): the finished chrome jeepney lettering, with a quick shine sweep. On screen: “How to get that jeepney sign lettering, fully vector.”',
-          'ALT HOOKS to test: “Pinoy designers, this one’s for you.” · “The most Filipino text effect.”',
-          'BEATS: 2–10s one line of text in a bold script · 10–35s Appearance panel: stack 3–4 strokes (thick dark, colour, thin white), add a drop shadow and a chrome gradient fill · 35–45s on a jeepney side panel mockup.',
-          'END: the shine sweep loops.',
-          'CAPTION: Jeepney sign lettering in Illustrator. Proudly from Iloilo. Saan mo ito gagamitin? #pinoydesigner #jeepney #illustratortutorial #typography #JoshWorks',
-          'WHY: local, cultural design is a 2026 trend and few creators can make this; Filipino viewers share it with friends.',
-        ),
-      },
-      {
-        week: 4,
-        dow: 4,
-        title: 'Fixing your logo (episode 1)',
-        format: 'Reel',
-        stage: 'decision',
-        series: 'Fix your logo',
-        brief: lines(
-          'HOOK (0–2s): the old logo and the redesign side by side, then the old one alone. On screen: “You sent me your logo. Here’s what I’d fix.”',
-          'ALT HOOKS to test: “3 things wrong with this logo.” · “I fixed a follower’s logo in 45 seconds.”',
-          'BEATS: three quick notes with arrows (spacing, line weight, colour) · rebuild it sped up · reveal on a sign or a cup.',
-          'END: “Want yours fixed next? Comment FIX or DM FIX.”',
-          'CAPTION: Logo fixes, episode 1. Send yours: comment or DM FIX. #logoredesign #logodesign #smallbusiness #branding #JoshWorks',
-          'ASK the owner’s permission first, and tag them if they’re happy to be featured.',
-          'WHY: logo-fix series have a strong record on TikTok; every episode brings new submissions (leads) and a reason to follow for the next one.',
-        ),
-      },
-      {
-        week: 6,
-        dow: 1,
+        time: '19:00',
         title: 'One drawing, every angle (Turntable)',
         format: 'Reel',
         stage: 'awareness',
@@ -345,16 +291,54 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
         brief: lines(
           'HOOK (0–2s): the mascot spinning 360°. On screen: “I drew this character once. Illustrator drew the other angles.”',
           'ALT HOOKS to test: “Draw it once, get every angle.” · “The Illustrator feature nobody is using yet.”',
-          'BEATS: 2–8s the flat mascot · 8–15s run Turntable, scrub the full rotation · 15–20s export the GIF and drop it into a chat.',
+          'BEATS: 2–8s the flat mascot (give it a Santa hat for December) · 8–15s run Turntable, scrub the full rotation · 15–20s export the GIF and drop it into a chat.',
           'END: the spin loops.',
           'NOTE: Turntable uses generative credits; say so in the caption so nobody is surprised.',
-          'CAPTION: One drawing, every angle, with Illustrator’s Turntable (uses generative credits). Mascot design by JoshWorks. #illustrator #characterdesign #mascot #adobeillustrator #JoshWorks',
-          'WHY: a new feature few have covered yet, with a looping ending that gets rewatched; it also sells mascot design.',
+          'CAPTION: One drawing, every angle, with Illustrator’s Turntable (uses generative credits). Mascots for your brand’s holiday posts: DM MASCOT. #illustrator #characterdesign #mascot #adobeillustrator #JoshWorks',
+          'TIMING: early December, when businesses plan holiday merch and greetings: a mascot sells.',
+          'WHY: a new feature few have covered yet, with a looping ending that gets rewatched.',
         ),
       },
       {
-        week: 6,
+        week: 2,
         dow: 4,
+        time: '19:00',
+        title: 'Your logo, animated for Christmas (Illustrator to After Effects)',
+        format: 'Reel',
+        stage: 'decision',
+        series: 'Illustrator in seconds',
+        brief: lines(
+          'HOOK (0–2s): the finished logo animation playing, with a light snowfall. On screen: “This logo animation took 15 minutes, not 15 hours.”',
+          'ALT HOOKS to test: “Your logo, but alive.” · “Static logo vs animated logo.”',
+          'BEATS: build the logo in Illustrator · import into After Effects · three clean moves (scale in, mask reveal, settle with easing) · payoff: a notification-style pop-in, “Merry Christmas from …” or “Payment received”.',
+          'END: the animation loops.',
+          'CAPTION: Logo animation from Illustrator to After Effects. Want an animated Christmas greeting with your logo? DM MOTION. #logoanimation #aftereffects #motiondesign #illustrator #JoshWorks',
+          'TIMING: two weeks before Christmas, when businesses still have time to order animated greetings.',
+          'WHY: clean, minimal motion and app-style notifications are leading motion trends; it sells the animation service in its busiest month.',
+        ),
+      },
+      {
+        week: 4,
+        dow: 1,
+        time: '19:00',
+        title: 'Puffy Christmas sticker text with Inflate',
+        format: 'Reel',
+        stage: 'awareness',
+        series: 'Illustrator in seconds',
+        brief: lines(
+          'HOOK (0–2s): squish the finished puffy “PASKO” with the cursor on screen. On screen: “Make your text look squishy.”',
+          'ALT HOOKS to test: “3D bubble text without Blender.” · “Your text, but make it a Christmas sticker.”',
+          'BEATS: 2–8s bold rounded type · 8–18s Effect > 3D and Materials > Inflate, soft plastic material · 18–26s Appearance panel: a thick white stroke behind it for the sticker outline · 26–30s on a sticker sheet or gift tag mockup.',
+          'END: cut back to the squish so it loops.',
+          'CAPTION: Puffy 3D sticker text in Illustrator. Which word should I make next? #illustrator #3Dtext #stickerdesign #pasko #JoshWorks',
+          'TIMING: Christmas week, when people are making greetings and gift tags; light and fun.',
+          'WHY: puffy, bubbly lettering is on every 2026 trend list; asking “which word next” brings comments, which become the next videos.',
+        ),
+      },
+      {
+        week: 4,
+        dow: 4,
+        time: '19:00',
         title: 'Designing like it’s 2016 vs 2026',
         format: 'Reel',
         stage: 'interest',
@@ -365,28 +349,69 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
           'BEATS: 2016 version: long shadows, flat icons, Instagram gradient · 2026 version: tactile textures, oversized type, bold maximalist colour · flip between them on the beat.',
           'END: “Which one would you post? 2016 or 2026?”',
           'CAPTION: Design eras, 2016 vs 2026. Be honest: which one is your style? #graphicdesign #designtrends #2016 #posterdesign #JoshWorks',
+          'TIMING: the week before New Year, when everyone looks back at the year; if Thursday is Christmas Eve, the app moves it to Wednesday.',
           'WHY: rides the “2026 is the new 2016” nostalgia trend; easy to follow and easy to argue about in the comments.',
+        ),
+      },
+      {
+        week: 6,
+        dow: 1,
+        time: '19:00',
+        title: 'New year, new logo: fixing your logo (episode 1)',
+        format: 'Reel',
+        stage: 'decision',
+        series: 'Fix your logo',
+        brief: lines(
+          'HOOK (0–2s): the old logo and the redesign side by side, then the old one alone. On screen: “You sent me your logo. Here’s what I’d fix.”',
+          'ALT HOOKS to test: “3 things wrong with this logo.” · “New year, new logo. Let’s fix yours.”',
+          'BEATS: three quick notes with arrows (spacing, line weight, colour) · rebuild it sped up · reveal on a sign or a cup.',
+          'END: “Want yours fixed next? Comment FIX or DM FIX.”',
+          'CAPTION: Logo fixes, episode 1. New year, new brand: send yours, comment or DM FIX. #logoredesign #logodesign #smallbusiness #branding #JoshWorks',
+          'ASK the owner’s permission first, and tag them if they’re happy to be featured.',
+          'TIMING: the first working week of January, when owners plan a fresh start.',
+          'WHY: logo-fix series have a strong record on TikTok; every episode brings new submissions (leads) and a reason to follow.',
+        ),
+      },
+      {
+        week: 6,
+        dow: 4,
+        time: '19:00',
+        title: 'Me vs Illustrator’s AI',
+        format: 'Reel',
+        stage: 'interest',
+        series: 'Illustrator in seconds',
+        brief: lines(
+          'HOOK (0–2s): split screen of both finished icons. On screen: “Same icon. One made by AI, one made by me. Which one’s better?”',
+          'ALT HOOKS to test: “I raced Illustrator’s AI.” · “Can you tell which one a human made?”',
+          'BEATS: left: Text to Vector Graphic with the prompt on screen · right: built by hand with Shape Builder, sped up · 30–40s zoom into the details (clean curves vs extra anchor points).',
+          'END: “Comment LEFT or RIGHT.” Reveal which is which in a reply video to the top comment.',
+          'CAPTION: AI or human? Vote in the comments. #designer #illustrator #aiart #graphicdesign #JoshWorks',
+          'TIMING: new-year talk is full of “AI will replace designers”; this answers it with work, not words.',
+          'WHY: a fair, friendly debate drives comments and shares, and it shows why hand-made design is worth paying for (the contract’s “original human work” promise).',
         ),
       },
       {
         week: 8,
         dow: 1,
-        title: 'Illustrator to After Effects in 15 seconds',
+        time: '19:00',
+        title: 'Jeepney sign lettering for Dinagyang',
         format: 'Reel',
-        stage: 'decision',
+        stage: 'awareness',
         series: 'Illustrator in seconds',
         brief: lines(
-          'HOOK (0–2s): the finished logo animation playing. On screen: “This logo animation took 15 minutes, not 15 hours.”',
-          'ALT HOOKS to test: “Your logo, but alive.” · “Static logo vs animated logo.”',
-          'BEATS: build the logo in Illustrator · import into After Effects · three clean moves (scale in, mask reveal, settle with easing) · payoff: a notification-style pop-in such as “Payment received” or “New follower”.',
-          'END: the animation loops.',
-          'CAPTION: Logo animation from Illustrator to After Effects. Want your logo moving for reels and intros? DM MOTION. #logoanimation #aftereffects #motiondesign #illustrator #JoshWorks',
-          'WHY: clean, minimal motion and app-style notifications are leading motion trends; it sells the logo animation service.',
+          'HOOK (0–2s): the finished chrome jeepney lettering reading “DINAGYANG”, with a quick shine sweep. On screen: “How to get that jeepney sign lettering, fully vector.”',
+          'ALT HOOKS to test: “Pinoy designers, this one’s for you.” · “The most Filipino text effect.”',
+          'BEATS: 2–10s one line of text in a bold script · 10–35s Appearance panel: stack 3–4 strokes (thick dark, colour, thin white), add a drop shadow and a chrome gradient fill · 35–45s on a jeepney side panel mockup.',
+          'END: the shine sweep loops.',
+          'CAPTION: Jeepney sign lettering in Illustrator, just in time for Dinagyang. Proudly from Iloilo. Saan mo ito gagamitin? #pinoydesigner #dinagyang #jeepney #illustratortutorial #JoshWorks',
+          'TIMING: the week before Dinagyang (Jan 24): Iloilo is proud and sharing local content.',
+          'WHY: local, cultural design is a 2026 trend and few creators can make this; Filipino viewers share it with friends.',
         ),
       },
       {
         week: 8,
         dow: 4,
+        time: '19:00',
         title: 'Tier list: every Illustrator tool',
         format: 'Reel',
         stage: 'loyalty',
@@ -397,7 +422,8 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
           'BEATS: about 3 seconds per tool into S, A, B and “never touched” · save the most controversial pick for the end.',
           'END: “Which tool did I get wrong?” Pin the best reply and answer it with a video.',
           'CAPTION: My Illustrator tool tier list. Fight me in the comments. Every trick from this series is on our page. #illustrator #tierlist #graphicdesigner #designtips #JoshWorks',
-          'WHY: rankings are among the most-commented formats; it closes the series and sends viewers back to the other nine videos.',
+          'TIMING: closes the series and sends viewers back to the other nine videos.',
+          'WHY: rankings are among the most-commented formats.',
         ),
       },
     ],
@@ -600,6 +626,8 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
 
 export interface PlannedPost {
   date: string;
+  /** HH:MM, or '' for the platform's default time. */
+  time: string;
   title: string;
   format: string;
   stage: FunnelStage;
@@ -607,7 +635,11 @@ export interface PlannedPost {
   series: string;
 }
 
-/** Dates for a template's posts from a start day. A post that lands in a break week moves to the week after. */
+/**
+ * Dates for a template's posts from a start day. A post that lands in a break
+ * week moves to the week after; one that lands on a public holiday moves to the
+ * nearest free weekday that week (when the calendar skips holidays).
+ */
 export function planTemplatePosts(t: CampaignTemplate, start: string, cadence: CadenceSettings): PlannedPost[] {
   const monday = mondayOf(start);
   const out: PlannedPost[] = [];
@@ -621,9 +653,21 @@ export function planTemplatePosts(t: CampaignTemplate, start: string, cadence: C
       date = addDays(date, 7);
       if (t.keepRhythm) shift++;
     }
-    out.push({ date, title: p.title, format: p.format, stage: p.stage, brief: p.brief, series: p.series ?? '' });
+    if (cadence.skipHolidays !== false && isHoliday(date)) date = offHoliday(date, start, cadence, new Set(out.map((x) => x.date)));
+    out.push({ date, time: p.time ?? '', title: p.title, format: p.format, stage: p.stage, brief: p.brief, series: p.series ?? '' });
   }
   return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** The nearest weekday to a holiday that is free: not a holiday, a break, before the start, or already taken. */
+function offHoliday(date: string, start: string, cadence: CadenceSettings, taken: ReadonlySet<string>): string {
+  for (const d of [-1, 1, -2, 2, -3, 3]) {
+    const c = addDays(date, d);
+    const dow = new Date(`${c}T00:00:00`).getDay();
+    if (dow === 0 || dow === 6 || c < start || isHoliday(c) || isBreak(cadence, c) || taken.has(c)) continue;
+    return c;
+  }
+  return date;
 }
 
 export const GOAL_LABEL: Record<CampaignGoal, string> = {

@@ -44,6 +44,8 @@ export async function saveCampaign(c: Partial<Campaign> & { name: string }): Pro
 
 export interface PlannedRow {
   date: string;
+  /** HH:MM, or '' for the platform's default time. */
+  time?: string;
   title: string;
   format: string;
   stage: FunnelStage;
@@ -71,6 +73,7 @@ export async function launchCampaign(c: Omit<Campaign, 'id' | 'createdAt' | 'upd
     await createPost({
       title: r.title,
       date: r.date,
+      ...(r.time ? { time: r.time } : {}),
       themeKey: themeForDate(cadence, r.date)?.key ?? '',
       format: r.format,
       brief: r.brief,

@@ -310,7 +310,7 @@ function CampaignBuilder({ start, onClose }: { start: CampaignTemplate | 'blank'
       if (!s) return defaultStart;
       const w = nextWindow(s, today);
       return mondayOnOrAfter(w.start > defaultStart ? w.start : defaultStart);
-    })() : defaultStart;
+    })() : t?.startOn && t.startOn >= defaultStart ? t.startOn : defaultStart;
     setC({
       ...blankCampaign(),
       name: t?.name ?? '',
