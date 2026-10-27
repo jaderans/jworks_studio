@@ -26,7 +26,7 @@ It is a web app that installs like a phone app (PWA). It works offline, keeps da
 
 **Marketing**: the content calendar (weekly themes, break weeks, Philippine holidays), the board, ideas and carousel scripts, campaigns, trends, results, and the assistant.
 
-**People**: owner, manager and designer roles, sign-in with Google or email, invites by email, an activity log, backups and an owner PIN.
+**People**: the owner adds each person with a name and email, and the app makes their login with a temporary password to send (no Google account or email confirmation). They choose their own password and get a welcome guide. Designers are Managers by default, so they see everything happening at the studio. Also an activity log, backups and an owner PIN.
 
 **Import**: the commission tracker (jobs, payments, splits, targets, BIR settings) and the content planner (.xlsx), read on the device.
 

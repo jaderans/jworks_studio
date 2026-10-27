@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import {
-  Briefcase, ChevronDown, ChevronsLeft, ChevronsRight, CloudUpload, Contact, FileSignature, History, LayoutGrid, Layers, ListChecks, Megaphone, Menu, Monitor,
+  Briefcase, ChevronDown, Compass, ChevronsLeft, ChevronsRight, CloudUpload, Contact, FileSignature, History, LayoutGrid, Layers, ListChecks, Megaphone, Menu, Monitor,
   Moon, RefreshCw, Settings, Sun, Users, Wallet, WifiOff, type LucideIcon,
 } from 'lucide-react';
 import mark from '../assets/brand/mark.png';
@@ -23,6 +23,7 @@ import { applyTheme, getTheme, setTheme, type ThemeMode } from '../lib/theme';
 import { useSyncStatus } from '../sync/useSync';
 import { ACTIVITY_LABELS, activityTone } from '../features/activity/labels';
 import { ErrorBoundary } from './ErrorBoundary';
+import { FirstRun } from '../features/welcome/WelcomeGuide';
 
 interface Tab {
   to: string;
@@ -159,6 +160,7 @@ export function Shell() {
   const [scopePicker, setScopePicker] = useState(false);
   const [userPicker, setUserPicker] = useState(false);
   const [more, setMore] = useState(false);
+  const [guide, setGuide] = useState(false);
   const [theme, setThemeState] = useState<ThemeMode>(getTheme());
   const [navMode, setNavMode] = useState<'full' | 'rail'>(() => (readPref(NAV_KEY) === 'rail' ? 'rail' : 'full'));
   const business = settingValue(useSettingRows(), 'business');
@@ -289,6 +291,9 @@ export function Shell() {
                 <button type="button" className="menu-item" onClick={() => { close(); navigate('/me'); }}>
                   <ListChecks size={18} aria-hidden="true" /> My tasks
                 </button>
+                <button type="button" className="menu-item" onClick={() => { close(); setGuide(true); }}>
+                  <Compass size={18} aria-hidden="true" /> Welcome guide
+                </button>
                 <button type="button" className="menu-item" onClick={() => { close(); navigate('/settings'); }}>
                   <Settings size={18} aria-hidden="true" /> Settings
                 </button>
@@ -314,6 +319,7 @@ export function Shell() {
           <Outlet />
         </ErrorBoundary>
       </main>
+      <FirstRun guideOpen={guide} setGuideOpen={setGuide} />
 
       <nav className="bottomnav" aria-label="Main" style={{ gridTemplateColumns: `repeat(${primary.length + 1}, minmax(0, 1fr))` }}>
         {primary.map((s) => (

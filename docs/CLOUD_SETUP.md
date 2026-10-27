@@ -7,7 +7,7 @@ Sync runs on your own Firebase project, separate from JoshWorks POS, so the two 
 ## 1. Create the Firebase project (owner, once, about 10 minutes)
 
 1. Go to [console.firebase.google.com](https://console.firebase.google.com), sign in with the JoshWorks Google account and choose **Add project**. Google Analytics isn't needed.
-2. **Build → Authentication → Get started**. Under **Sign-in method**, turn on **Google** (choose the studio Gmail as the support email) and **Email/Password**.
+2. **Build → Authentication → Get started**. Under **Sign-in method**, turn on **Email/Password**. That is the only sign-in the team needs (Google isn’t used).
 3. **Build → Firestore Database → Create database**. Choose **asia-southeast1 (Singapore)** and start in **production mode**.
 4. In Firestore, open **Rules**, replace everything with the JoshWorks rules and click **Publish**. Copy them from **Settings → Cloud sync → Copy the security rules** in the app, or from [`firebase/firestore.rules`](../firebase/firestore.rules).
 5. **Project settings → Your apps → Web (`</>`)**, register an app (no hosting needed) and copy the `firebaseConfig` block.
@@ -17,40 +17,41 @@ The `firebaseConfig` values aren't secret: they only say which project to talk t
 
 > **Already set up?** After updating to JoshWorks Studio, publish the rules again (step 4). The new rules add jobs, payments, invoices and designer pay; until they're published, those don't sync.
 >
-> **October 2026 update:** publish the rules once more for **client links** (Documents → Contracts → Client link). They let a client open one contract with its link, answer the questionnaire and sign, and nothing else: no account, no other records, and only once before the link expires.
+> **October 2026 updates:** publish the rules once more. They add **team logins made by the owner** (email + temporary password, no email confirmation) and **client links** (Documents → Contracts → Client link). They let a client open one contract with its link, answer the questionnaire and sign, and nothing else: no account, no other records, and only once before the link expires.
 
-## 2. Make Firebase's emails look like JoshWorks
+## 2. Make Firebase's password-reset email look like JoshWorks
 
-Firebase sends the sign-up confirmation and password-reset emails. By default they come from "noreply@your-project.firebaseapp.com" with the project's code name, which looks like spam. Fix it once:
+Nobody confirms their email any more: the owner makes each login in the app. Firebase only sends an email when someone taps **Forgot password?**. By default they come from "noreply@your-project.firebaseapp.com" with the project's code name, which looks like spam. Fix it once:
 
 1. **Project settings → General → Public-facing name**: `JoshWorks Studio`. This replaces "joshworks-campaigns" in every email.
-2. **Authentication → Templates**. For **Email address verification** and **Password reset**, click the pencil:
+2. **Authentication → Templates → Password reset**, click the pencil:
    - **Sender name**: `JoshWorks Studio`
    - **Reply to**: `jworks1505@gmail.com`
-   - **Subject**: for example "Confirm your email for JoshWorks Studio" and "Reset your JoshWorks Studio password".
-   - Click **Customize action URL** and enter `https://jaderans.github.io/jworks_studio/`. The links in the emails then open the app's own page ("Email confirmed" or "Set a new password") in the JoshWorks design instead of Firebase's plain page.
+   - **Subject**: for example "Reset your JoshWorks Studio password".
+   - Click **Customize action URL** and enter `https://jaderans.github.io/jworks_studio/`. The link in the email then opens the app's own "Set a new password" page in the JoshWorks design.
    - Save.
-
-Firebase doesn't let you change the email's design or the sending address on the free plan, so the best fix is to skip the email: **Continue with Google** signs people in with no confirmation email at all. Ask designers with Gmail accounts to use it.
 
 ## 3. Connect the owner's device
 
 1. In the app: **Settings → Cloud sync and team accounts**.
 2. Paste the `firebaseConfig` block. Keep the team name `joshworks`; every device on the team uses the same one.
-3. Click **Connect this device**, then **Continue with Google** (or create an email and password account and confirm it).
+3. Click **Connect this device**, choose **Create the owner account**, and enter your email and a password. No confirmation email. (Set the owner account up with Google before? The small **Continue with Google** link under the form still works for you.)
 
 Everything already on this device uploads once you're signed in.
 
-## 4. Invite the team
+## 4. Add the team
 
-1. **Team → Add person** (or edit someone the imports already added). Enter their **sign-in email**: their Google account, or any email they'll use with a password. Choose a role:
-   - **Designer**: their jobs and deadlines (status, revisions, delivery checklist, links), the content calendar, board, ideas, trends and results, and **My pay** (their own earnings, payouts and payout details). No prices, quotes, contracts, invoices, client payments or other people's pay.
-   - **Manager**: everything a designer can do, plus jobs' money, clients, quotes, contracts, invoices, payments, payouts, expenses, reports and BIR. Not the team or settings.
-   - **Owner**: everything, including settings, team access and the activity log.
-2. Click **Invite**. With email set up ([EMAIL_SETUP.md](EMAIL_SETUP.md)) it sends a branded invite; the link icon shares the invite link instead (Messenger, Viber).
-3. They open the link and sign in with Google or that same email. Their device then fills with what their role can see.
+1. **Team → Add person**. Enter their **name** and a **working email**. They're **Managers** by default: they see and run everything happening at the studio (jobs, clients, documents, money, marketing) and their own **My pay**; only the owner changes the team and settings. (**Designer** is still there for someone who should only see their jobs, the calendar and their own pay.)
+2. Press **Save**. The app makes their login with a **temporary password** and shows it once, with the app link:
+   - **Email it** sends it from the studio Gmail ([EMAIL_SETUP.md](EMAIL_SETUP.md)), or
+   - **Copy message** to paste in Messenger or Viber.
+3. They open the link, sign in with their email and the temporary password, **choose their own password**, and get a short **welcome guide** to the app. No Google account and no email confirmation.
 
-**Changing someone's email** moves their access: the old address stops working and the new one can sign in. Send them a new invite. **To pause someone**, edit them and mark them inactive; their access stops right away and their work stays.
+The Team page shows where each person is: **No login yet** (press **Make login**), **Temporary password** (press **Send login** to show it again on the device that made it), or **Signed in**.
+
+A login only works for the account the app made: someone who registers the same email elsewhere gets nothing. If a person forgets their password, they tap **Forgot password?** on the sign-in screen.
+
+**Changing someone's email** moves their access: the old address stops working, and the new one gets a fresh login to send. **To pause someone**, edit them and mark them inactive; their access stops right away and their work stays.
 
 ## What syncs and what doesn't
 

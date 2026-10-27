@@ -59,8 +59,12 @@ describe('studio email through the Gmail mailer', () => {
   });
 
   it('explains a wrong key, a full quota and a link that is not the mailer', async () => {
-    const mail = inviteEmail(DEFAULT_BUSINESS, { name: 'Kaye', email: 'kaye@example.com', link: 'https://x/#/join', role: 'Designer', from: 'Joshua' });
-    expect(mail.subject).toMatch(/approve your account/);
+    const mail = inviteEmail(DEFAULT_BUSINESS, { name: 'Kaye', email: 'kaye@example.com', link: 'https://x/#/join', role: 'Manager', from: 'Joshua', password: 'JW-K7QF-M2XP' });
+    // The login the owner made: email, temporary password and the link, no Google or confirmation.
+    expect(mail.subject).toBe('Your JoshWorks Studio account is ready');
+    expect(mail.html).toContain('JW-K7QF-M2XP');
+    expect(mail.text).toContain('Temporary password: JW-K7QF-M2XP');
+    expect(mail.html).not.toMatch(/Google/);
     mockMailer({ ok: false, error: 'key' });
     await expect(sendEmail({ email: 'kaye@example.com' }, mail, { settings })).rejects.toThrow(/key doesn’t match/);
     mockMailer({ ok: false, error: 'quota', remaining: 0 });

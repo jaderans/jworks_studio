@@ -32,7 +32,8 @@ const STUDIO: Permission[] = ['dashboard', 'content', 'editCampaigns', 'clients'
 
 export const ROLE_PERMISSIONS: Record<AppRole, readonly Permission[]> = {
   owner: [...STUDIO, 'team', 'settings', 'import'],
-  manager: STUDIO,
+  // Managers are the studio's designers too: everything happening at the studio, plus their own pay.
+  manager: [...STUDIO, 'mypay'],
   designer: ['dashboard', 'content', 'assistant', 'jobs', 'mypay'],
 };
 

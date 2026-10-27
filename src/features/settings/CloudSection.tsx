@@ -158,8 +158,23 @@ export function CloudSection() {
             </div>
           ) : (
             <>
-              {sync.state === 'error' ? <Callout tone="bad">{sync.message}</Callout> : <p className="sub">{owner ? 'Sign in with the owner account. The first time, create it with the email you want the team to know you by.' : 'Sign in with the email the owner added for you.'}</p>}
-              <AuthForm defaultMode={owner ? 'signup' : 'signin'} />
+              {sync.state === 'error' ? <Callout tone="bad">{sync.message}</Callout> : <p className="sub">{owner ? 'Sign in with the owner account. The first time, create it with the email you want the team to know you by.' : 'Sign in with your email and password (new here: the temporary password from the owner’s message).'}</p>}
+              <AuthForm allowCreate={owner} />
+              {owner ? (
+                <p className="tiny muted">
+                  Set up the owner account with Google before?{' '}
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={async () => {
+                      const { signInWithGoogle } = await import('../../sync/cloud');
+                      await signInWithGoogle().catch((e) => app.toast(e instanceof Error ? e.message : 'Google sign-in didn’t work', { tone: 'bad' }));
+                    }}
+                  >
+                    Continue with Google
+                  </button>
+                </p>
+              ) : null}
             </>
           )}
           {owner ? (

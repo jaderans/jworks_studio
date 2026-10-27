@@ -16,6 +16,8 @@ await env.withSecurityRulesDisabled(async (ctx) => {
   await setDoc(doc(db, W), { ownerUid: 'u-owner' });
   const access = { 'owner@x.com': ['owner', 'm-owner'], 'mgr@x.com': ['manager', 'm-mgr'], 'des@x.com': ['designer', 'm-des'], 'other@x.com': ['designer', 'm-other'], 'off@x.com': ['designer', 'm-off'] };
   for (const [email, [role, memberId]] of Object.entries(access)) await setDoc(doc(db, `${W}/access/${email}`), { role, memberId, active: email !== 'off@x.com', email });
+  // A login the owner made in the app: tied to its uid, no email verification.
+  await setDoc(doc(db, `${W}/access/new@x.com`), { role: 'manager', memberId: 'm-new', active: true, email: 'new@x.com', uid: 'u-new', mustChangePassword: true });
   const rec = (extra = {}) => ({ updatedAt: 10, deleted: 0, ...extra });
   await setDoc(doc(db, `${W}/t_earnings/e-des`), rec({ memberId: 'm-des', amount: 100 }));
   await setDoc(doc(db, `${W}/t_earnings/e-other`), rec({ memberId: 'm-other', amount: 100 }));
@@ -33,6 +35,9 @@ const mgr = as('u-mgr', 'mgr@x.com');
 const des = as('u-des', 'des@x.com');
 const off = as('u-off', 'off@x.com');
 const unverified = as('u-des2', 'des@x.com', false);
+const madeLogin = as('u-new', 'new@x.com', false);
+const impostor = as('u-fake', 'new@x.com', false);
+const verifiedImpostor = as('u-fake2', 'new@x.com', true);
 const newer = { updatedAt: 20, deleted: 0 };
 
 let passed = 0;
@@ -89,6 +94,17 @@ await check('owner reads every payout account', assertSucceeds(getDoc(doc(owner,
 await check('paused designer reads nothing', assertFails(getDoc(doc(off, `${W}/t_jobs/x1`))));
 await check('paused designer cannot read own pay', assertFails(getDocs(query(collection(off, `${W}/t_earnings`), where('memberId', '==', 'm-off')))));
 await check('unverified email reads nothing', assertFails(getDoc(doc(unverified, `${W}/t_jobs/x1`))));
+
+// Logins made by the owner in the app: they work without email verification, and only for that login.
+await check('owner-made login reads without verification', assertSucceeds(getDoc(doc(madeLogin, `${W}/t_jobs/x1`))));
+await check('owner-made manager login reads money', assertSucceeds(getDoc(doc(madeLogin, `${W}/t_payments/x1`))));
+await check('same email, other login, reads nothing', assertFails(getDoc(doc(impostor, `${W}/t_jobs/x1`))));
+await check('same email verified elsewhere reads nothing', assertFails(getDoc(doc(verifiedImpostor, `${W}/t_jobs/x1`))));
+await check('they cannot change their own role', assertFails(updateDoc(doc(madeLogin, `${W}/access/new@x.com`), { role: 'owner' })));
+await check('an impostor cannot clear the temporary password flag', assertFails(updateDoc(doc(impostor, `${W}/access/new@x.com`), { mustChangePassword: false, passwordSetAt: 1 })));
+await check('they clear their temporary password flag', assertSucceeds(updateDoc(doc(madeLogin, `${W}/access/new@x.com`), { mustChangePassword: false, passwordSetAt: 1 })));
+await check('a manager cannot create logins', assertFails(setDoc(doc(mgr, `${W}/access/x@x.com`), { role: 'owner', active: true })));
+await check('the owner creates logins', assertSucceeds(setDoc(doc(owner, `${W}/access/x@x.com`), { role: 'manager', active: true, uid: 'u-x' })));
 await check('nothing is hard-deleted', assertFails((await import('firebase/firestore')).deleteDoc(doc(owner, `${W}/t_jobs/x1`))));
 
 // Client links: anyone with the link reads it; an anonymous client sends their answers or signature once.

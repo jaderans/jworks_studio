@@ -135,16 +135,20 @@ const build = (b: BusinessSettings, subject: string, l: Layout): EmailContent =>
 
 // ----- the emails -----
 
-export function inviteEmail(b: BusinessSettings, o: { name: string; email: string; link: string; role: string; from: string }): EmailContent {
-  return build(b, `${o.from} invited you to JoshWorks Studio: approve your account`, {
-    preheader: 'Approve your JoshWorks Studio account: jobs, deadlines and your pay in one place.',
-    heading: `Hi ${o.name}, please approve your JoshWorks Studio account`,
+/** A new team member's login: the app link, their email and the temporary password the owner made. */
+export function inviteEmail(b: BusinessSettings, o: { name: string; email: string; link: string; role: string; from: string; password?: string }): EmailContent {
+  return build(b, `Your JoshWorks Studio account is ready`, {
+    preheader: 'Your login for JoshWorks Studio: jobs, clients, documents and your pay in one place.',
+    heading: `Hi ${o.name}, your JoshWorks Studio account is ready`,
     paragraphs: [
-      `${esc(o.from)} added you to the JoshWorks team as <strong>${esc(o.role)}</strong>. The app keeps our jobs, deadlines, content calendar and your payouts in one place, on your phone or laptop.`,
-      `To approve your account, open the link below and sign in with Google, or with this email: <strong>${esc(o.email)}</strong>. Your account is ready as soon as you sign in.`,
+      `${esc(o.from)} added you to the JoshWorks team as <strong>${esc(o.role)}</strong>. The app keeps our jobs, clients, documents, money and content calendar in one place, on your phone or laptop.`,
+      o.password
+        ? 'Open the link below and sign in with your email and the temporary password. Right after, you choose your own password and get a short guide to the app.'
+        : 'Open the link below and sign in with your email and password.',
     ],
-    button: { label: 'Approve and join', url: o.link },
-    note: 'Tip: on your phone, add it to your home screen (Share → Add to Home Screen) so it opens like an app.',
+    rows: [['Email', o.email], ...(o.password ? ([['Temporary password', o.password]] as [string, string][]) : [])],
+    button: { label: 'Open JoshWorks Studio', url: o.link },
+    note: 'Keep this password private; it stops working once you choose your own. On your phone, add the app to your home screen (Share → Add to Home Screen) so it opens like an app.',
     signoff: `See you inside,<br><strong>${esc(o.from)}</strong>`,
   });
 }
@@ -285,7 +289,7 @@ export function sampleEmail(kind: SampleKind, b: BusinessSettings, methods: Stud
   ];
   switch (kind) {
     case 'invite':
-      return inviteEmail(b, { name: 'Kaye', email: 'kaye@example.com', link: `${appBase()}#/join`, role: 'Designer', from: b.signatory?.split(',')[0] || 'Joshua' });
+      return inviteEmail(b, { name: 'Kaye', email: 'kaye@example.com', link: `${appBase()}#/join`, role: 'Manager', from: b.signatory?.split(',')[0] || 'Joshua', password: 'JW-K7QF-M2XP' });
     case 'contract':
       return contractEmail(b, { clientName: 'Kape Ilonggo', number: 'C-2026-001', title: 'Branding & Visual Identity Agreement', total: 437500, down: 218750, signUrl: `${appBase()}#/c` }, methods);
     case 'invoice':

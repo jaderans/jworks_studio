@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { Link2, Mail, Pencil, Plus, Trash2, UserPlus } from 'lucide-react';
+import { KeyRound, Pencil, Plus, Send, Trash2, UserPlus } from 'lucide-react';
 import { useApp } from '../../app/AppContext';
 import { Badge, Button, Callout, IconButton, Loading, PageHeader, Segmented, Toggle } from '../../components/ui';
 import { Field, Select, TextArea, TextInput } from '../../components/form';
@@ -11,11 +11,9 @@ import { useJobs, useMembers } from '../../hooks/data';
 import { useSyncStatus } from '../../sync/useSync';
 import { ROLE_HINT, ROLE_LABEL, deleteMember, saveMember, setMemberActive, skillsFromRole } from '../../services/team';
 import { SERVICE_LABEL } from '../../domain/campaignTemplates';
-import { getSetting } from '../../db/settings';
+import { getLocal, setLocal } from '../../db/local';
 import { isOpen } from '../../domain/jobs';
-import { emailReady, sendEmail } from '../../email/send';
-import { inviteEmail } from '../../email/templates';
-import { copyText } from '../../lib/text';
+import { LoginDialog, type LoginToSend } from './LoginDialog';
 import type { AccessRow } from '../../sync/cloud';
 import type { AppRole, Member, ServiceKey } from '../../db/types';
 
@@ -44,35 +42,45 @@ export default function TeamPage() {
     void loadAccess();
   }, [loadAccess, members]);
 
-  /** Invite by branded email when Settings → Email is set up; otherwise (or with `share`) share or copy the link. */
-  const invite = async (m: Member, share = false) => {
-    const { getCloudConfig } = await import('../../sync/cloud');
-    const { inviteLink } = await import('../../sync/config');
-    const cfg = await getCloudConfig();
-    if (!cfg) return;
-    const link = inviteLink(cfg, m.email, m.name);
-    const emailSettings = await getSetting('email');
-    if (!share && emailReady(emailSettings)) {
-      try {
-        const business = await getSetting('business');
-        const from = app.member?.name || business.name || 'JoshWorks';
-        await sendEmail({ email: m.email, name: m.name }, inviteEmail(business, { name: m.name, email: m.email, link, role: ROLE_LABEL[m.appRole], from }), { settings: emailSettings, what: `team invite for ${m.name}` });
-        app.toast(`Invite emailed to ${m.email}`, { tone: 'good' });
-      } catch (e) {
-        app.toast(`${e instanceof Error ? e.message : 'The email didn’t send.'} You can share the link instead.`, { tone: 'bad', action: { label: 'Share link', onClick: () => void invite(m, true) } });
-      }
-      return;
-    }
-    const text = `Hi ${m.name}! Join JoshWorks Studio: open this link on your phone and sign in with Google or ${m.email}.\n${link}`;
+  const [login, setLogin] = useState<LoginToSend | null>(null);
+
+  /** Make their login (email + temporary password) and show it to send. */
+  const makeLogin = async (m: Member) => {
     try {
-      if (navigator.share) {
-        await navigator.share({ title: 'JoshWorks Studio invite', text });
-        return;
+      const { createTeamLogin } = await import('../../sync/cloud');
+      const r = await createTeamLogin(m);
+      await loadAccess();
+      if (r.created) {
+        await setLocal(`login:${r.email}`, { password: r.password, at: Date.now() });
+        setLogin({ member: m, email: r.email, password: r.password });
+      } else {
+        app.toast(`${r.email} already had a login, so it keeps its own password. If they forgot it, they tap “Forgot password?” on the sign-in screen.`, { tone: 'info', ms: 12_000 });
       }
-    } catch {
-      /* cancelled; fall back to copy */
+    } catch (e) {
+      const { friendlyError } = await import('../../sync/cloud');
+      app.toast(friendlyError(e), { tone: 'bad' });
     }
-    app.toast((await copyText(text)) ? 'Invite copied. Paste it in Messenger or Viber.' : 'Couldn’t copy the invite.', { tone: 'good' });
+  };
+
+  /** Show a login made on this device again (until they choose their own password). */
+  const sendLogin = async (m: Member) => {
+    const email = m.email.trim().toLowerCase();
+    const saved = await getLocal<{ password: string } | null>(`login:${email}`, null);
+    if (saved) setLogin({ member: m, email, password: saved.password });
+    else app.toast('Their temporary password was made on another device. Send it from there, or ask them to tap “Forgot password?” on the sign-in screen.', { tone: 'info', ms: 10_000 });
+  };
+
+  const stillDesigners = (members ?? []).filter((m) => m.active === 1 && m.appRole === 'designer');
+  const makeManagers = async () => {
+    for (const m of stillDesigners) {
+      const saved = await saveMember({ ...m, appRole: 'manager' });
+      if (cloudOwner && saved.email) {
+        const { grantAccess } = await import('../../sync/cloud');
+        await grantAccess(saved).catch(() => undefined);
+      }
+    }
+    await loadAccess();
+    app.toast(`${stillDesigners.length} ${stillDesigners.length === 1 ? 'person is' : 'people are'} now Managers`, { tone: 'good' });
   };
 
   if (!members) return <Loading />;
@@ -87,17 +95,29 @@ export default function TeamPage() {
         title="Team"
         subtitle="Everyone at the studio. Their colour follows them on jobs, the calendar and payouts."
         actions={
-          <Button variant="primary" onClick={() => setEditing({ appRole: 'designer', skills: [] })}>
+          <Button variant="primary" onClick={() => setEditing({ appRole: 'manager', skills: [] })}>
             <UserPlus size={18} /> Add person
           </Button>
         }
       />
       {!sync.enabled ? (
         <Callout tone="info" title="Connect the team’s phones">
-          Turn on cloud sync in <Link to="/settings#s-sync">Settings → Cloud sync</Link> (your own free Firebase project). Then add each person’s sign-in email here and invite them. Their jobs, posts and pay sync live.
+          Turn on cloud sync in <Link to="/settings#s-sync">Settings → Cloud sync</Link>. Then add each person here with their name and email: the app makes their login with a temporary password for you to send. No email confirmation or Google account needed.
         </Callout>
       ) : !cloudOwner ? (
-        <Callout tone="warn">Sign in as the owner (Settings → Cloud sync) to send invites.</Callout>
+        <Callout tone="warn">Sign in as the owner (Settings → Cloud sync) to make logins.</Callout>
+      ) : (
+        <p className="small muted">Add a person with their name and email, and the app makes their login with a temporary password to send them. They sign in, choose their own password, and get a short guide to the app.</p>
+      )}
+      {stillDesigners.length && app.role === 'owner' ? (
+        <Callout tone="info" title={`${stillDesigners.length} ${stillDesigners.length === 1 ? 'person is' : 'people are'} still Designer`}>
+          <div className="row wrap between">
+            <span>Designers don’t see money, quotes or contracts. Make them Managers so they see everything happening at the studio (only you change the team and settings).</span>
+            <Button variant="teal" size="sm" onClick={makeManagers}>
+              Make them Managers
+            </Button>
+          </div>
+        </Callout>
       ) : null}
       <FilterBar
         id="team"
@@ -141,21 +161,26 @@ export default function TeamPage() {
                 {cloudOwner ? (
                   !m.email ? (
                     <span className="muted small hide-phone">No email</span>
-                  ) : acc ? (
-                    <Badge tone={acc.active ? 'good' : undefined}>{acc.active ? 'Can sign in' : 'Paused'}</Badge>
+                  ) : !acc ? (
+                    <Badge tone="warn">No login yet</Badge>
+                  ) : !acc.active ? (
+                    <Badge>Paused</Badge>
+                  ) : acc.mustChangePassword ? (
+                    <Badge tone="yellow">Temporary password</Badge>
                   ) : (
-                    <Badge tone="warn">Not invited</Badge>
+                    <Badge tone="good">{acc.hasLogin || m.appRole === 'owner' ? 'Signed in' : 'Can sign in'}</Badge>
                   )
                 ) : null}
                 {cloudOwner && m.email && m.appRole !== 'owner' ? (
-                  <>
-                    <Button size="sm" onClick={() => invite(m)} aria-label={`Invite ${m.name}`}>
-                      <Mail size={15} /> <span className="hide-phone">Invite</span>
+                  !acc || (!acc.hasLogin && !acc.mustChangePassword) ? (
+                    <Button size="sm" onClick={() => makeLogin(m)} aria-label={`Make ${m.name}’s login`}>
+                      <KeyRound size={15} /> <span className="hide-phone">Make login</span>
                     </Button>
-                    <IconButton label={`Share ${m.name}’s invite link`} size="sm" plain onClick={() => invite(m, true)}>
-                      <Link2 size={16} />
-                    </IconButton>
-                  </>
+                  ) : acc.mustChangePassword ? (
+                    <Button size="sm" onClick={() => sendLogin(m)} aria-label={`Send ${m.name}’s login`}>
+                      <Send size={15} /> <span className="hide-phone">Send login</span>
+                    </Button>
+                  ) : null
                 ) : null}
                 <IconButton label={`Edit ${m.name}`} size="sm" plain onClick={() => setEditing(m)}>
                   <Pencil size={16} />
@@ -178,16 +203,16 @@ export default function TeamPage() {
             const { grantAccess, revokeAccess } = await import('../../sync/cloud');
             // Access follows the email: the old address stops working, the new one can sign in.
             if (moved) await revokeAccess(oldEmail).catch(() => undefined);
-            if (saved.email) await grantAccess(saved);
+            if (saved.email && !(saved.appRole !== 'owner' && (moved || !oldEmail))) await grantAccess(saved);
             await loadAccess();
-            const canInvite = !!saved.email && saved.appRole !== 'owner';
-            if (moved && saved.email) app.toast(`${saved.name} now signs in with ${saved.email}. ${oldEmail} no longer has access.`, { tone: 'good', action: canInvite ? { label: 'Invite', onClick: () => void invite(saved) } : undefined });
-            else if (!oldEmail && canInvite) app.toast(`${saved.name} can sign in with ${saved.email}.`, { tone: 'good', action: { label: 'Send invite', onClick: () => void invite(saved) } });
+            // A new email gets its login (with a temporary password) right away.
+            if (saved.email && saved.appRole !== 'owner' && (moved || !oldEmail)) await makeLogin(saved);
           } catch (e) {
             app.toast(e instanceof Error ? e.message : 'Could not update their access', { tone: 'bad' });
           }
         }}
       />
+      <LoginDialog value={login} onClose={() => setLogin(null)} />
     </div>
   );
 }
@@ -277,18 +302,18 @@ function MemberDialog({ value, onClose, onSaved }: { value: Partial<Member> | nu
             onChange={(e) => setM({ ...m, roleLabel: e.target.value, skills: (m.skills ?? []).length ? m.skills : skillsFromRole(e.target.value) })}
           />
         </Field>
-        <Field label="Sign-in email" htmlFor="tm-email" className="span-2" hint="Their Google account, or any email they’ll sign in with. If you change it, their access moves to the new address.">
+        <Field label="Sign-in email" htmlFor="tm-email" className="span-2" hint="Any working email. Saving makes their login with a temporary password for you to send. If you change it, their access moves to the new address.">
           <TextInput id="tm-email" type="email" autoComplete="off" placeholder="name@gmail.com" value={m.email ?? ''} onChange={(e) => setM({ ...m, email: e.target.value.trim() })} />
         </Field>
       </div>
       <Field label="Access">
         <Segmented<AppRole>
           label="Access"
-          value={m.appRole ?? 'designer'}
+          value={m.appRole ?? 'manager'}
           onChange={(v) => setM({ ...m, appRole: v })}
-          options={(['designer', 'manager', 'owner'] as AppRole[]).map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
+          options={(['manager', 'designer', 'owner'] as AppRole[]).map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
         />
-        <span className="hint">{ROLE_HINT[m.appRole ?? 'designer']}</span>
+        <span className="hint">{ROLE_HINT[m.appRole ?? 'manager']}</span>
       </Field>
       <Field label="Leads on">
         <div className="chip-row">

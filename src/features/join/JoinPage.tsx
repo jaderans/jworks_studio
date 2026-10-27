@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router';
 import logo from '../../assets/brand/logo-128.png';
 import { Button, Callout, Loading } from '../../components/ui';
 import { AuthForm } from '../../sync/AuthForm';
+import { ChoosePassword } from '../../sync/ChoosePassword';
 import { readInvite } from '../../sync/config';
 import { useSyncStatus } from '../../sync/useSync';
 import { getLocal } from '../../db/local';
@@ -50,10 +51,17 @@ export function JoinPage({ onJoined }: { onJoined: () => void }) {
           <Callout tone="bad">{error}</Callout>
         ) : !ready ? (
           <Loading label="Connecting…" />
+        ) : sync.access?.mustChangePassword ? (
+          <div className="card pad-lg stack">
+            <Callout tone="good" title={`Welcome${invite.n ? `, ${invite.n}` : ''}! You’re in as ${ROLE_LABEL[sync.access.role]}`}>
+              One last step: choose your own password.
+            </Callout>
+            <ChoosePassword />
+          </div>
         ) : sync.access ? (
           <div className="card pad-lg stack">
             <Callout tone="good" title={`You’re in as ${ROLE_LABEL[sync.access.role]}`}>
-              Signed in as {sync.userEmail}. The calendar, ideas and your tasks are downloading now.
+              Signed in as {sync.userEmail}. Jobs, clients and the calendar are downloading now.
             </Callout>
             <div>
               <Button
@@ -71,10 +79,10 @@ export function JoinPage({ onJoined }: { onJoined: () => void }) {
         ) : (
           <div className="card pad-lg stack">
             <p className="muted">
-              {invite.n ? `Hi ${invite.n}! ` : ''}Sign in with the email the owner added{invite.e ? ` (${invite.e})` : ''}. New here? Choose Create account and use that same email.
+              {invite.n ? `Hi ${invite.n}! ` : ''}Sign in with your email{invite.e ? ` (${invite.e})` : ''} and the temporary password from the owner’s message. No email confirmation needed.
             </p>
             {sync.state === 'error' ? <Callout tone="warn">{sync.message}</Callout> : null}
-            <AuthForm defaultEmail={invite.e ?? ''} defaultMode="signup" />
+            <AuthForm defaultEmail={invite.e ?? ''} />
           </div>
         )}
       </div>

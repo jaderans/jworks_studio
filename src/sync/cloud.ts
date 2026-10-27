@@ -1,7 +1,7 @@
 import { deleteApp, initializeApp, type FirebaseApp } from 'firebase/app';
 import {
-  GoogleAuthProvider, browserLocalPersistence, browserPopupRedirectResolver, connectAuthEmulator, createUserWithEmailAndPassword, indexedDBLocalPersistence,
-  initializeAuth, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, signOut,
+  GoogleAuthProvider, browserLocalPersistence, browserPopupRedirectResolver, connectAuthEmulator, createUserWithEmailAndPassword, inMemoryPersistence, indexedDBLocalPersistence,
+  initializeAuth, onAuthStateChanged, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, signOut, updatePassword,
   type ActionCodeSettings, type Auth, type User,
 } from 'firebase/auth';
 import {
@@ -140,7 +140,7 @@ export async function disconnectCloud(): Promise<void> {
   cfg = null;
   await setLocal('cloudConfig', null);
   await setLocal('lastPull', {});
-  setSyncStatus({ enabled: false, state: 'idle', message: 'Cloud sync is not set up.', access: null, userEmail: null, needsVerification: false, ws: null });
+  setSyncStatus({ enabled: false, state: 'idle', message: 'Cloud sync is not set up.', access: null, userEmail: null, ws: null });
 }
 
 const need = () => {
@@ -162,10 +162,10 @@ async function withContinue(send: (s?: ActionCodeSettings) => Promise<void>): Pr
   }
 }
 
+/** The owner's own account, made once when setting up the studio's cloud. No email confirmation. */
 export async function signUpCloud(email: string, password: string): Promise<void> {
   const { auth } = need();
-  const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-  await withContinue((s) => sendEmailVerification(cred.user, s)).catch(() => undefined);
+  await createUserWithEmailAndPassword(auth, email.trim(), password);
 }
 
 export async function signInCloud(email: string, password: string): Promise<void> {
@@ -188,23 +188,6 @@ export async function signInWithGoogle(loginHint?: string): Promise<void> {
   }
 }
 
-export async function resendVerification(): Promise<void> {
-  const { auth } = need();
-  const u = auth.currentUser;
-  if (u) await withContinue((s) => sendEmailVerification(u, s));
-}
-
-/** After clicking the email link: refresh the account so the app sees it's verified. */
-export async function checkVerified(): Promise<boolean> {
-  const { auth } = need();
-  const u = auth.currentUser;
-  if (!u) return false;
-  await u.reload();
-  await u.getIdToken(true);
-  if (u.emailVerified) await onUser(u);
-  return u.emailVerified;
-}
-
 export async function resetPassword(email: string): Promise<void> {
   const { auth } = need();
   await withContinue((s) => sendPasswordResetEmail(auth, email.trim(), s));
@@ -220,7 +203,8 @@ export function friendlyError(e: unknown): string {
   const map: Record<string, string> = {
     'auth/invalid-credential': 'That email and password don’t match.',
     'auth/wrong-password': 'That password is not right.',
-    'auth/user-not-found': 'No account with that email yet. Create one instead.',
+    'auth/user-not-found': 'No login with that email yet. Ask the owner to add you in Team.',
+    'auth/requires-recent-login': 'For your safety, sign out and sign in again, then choose your password.',
     'auth/email-already-in-use': 'That email already has an account. Sign in instead.',
     'auth/weak-password': 'Use a password of at least 6 characters.',
     'auth/invalid-email': 'That email address doesn’t look right.',
@@ -254,7 +238,9 @@ async function resolveAccess(user: User): Promise<CloudAccess | null> {
   const acc = await getDoc(accRef).catch((e) => (isDenied(e) ? null : Promise.reject(e)));
   if (acc?.exists()) {
     const d = acc.data();
-    return { role: d.role as AppRole, memberId: (d.memberId as string) ?? null, active: d.active !== false };
+    // The owner made this email's login in the app: only that login gets in.
+    if (d.uid && d.uid !== user.uid) throw new Error(`${email} signs in with the login the owner made. Use the temporary password from the owner’s message, or ask them to send it again.`);
+    return { role: d.role as AppRole, memberId: (d.memberId as string) ?? null, active: d.active !== false, mustChangePassword: d.mustChangePassword === true };
   }
   const wsRef = doc(fs, 'camp', cfg.ws);
   const ws = await getDoc(wsRef).catch((e) => (isDenied(e) ? null : Promise.reject(e)));
@@ -280,21 +266,10 @@ async function onUser(user: User | null) {
   stopListeners();
   access = null;
   if (!user) {
-    setSyncStatus({ enabled: true, state: 'signed-out', message: 'Sign in to sync with the team.', userEmail: null, needsVerification: false, access: null });
+    setSyncStatus({ enabled: true, state: 'signed-out', message: 'Sign in to sync with the team.', userEmail: null, access: null });
     return;
   }
-  if (!user.emailVerified) {
-    setSyncStatus({
-      enabled: true,
-      state: 'signed-out',
-      message: `Open the verification link sent to ${user.email}, then tap “I’ve verified”.`,
-      userEmail: user.email,
-      needsVerification: true,
-      access: null,
-    });
-    return;
-  }
-  setSyncStatus({ enabled: true, state: 'syncing', message: 'Connecting to the team…', userEmail: user.email, needsVerification: false });
+  setSyncStatus({ enabled: true, state: 'syncing', message: 'Connecting to the team…', userEmail: user.email });
   let a: CloudAccess | null;
   try {
     a = await resolveAccess(user);
@@ -597,20 +572,87 @@ export interface AccessRow {
   role: AppRole;
   memberId: string | null;
   active: boolean;
+  /** Made in the app (email + temporary password). */
+  hasLogin: boolean;
+  /** Still on the temporary password. */
+  mustChangePassword: boolean;
 }
 
 export async function listAccess(): Promise<AccessRow[]> {
   const { fs, cfg } = need();
   const snap = await getDocs(collection(fs, 'camp', cfg.ws, 'access'));
-  return snap.docs.map((d) => ({ email: d.id, role: d.data().role as AppRole, memberId: (d.data().memberId as string) ?? null, active: d.data().active !== false }));
+  return snap.docs.map((d) => ({
+    email: d.id,
+    role: d.data().role as AppRole,
+    memberId: (d.data().memberId as string) ?? null,
+    active: d.data().active !== false,
+    hasLogin: !!d.data().uid,
+    mustChangePassword: d.data().mustChangePassword === true,
+  }));
 }
 
-/** Give a team member cloud access with their role (or update it). */
-export async function grantAccess(m: Member): Promise<void> {
+/** Give a team member cloud access with their role (or update it). Keeps their login (uid) and password state. */
+export async function grantAccess(m: Member, extra: { uid?: string; mustChangePassword?: boolean } = {}): Promise<void> {
   const { fs, cfg } = need();
   const email = m.email.trim().toLowerCase();
   if (!email) throw new Error(`Add ${m.name}'s email first.`);
-  await setDoc(doc(fs, 'camp', cfg.ws, 'access', email), { role: m.appRole, memberId: m.id, active: m.active === 1, name: m.name, email, updatedAt: Date.now() });
+  await setDoc(doc(fs, 'camp', cfg.ws, 'access', email), { role: m.appRole, memberId: m.id, active: m.active === 1, name: m.name, email, updatedAt: Date.now(), ...extra }, { merge: true });
+}
+
+/** "JW-K7QF-M2XP": easy to read out or type, no 0/O or 1/I/L mix-ups. */
+export function temporaryPassword(): string {
+  const abc = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const pick = (n: number) => Array.from(crypto.getRandomValues(new Uint8Array(n)), (b) => abc[b % abc.length]).join('');
+  return `JW-${pick(4)}-${pick(4)}`;
+}
+
+export interface NewLogin {
+  email: string;
+  password: string;
+  /** False when the email already had a login: it keeps its own password. */
+  created: boolean;
+}
+
+/**
+ * Make a team member's login (email + temporary password) and give it access,
+ * without signing the owner out: the login is made through a separate,
+ * throwaway connection. No email verification is needed: access is tied to
+ * this login.
+ */
+export async function createTeamLogin(m: Member): Promise<NewLogin> {
+  const { cfg } = need();
+  const email = m.email.trim().toLowerCase();
+  if (!email) throw new Error(`Add ${m.name}'s email first.`);
+  const password = temporaryPassword();
+  const { emulator, ...options } = cfg.firebase;
+  const tmp = initializeApp(options, `jw-login-${Date.now()}`);
+  try {
+    const tmpAuth = initializeAuth(tmp, { persistence: inMemoryPersistence });
+    if (emulator) connectAuthEmulator(tmpAuth, `http://${emulator.host}:${emulator.authPort}`, { disableWarnings: true });
+    try {
+      const cred = await createUserWithEmailAndPassword(tmpAuth, email, password);
+      await grantAccess(m, { uid: cred.user.uid, mustChangePassword: true });
+      await signOut(tmpAuth).catch(() => undefined);
+      return { email, password, created: true };
+    } catch (e) {
+      if ((e as { code?: string })?.code !== 'auth/email-already-in-use') throw e;
+      await grantAccess(m);
+      return { email, password: '', created: false };
+    }
+  } finally {
+    await deleteApp(tmp).catch(() => undefined);
+  }
+}
+
+/** Replace the temporary password with one of their own (first sign-in). */
+export async function changeOwnPassword(newPassword: string): Promise<void> {
+  const { auth, fs, cfg } = need();
+  const u = auth.currentUser;
+  if (!u?.email) throw new Error('Sign in first.');
+  await updatePassword(u, newPassword);
+  await setDoc(doc(fs, 'camp', cfg.ws, 'access', u.email.toLowerCase()), { mustChangePassword: false, passwordSetAt: Date.now() }, { merge: true });
+  if (access) access = { ...access, mustChangePassword: false };
+  setSyncStatus({ access });
 }
 
 export async function revokeAccess(email: string): Promise<void> {

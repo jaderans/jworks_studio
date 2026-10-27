@@ -12,7 +12,7 @@ export const ROLE_LABEL: Record<AppRole, string> = {
 
 export const ROLE_HINT: Record<AppRole, string> = {
   owner: 'Everything: jobs, clients, money, documents, marketing, team and settings.',
-  manager: 'Runs jobs, clients and money: quotes, contracts, invoices, payouts and reports. No team or settings changes.',
+  manager: 'Sees and runs everything happening at the studio: jobs, clients, documents, money and marketing, plus their own pay. Only the owner changes the team and settings.',
   designer: 'Their jobs and deadlines, the content calendar and board, and their own pay. No prices, invoices or contracts.',
 };
 

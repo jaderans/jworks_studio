@@ -5,6 +5,8 @@ export interface CloudAccess {
   role: AppRole;
   memberId: string | null;
   active: boolean;
+  /** Still on the temporary password the owner made: choose a new one first. */
+  mustChangePassword?: boolean;
 }
 
 /** Cloud sync status, shared by the sync engine and the UI. */
@@ -14,7 +16,6 @@ export interface SyncStatus {
   message: string;
   lastSyncAt: number | null;
   userEmail: string | null;
-  needsVerification: boolean;
   access: CloudAccess | null;
   ws: string | null;
   /** Changes the cloud refused (usually: the security rules need republishing). They stay on the device and are retried. */
@@ -29,7 +30,6 @@ let status: SyncStatus = {
   message: 'Cloud sync is not set up.',
   lastSyncAt: null,
   userEmail: null,
-  needsVerification: false,
   access: null,
   ws: null,
   refused: 0,
