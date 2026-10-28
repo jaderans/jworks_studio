@@ -156,7 +156,7 @@ const VIEWPORTS = [
   { name: 'laptop', width: 1280, height: 800 },
   { name: 'desktop', width: 1440, height: 900 },
 ];
-const ROUTES = ['/', '/jobs', '/jobs/list', '/jobs/deadlines', '/jobs/workload', '/clients', '/money/invoices', '/money/payments', '/money/payouts', '/money/expenses', '/money/reports', '/money/bir', '/docs/quotes', '/docs/contracts', '/docs/prices', '/docs/templates', '/docs/rates', '/calendar', '/board', '/team', '/settings'];
+const ROUTES = ['/', '/jobs', '/jobs/list', '/jobs/deadlines', '/jobs/workload', '/clients', '/money/invoices', '/money/payments', '/money/payouts', '/money/expenses', '/money/pos', '/money/reports', '/money/bir', '/docs/quotes', '/docs/contracts', '/docs/prices', '/docs/templates', '/docs/rates', '/calendar', '/board', '/team', '/settings'];
 
 test('every screen fits phones, tablets and desktops', async ({ page }) => {
   await page.clock.install({ time: new Date('2026-10-21T10:00:00+08:00') });

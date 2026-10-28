@@ -213,3 +213,6 @@ body[data-dialog-open='true'] .toast:not(:last-child) { display: none; }
 .welcome-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
 .welcome-part { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: 12px; background: var(--sunk); }
 .welcome-part > div { display: grid; gap: 2px; }
+
+/* Money → Booth events: amount lines in the import dialog */
+.pos-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 0.92rem; }

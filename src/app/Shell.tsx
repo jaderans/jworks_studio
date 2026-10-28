@@ -74,6 +74,7 @@ export const SECTIONS: Section[] = [
       { to: '/money/payments', label: 'Payments' },
       { to: '/money/payouts', label: 'Payouts' },
       { to: '/money/expenses', label: 'Expenses' },
+      { to: '/money/pos', label: 'Booth events' },
       { to: '/money/reports', label: 'Reports' },
       { to: '/money/bir', label: 'BIR' },
     ],

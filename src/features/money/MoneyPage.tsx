@@ -18,6 +18,7 @@ import { PaymentDialog } from './PaymentDialog';
 import { emailInvoice, emailReceipt, shareReceipt } from './share';
 import { PayoutsTab } from './PayoutsTab';
 import { BirTab, ReportsTab } from './ReportsTab';
+import { BoothEventsTab } from './BoothEventsTab';
 import type { Expense } from '../../db/types';
 
 export default function MoneyPage() {
@@ -29,6 +30,7 @@ export default function MoneyPage() {
         <Route path="payments" element={<Payments />} />
         <Route path="payouts" element={<PayoutsTab />} />
         <Route path="expenses" element={<Expenses />} />
+        <Route path="pos" element={<BoothEventsTab />} />
         <Route path="reports" element={<ReportsTab />} />
         <Route path="bir" element={<BirTab />} />
       </Routes>
