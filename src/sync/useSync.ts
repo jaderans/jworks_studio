@@ -7,6 +7,8 @@ export interface CloudAccess {
   active: boolean;
   /** Still on the temporary password the owner made: choose a new one first. */
   mustChangePassword?: boolean;
+  /** Their own email (a renewed login signs in with a +jw tagged copy of it). */
+  email?: string;
 }
 
 /** Cloud sync status, shared by the sync engine and the UI. */

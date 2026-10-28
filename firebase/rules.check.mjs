@@ -105,6 +105,22 @@ await check('an impostor cannot clear the temporary password flag', assertFails(
 await check('they clear their temporary password flag', assertSucceeds(updateDoc(doc(madeLogin, `${W}/access/new@x.com`), { mustChangePassword: false, passwordSetAt: 1 })));
 await check('a manager cannot create logins', assertFails(setDoc(doc(mgr, `${W}/access/x@x.com`), { role: 'owner', active: true })));
 await check('the owner creates logins', assertSucceeds(setDoc(doc(owner, `${W}/access/x@x.com`), { role: 'manager', active: true, uid: 'u-x' })));
+
+// Renewed logins: a fresh account on a tagged email, found through camp/{ws}/signin/{email} before signing in.
+const signedOut = env.unauthenticatedContext().firestore();
+const renewed = as('u-renewed', 'new+jwab2cd@x.com', false);
+await check('the owner points an email at its renewed login', assertSucceeds(setDoc(doc(owner, `${W}/signin/new@x.com`), { login: 'new+jwab2cd@x.com', updatedAt: 1 })));
+await check('the owner keys the renewed access by that login', assertSucceeds(setDoc(doc(owner, `${W}/access/new+jwab2cd@x.com`), { role: 'manager', memberId: 'm-new', active: true, email: 'new@x.com', uid: 'u-renewed', mustChangePassword: true })));
+await check('the owner lists the team’s access by person', assertSucceeds(getDocs(query(collection(owner, `${W}/access`), where('memberId', '==', 'm-new')))));
+await check('the owner retires the old login', assertSucceeds((await import('firebase/firestore')).deleteDoc(doc(owner, `${W}/access/new@x.com`))));
+await check('anyone reads where one email signs in', assertSucceeds(getDoc(doc(signedOut, `${W}/signin/new@x.com`))));
+await check('nobody lists the sign-in pointers', assertFails(getDocs(collection(signedOut, `${W}/signin`))));
+await check('a manager cannot list the sign-in pointers', assertFails(getDocs(collection(mgr, `${W}/signin`))));
+await check('a manager cannot point an email elsewhere', assertFails(setDoc(doc(mgr, `${W}/signin/new@x.com`), { login: 'evil@x.com', updatedAt: 2 })));
+await check('a stranger cannot point an email elsewhere', assertFails(setDoc(doc(signedOut, `${W}/signin/des@x.com`), { login: 'evil@x.com', updatedAt: 2 })));
+await check('the old login reads nothing after renewal', assertFails(getDoc(doc(madeLogin, `${W}/t_jobs/x1`))));
+await check('the renewed login reads without verification', assertSucceeds(getDoc(doc(renewed, `${W}/t_payments/x1`))));
+await check('the renewed login clears its temporary password flag', assertSucceeds(updateDoc(doc(renewed, `${W}/access/new+jwab2cd@x.com`), { mustChangePassword: false, passwordSetAt: 2 })));
 await check('nothing is hard-deleted', assertFails((await import('firebase/firestore')).deleteDoc(doc(owner, `${W}/t_jobs/x1`))));
 
 // Client links: anyone with the link reads it; an anonymous client sends their answers or signature once.

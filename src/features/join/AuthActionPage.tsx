@@ -25,7 +25,7 @@ async function actionAuth(apiKey: string): Promise<Auth> {
 
 const linkError = (e: unknown): string => {
   const code = (e as { code?: string })?.code ?? '';
-  if (code === 'auth/expired-action-code') return 'This link has expired. Ask for a new one from the app (Send the link again, or Forgot password).';
+  if (code === 'auth/expired-action-code') return 'This link has expired. Ask the owner for a new temporary password instead.';
   if (code === 'auth/invalid-action-code') return 'This link was already used or isn’t complete. If your email is already confirmed, just open the app.';
   if (code === 'auth/user-disabled') return 'This account has been turned off. Ask the studio owner.';
   if (code === 'auth/weak-password') return 'Use a password of at least 6 characters.';

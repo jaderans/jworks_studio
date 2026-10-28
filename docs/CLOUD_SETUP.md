@@ -17,19 +17,11 @@ The `firebaseConfig` values aren't secret: they only say which project to talk t
 
 > **Already set up?** After updating to JoshWorks Studio, publish the rules again (step 4). The new rules add jobs, payments, invoices and designer pay; until they're published, those don't sync.
 >
-> **October 2026 updates:** publish the rules once more. They add **team logins made by the owner** (email + temporary password, no email confirmation) and **client links** (Documents → Contracts → Client link). They let a client open one contract with its link, answer the questionnaire and sign, and nothing else: no account, no other records, and only once before the link expires.
+> **October 2026 updates:** publish the rules once more. They add **team logins made by the owner** (email + temporary password, no email confirmation), **new passwords from the Team page** (the sign-in pointers in `signin`) and **client links** (Documents → Contracts → Client link). Client links let a client open one contract, answer the questionnaire and sign, and nothing else: no account, no other records, and only once before the link expires.
 
-## 2. Make Firebase's password-reset email look like JoshWorks
+## 2. No Firebase emails
 
-Nobody confirms their email any more: the owner makes each login in the app. Firebase only sends an email when someone taps **Forgot password?**. By default they come from "noreply@your-project.firebaseapp.com" with the project's code name, which looks like spam. Fix it once:
-
-1. **Project settings → General → Public-facing name**: `JoshWorks Studio`. This replaces "joshworks-campaigns" in every email.
-2. **Authentication → Templates → Password reset**, click the pencil:
-   - **Sender name**: `JoshWorks Studio`
-   - **Reply to**: `jworks1505@gmail.com`
-   - **Subject**: for example "Reset your JoshWorks Studio password".
-   - Click **Customize action URL** and enter `https://jaderans.github.io/jworks_studio/`. The link in the email then opens the app's own "Set a new password" page in the JoshWorks design.
-   - Save.
+Firebase sends nobody an email: there's no email confirmation and no "Forgot password" link. The owner makes every login in the app, and when someone loses or forgets a password the owner gives them a new temporary one (see below). Optional: **Project settings → General → Public-facing name** `JoshWorks Studio`.
 
 ## 3. Connect the owner's device
 
@@ -45,7 +37,7 @@ Everything already on this device uploads once you're signed in.
 2. Press **Save**. The app makes their login with a **temporary password** and shows it once, with the team sign-in link (their email already filled in):
    - **Email it** sends it from the studio Gmail ([EMAIL_SETUP.md](EMAIL_SETUP.md)), or
    - **Copy message** to paste in Messenger or Viber.
-3. They open the link, sign in with their email and the temporary password, **choose their own password**, and get a short **welcome guide** to the app. No Google account and no email confirmation.
+3. They open the link and sign in with their email and the temporary password. **Choosing their own password comes first**, wherever they sign in (nothing else opens until they do), then a short **welcome guide** to the app. No Google account and no email confirmation.
 
 ### The team sign-in link
 
@@ -53,9 +45,16 @@ Everything already on this device uploads once you're signed in.
 
 **Optional: no link at all.** In **Settings → Cloud sync**, open *Optional: show Sign in at the app’s own address* and press **Copy for GitHub**. On GitHub, open the repository → **Settings → Secrets and variables → Actions → Variables → New repository variable**, name it `STUDIO_CLOUD` and paste the value. Then **Actions → Deploy to GitHub Pages → Run workflow**. From then on, `jaderans.github.io/jworks_studio` itself opens Sign in on a new device. The value is your Firebase project's public config, the same thing the sign-in link carries; the security rules and each person's password protect the data.
 
-The Team page shows where each person is: **No login yet** (press **Make login**), **Temporary password** (press **Send login** to show it again on the device that made it), or **Signed in**.
+The Team page shows where each person is: **No login yet** or **Old invite** (press **Make login**), **Temporary password** (press **Send login** to show it again on the device that made it), or **Signed in**.
 
-A login only works for the account the app made: someone who registers the same email elsewhere gets nothing. If a person forgets their password, they tap **Forgot password?** on the sign-in screen.
+### New passwords
+
+- **One person** lost their temporary password or forgot their own: press **New password** (the key) next to their name.
+- **Everyone at once**: **Team → New passwords for everyone**. You get one list with each person's email and new temporary password: **Copy the list** for yourself, then send each person **only their own** (Copy or Email on their row).
+
+Their old password stops working right away; anyone signed in on a phone is asked to sign in again with the new one, then chooses their own password. Behind the scenes Firebase doesn't let an app change someone else's password, so a new password is a fresh login on a tagged copy of their email (for example `kaye+jw4k7p@example.com`). They still sign in with their own email; the app finds the right login. The old logins stay unused under Firebase → Authentication → Users; you may delete them there, but you don't have to.
+
+A login only works for the account the app made: someone who registers the same email elsewhere gets nothing.
 
 **Changing someone's email** moves their access: the old address stops working, and the new one gets a fresh login to send. **To pause someone**, edit them and mark them inactive; their access stops right away and their work stays.
 
@@ -75,5 +74,6 @@ Nothing waits for the internet: changes save on the device first and upload when
 - **"Missing or insufficient permissions"**: the rules weren't published (or are the old ones), or this person's email isn't on the Team page with access.
 - **"This site isn't allowed to sign in yet"**: add `jaderans.github.io` under **Authentication → Settings → Authorized domains**.
 - **The Google window doesn't open**: allow pop-ups for the site, or sign in with email and password.
-- **Forgot the password**: **Forgot password** on the sign-in form sends a reset link.
+- **Forgot the password**: the owner presses **New password** next to their name in Team and sends them the new temporary one.
+- **"The owner made a new temporary password"**: sign in again (Settings → Cloud sync, or the team sign-in link) with your email and the new temporary password.
 - **Moving to a new phone**: open the team sign-in link (pinned in the team chat) and sign in.

@@ -11,8 +11,10 @@ import { startSync } from '../sync/engine';
 import { expireTrends, fetchFeed } from '../services/growth';
 import { readAuthAction } from '../features/join/authAction';
 import { builtInCloud } from '../sync/config';
+import { useSyncStatus } from '../sync/useSync';
 
 const JoinPage = lazy(() => import('../features/join/JoinPage').then((m) => ({ default: m.JoinPage })));
+const PasswordFirstPage = lazy(() => import('../features/join/PasswordFirstPage').then((m) => ({ default: m.PasswordFirstPage })));
 const AuthActionPage = lazy(() => import('../features/join/AuthActionPage').then((m) => ({ default: m.AuthActionPage })));
 const ClientLinkPage = lazy(() => import('../features/clientlink/ClientLinkPage').then((m) => ({ default: m.ClientLinkPage })));
 const DashboardPage = lazy(() => import('../features/dashboard/DashboardPage'));
@@ -52,6 +54,7 @@ function Gate() {
   const location = useLocation();
   const app = useApp();
   const navigate = useNavigate();
+  const sync = useSyncStatus();
   usePwaUpdates();
   // A client answered or signed through their link (merged by sync/clientLinks.ts).
   useEffect(() => {
@@ -110,6 +113,13 @@ function Gate() {
       </Lazy>
     );
   if (!done) return <SetupWizard onDone={() => setDone(true)} />;
+  // Signed in with a temporary password (wherever they signed in): their own password comes first.
+  if (sync.access?.mustChangePassword)
+    return (
+      <Lazy>
+        <PasswordFirstPage />
+      </Lazy>
+    );
   return (
     <Routes>
       <Route element={<Shell />}>

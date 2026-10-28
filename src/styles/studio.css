@@ -206,6 +206,9 @@ body[data-dialog-open='true'] .toast:not(:last-child) { display: none; }
 .client-link .sum b { display: block; font-size: 1.05rem; }
 .login-card { padding: 12px 14px; border-radius: 12px; background: var(--sunk); }
 .login-message { margin: 0; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font: 0.82rem/1.5 var(--mono, ui-monospace, monospace); white-space: pre-wrap; word-break: break-all; }
+.login-row { flex-wrap: wrap; }
+.login-row .main-text { min-width: 180px; }
+.login-pass { font-size: 0.95rem; letter-spacing: 0.04em; }
 .link-btn { border: 0; background: none; padding: 0; color: var(--teal); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
 .welcome-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
 .welcome-part { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: 12px; background: var(--sunk); }

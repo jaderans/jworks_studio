@@ -45,6 +45,6 @@ Apps Script keeps running the version you deployed. After any edit (or after **N
 - **No QR codes in the email**: add them in Settings → Payment methods (each method's QR picture), and turn the method on.
 - **No logo in the email**: the logo is loaded from the live site (`/brand/email-logo.png`). It shows once the app is published at its address.
 
-## Firebase's own emails (sign-up confirmation, password reset)
+## Firebase sends no emails
 
-These come from Firebase, not the mailer. Make them look like JoshWorks and stay out of Spam: see "Make Firebase's emails look like JoshWorks" in [CLOUD_SETUP.md](CLOUD_SETUP.md). Signing in with **Continue with Google** skips the confirmation email entirely.
+There is no sign-up confirmation and no password-reset email. Team logins (email + temporary password) are made in the app and sent through this mailer or Messenger; a forgotten password gets a new temporary one from Team → New password. See [CLOUD_SETUP.md](CLOUD_SETUP.md).

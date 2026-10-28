@@ -6,6 +6,9 @@ rules_version = '2';
 // camp/{ws}/access/{email} = { role, memberId, active, uid }. Access needs that exact
 // login (uid), so nobody can get in by registering the same email elsewhere; no email
 // verification is needed. Older entries without a uid still need a verified email.
+// A renewed login (new temporary password) is a fresh account on a tagged copy of the
+// email (kaye+jw4k7p@example.com): camp/{ws}/signin/{email} = { login } tells the sign-in
+// screen which one to use, and the access entry is keyed by that login.
 //   owner    — everything
 //   manager  — jobs, clients, money (quotes, contracts, invoices, payments, payouts, expenses), content;
 //              not the team or settings
@@ -80,6 +83,16 @@ service cloud.firestore {
           || (signedIn() && email == myEmail() && resource.data.get('uid', '') == request.auth.uid
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['mustChangePassword', 'passwordSetAt'])
             && request.resource.data.mustChangePassword == false);
+      }
+
+      // Which login an email signs in with, read before signing in (one email at a time,
+      // never the list). The password still decides who gets in. Only the owner writes.
+      match /signin/{email} {
+        allow get: if true;
+        allow list: if isOwner(ws);
+        allow create, update: if isOwner(ws) && request.resource.data.keys().hasOnly(['login', 'updatedAt'])
+          && request.resource.data.login is string && request.resource.data.login.size() < 200;
+        allow delete: if isOwner(ws);
       }
 
       // Settings: the owner writes. Managers read everything but the PIN (money, BIR, payment methods,

@@ -43,7 +43,8 @@ export default function TeamPage() {
     void loadAccess();
   }, [loadAccess, members]);
 
-  const [login, setLogin] = useState<LoginToSend | null>(null);
+  const [login, setLogin] = useState<LoginToSend[] | null>(null);
+  const [renewing, setRenewing] = useState(false);
 
   /** The one link for the whole team: pin it in the group chat; everyone signs in there. */
   const copySignInLink = async () => {
@@ -54,21 +55,57 @@ export default function TeamPage() {
     app.toast(ok ? 'Sign-in link copied. Pin it in your team chat: everyone signs in there with their email and password.' : 'Couldn’t copy the link.', { tone: ok ? 'good' : 'bad', ms: 9000 });
   };
 
+  /** A new temporary password (their first login, or a fresh one): the old one stops working. */
+  const newLogin = async (m: Member): Promise<LoginToSend> => {
+    const { createTeamLogin } = await import('../../sync/cloud');
+    const r = await createTeamLogin(m);
+    await setLocal(`login:${r.email}`, { password: r.password, at: Date.now() });
+    return { member: m, email: r.email, password: r.password };
+  };
+  const loginError = async (e: unknown) => {
+    const { friendlyError } = await import('../../sync/cloud');
+    app.toast(friendlyError(e), { tone: 'bad' });
+  };
+
   /** Make their login (email + temporary password) and show it to send. */
   const makeLogin = async (m: Member) => {
     try {
-      const { createTeamLogin } = await import('../../sync/cloud');
-      const r = await createTeamLogin(m);
+      const made = await newLogin(m);
       await loadAccess();
-      if (r.created) {
-        await setLocal(`login:${r.email}`, { password: r.password, at: Date.now() });
-        setLogin({ member: m, email: r.email, password: r.password });
-      } else {
-        app.toast(`${r.email} already had a login, so it keeps its own password. If they forgot it, they tap “Forgot password?” on the sign-in screen.`, { tone: 'info', ms: 12_000 });
-      }
+      setLogin([made]);
     } catch (e) {
-      const { friendlyError } = await import('../../sync/cloud');
-      app.toast(friendlyError(e), { tone: 'bad' });
+      await loginError(e);
+    }
+  };
+
+  /** A fresh temporary password for someone who lost theirs or forgot their own. */
+  const renewLogin = async (m: Member) => {
+    const ok = await app.confirm({
+      title: `New password for ${m.name}?`,
+      message: `${m.name}’s current password stops working. They sign in with the new temporary one, then choose their own.`,
+      confirmLabel: 'Make a new password',
+    });
+    if (ok) await makeLogin(m);
+  };
+
+  /** Everyone but the owner gets a new temporary password, shown in one list. */
+  const renewAll = async (people: Member[]) => {
+    const ok = await app.confirm({
+      title: 'New passwords for everyone?',
+      message: `${people.map((m) => m.name).join(', ')} each get a new temporary password and their current one stops working. Anyone signed in signs in again with the new one, then chooses their own password.`,
+      confirmLabel: 'Make new passwords',
+    });
+    if (!ok) return;
+    setRenewing(true);
+    const made: LoginToSend[] = [];
+    try {
+      for (const m of people) made.push(await newLogin(m));
+    } catch (e) {
+      await loginError(e);
+    } finally {
+      setRenewing(false);
+      await loadAccess();
+      if (made.length) setLogin(made);
     }
   };
 
@@ -76,8 +113,9 @@ export default function TeamPage() {
   const sendLogin = async (m: Member) => {
     const email = m.email.trim().toLowerCase();
     const saved = await getLocal<{ password: string } | null>(`login:${email}`, null);
-    if (saved) setLogin({ member: m, email, password: saved.password });
-    else app.toast('Their temporary password was made on another device. Send it from there, or ask them to tap “Forgot password?” on the sign-in screen.', { tone: 'info', ms: 10_000 });
+    if (saved) setLogin([{ member: m, email, password: saved.password }]);
+    else if (await app.confirm({ title: `Make ${m.name} a new password?`, message: `${m.name}’s temporary password was made on another device, so it can’t be shown here. A new one replaces it.`, confirmLabel: 'Make a new password' }))
+      await makeLogin(m);
   };
 
   const stillDesigners = (members ?? []).filter((m) => m.active === 1 && m.appRole === 'designer');
@@ -95,6 +133,8 @@ export default function TeamPage() {
 
   if (!members) return <Loading />;
   const accessByEmail = new Map((access ?? []).map((a) => [a.email, a]));
+  const accessOf = (m: Member) => (m.email ? accessByEmail.get(m.email.trim().toLowerCase()) : undefined);
+  const withLogins = members.filter((m) => m.active === 1 && m.appRole !== 'owner' && m.email.trim());
   const needle = q.trim().toLowerCase();
   const shown = members.filter(
     (m) => (inactive || m.active === 1) && (!role || m.appRole === role) && (!needle || `${m.name} ${m.roleLabel} ${m.email ?? ''}`.toLowerCase().includes(needle)),
@@ -109,6 +149,11 @@ export default function TeamPage() {
             {sync.enabled ? (
               <Button onClick={copySignInLink}>
                 <Link2 size={18} /> Copy sign-in link
+              </Button>
+            ) : null}
+            {cloudOwner && withLogins.length ? (
+              <Button onClick={() => renewAll(withLogins)} disabled={renewing}>
+                <KeyRound size={18} /> {renewing ? 'Making passwords…' : 'New passwords for everyone'}
               </Button>
             ) : null}
             <Button variant="primary" onClick={() => setEditing({ appRole: 'manager', skills: [] })}>
@@ -160,7 +205,7 @@ export default function TeamPage() {
         <div className="list">
           {shown.map((m) => {
             const open = jobs.filter((j) => isOpen(j) && (j.designers.includes(m.id) || j.lead === m.id)).length;
-            const acc = m.email ? accessByEmail.get(m.email) : undefined;
+            const acc = accessOf(m);
             return (
               <div key={m.id} className="list-item" style={m.active ? undefined : { opacity: 0.55 }}>
                 <MemberDot member={m} size="lg" />
@@ -184,20 +229,32 @@ export default function TeamPage() {
                     <Badge>Paused</Badge>
                   ) : acc.mustChangePassword ? (
                     <Badge tone="yellow">Temporary password</Badge>
+                  ) : acc.hasLogin || m.appRole === 'owner' ? (
+                    <Badge tone="good">Signed in</Badge>
                   ) : (
-                    <Badge tone="good">{acc.hasLogin || m.appRole === 'owner' ? 'Signed in' : 'Can sign in'}</Badge>
+                    // From the old invite links: needs a login made here.
+                    <Badge tone="warn">Old invite</Badge>
                   )
                 ) : null}
                 {cloudOwner && m.email && m.appRole !== 'owner' ? (
-                  !acc || (!acc.hasLogin && !acc.mustChangePassword) ? (
+                  !acc || !acc.hasLogin ? (
                     <Button size="sm" onClick={() => makeLogin(m)} aria-label={`Make ${m.name}’s login`}>
                       <KeyRound size={15} /> <span className="hide-phone">Make login</span>
                     </Button>
                   ) : acc.mustChangePassword ? (
-                    <Button size="sm" onClick={() => sendLogin(m)} aria-label={`Send ${m.name}’s login`}>
-                      <Send size={15} /> <span className="hide-phone">Send login</span>
+                    <>
+                      <Button size="sm" onClick={() => sendLogin(m)} aria-label={`Send ${m.name}’s login`}>
+                        <Send size={15} /> <span className="hide-phone">Send login</span>
+                      </Button>
+                      <IconButton label={`New password for ${m.name}`} size="sm" plain onClick={() => renewLogin(m)}>
+                        <KeyRound size={16} />
+                      </IconButton>
+                    </>
+                  ) : (
+                    <Button size="sm" onClick={() => renewLogin(m)} aria-label={`New password for ${m.name}`}>
+                      <KeyRound size={15} /> <span className="hide-phone">New password</span>
                     </Button>
-                  ) : null
+                  )
                 ) : null}
                 <IconButton label={`Edit ${m.name}`} size="sm" plain onClick={() => setEditing(m)}>
                   <Pencil size={16} />
