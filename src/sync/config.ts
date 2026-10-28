@@ -76,11 +76,50 @@ export interface InvitePayload {
   n?: string;
 }
 
-/** A link a designer opens on their phone to join the team's sync. */
-export function inviteLink(cfg: CloudConfig, email?: string, name?: string): string {
-  const payload: InvitePayload = { c: cfg, e: email, n: name };
+/**
+ * The studio's own cloud, built into the published app (the repository
+ * variable STUDIO_CLOUD, copied from Settings → Cloud sync). With it, anyone
+ * opening the app just signs in: no invite link needed. Not secret: the
+ * security rules decide who sees what.
+ */
+export function builtInCloud(): CloudConfig | null {
+  const raw = (import.meta.env.VITE_STUDIO_CLOUD as string | undefined)?.trim();
+  if (!raw) return null;
+  try {
+    const c = JSON.parse(raw) as CloudConfig;
+    return c?.firebase?.apiKey && c.firebase.projectId && c.ws ? c : null;
+  } catch {
+    return null;
+  }
+}
+
+const sameCloud = (a: CloudConfig, b: CloudConfig) => a.firebase.projectId === b.firebase.projectId && a.ws === b.ws;
+
+/** What to save as STUDIO_CLOUD: the cloud this device uses (without emulator settings). */
+export function studioCloudValue(cfg: CloudConfig): string {
+  const { emulator, ...firebase } = cfg.firebase;
+  void emulator;
+  return JSON.stringify({ firebase, ws: cfg.ws });
+}
+
+/**
+ * The team's sign-in link: the same for everyone, to pin in the group chat.
+ * It opens the app's Sign in screen (email + password) and connects that
+ * device to the studio. With the cloud built into the app it's just #/login.
+ * With an email (a new person's login message), the email is filled in.
+ */
+export function teamSignInLink(cfg: CloudConfig, email?: string): string {
   const base = `${location.origin}${location.pathname}`;
-  return `${base}#/join?i=${b64urlEncode(JSON.stringify(payload))}`;
+  const e = email ? `e=${encodeURIComponent(email)}` : '';
+  const built = builtInCloud();
+  if (built && sameCloud(built, cfg)) return `${base}#/login${e ? `?${e}` : ''}`;
+  return `${base}#/login?i=${b64urlEncode(JSON.stringify({ c: cfg } satisfies InvitePayload))}${e ? `&${e}` : ''}`;
+}
+
+/** A pasted sign-in or invite link → the part after "#", to open it in this app. */
+export function linkRoute(pasted: string): string | null {
+  const m = /#(\/(?:login|join)\?i=[A-Za-z0-9_-]+(?:&[^#\s]*)?)/.exec(pasted.trim());
+  return m && readInvite(new URLSearchParams(m[1].split('?')[1]).get('i')) ? m[1] : null;
 }
 
 /** A client link: the team's Firebase project, the workspace and the link's token. */

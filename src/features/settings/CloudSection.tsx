@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Cloud, Copy, LogOut, RefreshCw, Unplug } from 'lucide-react';
+import { Cloud, Copy, Link2, LogOut, RefreshCw, Unplug } from 'lucide-react';
 import { Link } from 'react-router';
 import rulesText from '../../../firebase/firestore.rules?raw';
 import { useApp } from '../../app/AppContext';
@@ -7,7 +7,7 @@ import { Badge, Button, Callout } from '../../components/ui';
 import { Field, TextArea, TextInput } from '../../components/form';
 import { useSyncStatus } from '../../sync/useSync';
 import { AuthForm } from '../../sync/AuthForm';
-import { parseFirebaseConfig, slugify } from '../../sync/config';
+import { builtInCloud, parseFirebaseConfig, slugify } from '../../sync/config';
 import { relativeTime } from '../../lib/time';
 import { ROLE_LABEL } from '../../services/team';
 
@@ -29,6 +29,23 @@ export function CloudSection() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [showRules, setShowRules] = useState(false);
+
+  /** The one link for the whole team (pin it in the group chat). */
+  const copySignInLink = async () => {
+    const [{ getCloudConfig }, { teamSignInLink }] = await Promise.all([import('../../sync/cloud'), import('../../sync/config')]);
+    const cfg = await getCloudConfig();
+    if (!cfg) return;
+    const ok = await copy(teamSignInLink(cfg));
+    app.toast(ok ? 'Sign-in link copied. Pin it in your team chat.' : 'Couldn’t copy the link.', { tone: ok ? 'good' : 'bad' });
+  };
+  /** For the repository variable STUDIO_CLOUD: then the app's own address shows Sign in on any device. */
+  const copyForGitHub = async () => {
+    const [{ getCloudConfig }, { studioCloudValue }] = await Promise.all([import('../../sync/cloud'), import('../../sync/config')]);
+    const cfg = await getCloudConfig();
+    if (!cfg) return;
+    const ok = await copy(studioCloudValue(cfg));
+    app.toast(ok ? 'Copied. Paste it as the value of STUDIO_CLOUD in GitHub (steps below).' : 'Couldn’t copy.', { tone: ok ? 'good' : 'bad', ms: 8000 });
+  };
 
   const connect = async () => {
     setError('');
@@ -110,7 +127,7 @@ export function CloudSection() {
             </div>
           </div>
         ) : (
-          <p className="sub">Ask the owner for an invite link. Opening it on this device connects it to the team.</p>
+          <p className="sub">Open the team’s sign-in link on this device (the owner copies it from Team → Copy sign-in link) and sign in with your email and password.</p>
         )
       ) : (
         <div className="stack">
@@ -140,9 +157,14 @@ export function CloudSection() {
                   <RefreshCw size={16} /> Sync now
                 </Button>
                 {sync.access.role === 'owner' ? (
-                  <Link to="/team" className="btn sm">
-                    Invite the team
-                  </Link>
+                  <>
+                    <Button size="sm" onClick={copySignInLink}>
+                      <Link2 size={16} /> Copy sign-in link
+                    </Button>
+                    <Link to="/team" className="btn sm">
+                      Add the team
+                    </Link>
+                  </>
                 ) : null}
                 <Button
                   size="sm"
@@ -155,6 +177,30 @@ export function CloudSection() {
                   <LogOut size={16} /> Sign out
                 </Button>
               </div>
+              {sync.access.role === 'owner' ? (
+                <details className="disclosure">
+                  <summary className="small strong">
+                    Optional: show Sign in at the app’s own address on any device {builtInCloud() ? <Badge tone="good">On</Badge> : null}
+                  </summary>
+                  <div className="stack tight">
+                    <p className="small muted">The team sign-in link already works. With one GitHub setting, the plain address (jaderans.github.io/jworks_studio) also opens Sign in on a new phone or laptop, so nobody needs the link at all.</p>
+                    <ol className="small" style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 4 }}>
+                      <li>Press <b>Copy for GitHub</b>.</li>
+                      <li>
+                        On GitHub, open the <b>jworks_studio</b> repository → <b>Settings → Secrets and variables → Actions → Variables → New repository variable</b>. Name: <span className="mono">STUDIO_CLOUD</span>. Paste the value, then <b>Add variable</b>.
+                      </li>
+                      <li>
+                        <b>Actions → Deploy to GitHub Pages → Run workflow</b>. When it finishes, reload the app.
+                      </li>
+                    </ol>
+                    <div>
+                      <Button size="sm" onClick={copyForGitHub}>
+                        <Copy size={16} /> Copy for GitHub
+                      </Button>
+                    </div>
+                  </div>
+                </details>
+              ) : null}
             </div>
           ) : (
             <>

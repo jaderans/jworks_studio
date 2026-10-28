@@ -285,6 +285,9 @@ async function onUser(user: User | null) {
   if (a.role !== 'owner') {
     if (a.memberId) await setLocal('currentMemberId', a.memberId);
     await setLocal('setupDone', true);
+  } else if (a.memberId && !(await getLocal<string | null>('currentMemberId', null))) {
+    // The owner signing in on a new device: this device is theirs.
+    await setLocal('currentMemberId', a.memberId);
   }
   // A new role or person on this device reads everything again from the start.
   const who = `${a.role}:${a.memberId ?? ''}`;

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { KeyRound, Pencil, Plus, Send, Trash2, UserPlus } from 'lucide-react';
+import { KeyRound, Link2, Pencil, Plus, Send, Trash2, UserPlus } from 'lucide-react';
 import { useApp } from '../../app/AppContext';
 import { Badge, Button, Callout, IconButton, Loading, PageHeader, Segmented, Toggle } from '../../components/ui';
 import { Field, Select, TextArea, TextInput } from '../../components/form';
@@ -14,6 +14,7 @@ import { SERVICE_LABEL } from '../../domain/campaignTemplates';
 import { getLocal, setLocal } from '../../db/local';
 import { isOpen } from '../../domain/jobs';
 import { LoginDialog, type LoginToSend } from './LoginDialog';
+import { copyText } from '../../lib/text';
 import type { AccessRow } from '../../sync/cloud';
 import type { AppRole, Member, ServiceKey } from '../../db/types';
 
@@ -43,6 +44,15 @@ export default function TeamPage() {
   }, [loadAccess, members]);
 
   const [login, setLogin] = useState<LoginToSend | null>(null);
+
+  /** The one link for the whole team: pin it in the group chat; everyone signs in there. */
+  const copySignInLink = async () => {
+    const [{ getCloudConfig }, { teamSignInLink }] = await Promise.all([import('../../sync/cloud'), import('../../sync/config')]);
+    const cfg = await getCloudConfig();
+    if (!cfg) return;
+    const ok = await copyText(teamSignInLink(cfg));
+    app.toast(ok ? 'Sign-in link copied. Pin it in your team chat: everyone signs in there with their email and password.' : 'Couldn’t copy the link.', { tone: ok ? 'good' : 'bad', ms: 9000 });
+  };
 
   /** Make their login (email + temporary password) and show it to send. */
   const makeLogin = async (m: Member) => {
@@ -95,9 +105,16 @@ export default function TeamPage() {
         title="Team"
         subtitle="Everyone at the studio. Their colour follows them on jobs, the calendar and payouts."
         actions={
-          <Button variant="primary" onClick={() => setEditing({ appRole: 'manager', skills: [] })}>
-            <UserPlus size={18} /> Add person
-          </Button>
+          <>
+            {sync.enabled ? (
+              <Button onClick={copySignInLink}>
+                <Link2 size={18} /> Copy sign-in link
+              </Button>
+            ) : null}
+            <Button variant="primary" onClick={() => setEditing({ appRole: 'manager', skills: [] })}>
+              <UserPlus size={18} /> Add person
+            </Button>
+          </>
         }
       />
       {!sync.enabled ? (

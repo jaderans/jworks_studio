@@ -147,7 +147,7 @@ export function inviteEmail(b: BusinessSettings, o: { name: string; email: strin
         : 'Open the link below and sign in with your email and password.',
     ],
     rows: [['Email', o.email], ...(o.password ? ([['Temporary password', o.password]] as [string, string][]) : [])],
-    button: { label: 'Open JoshWorks Studio', url: o.link },
+    button: { label: 'Sign in to JoshWorks Studio', url: o.link },
     note: 'Keep this password private; it stops working once you choose your own. On your phone, add the app to your home screen (Share → Add to Home Screen) so it opens like an app.',
     signoff: `See you inside,<br><strong>${esc(o.from)}</strong>`,
   });
@@ -289,7 +289,7 @@ export function sampleEmail(kind: SampleKind, b: BusinessSettings, methods: Stud
   ];
   switch (kind) {
     case 'invite':
-      return inviteEmail(b, { name: 'Kaye', email: 'kaye@example.com', link: `${appBase()}#/join`, role: 'Manager', from: b.signatory?.split(',')[0] || 'Joshua', password: 'JW-K7QF-M2XP' });
+      return inviteEmail(b, { name: 'Kaye', email: 'kaye@example.com', link: `${appBase()}#/login`, role: 'Manager', from: b.signatory?.split(',')[0] || 'Joshua', password: 'JW-K7QF-M2XP' });
     case 'contract':
       return contractEmail(b, { clientName: 'Kape Ilonggo', number: 'C-2026-001', title: 'Branding & Visual Identity Agreement', total: 437500, down: 218750, signUrl: `${appBase()}#/c` }, methods);
     case 'invoice':

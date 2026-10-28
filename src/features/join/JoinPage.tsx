@@ -4,16 +4,20 @@ import logo from '../../assets/brand/logo-128.png';
 import { Button, Callout, Loading } from '../../components/ui';
 import { AuthForm } from '../../sync/AuthForm';
 import { ChoosePassword } from '../../sync/ChoosePassword';
-import { readInvite } from '../../sync/config';
+import { builtInCloud, readInvite } from '../../sync/config';
 import { useSyncStatus } from '../../sync/useSync';
 import { getLocal } from '../../db/local';
 import { runJoinSetup } from '../../services/setup';
 import { ROLE_LABEL } from '../../services/team';
 
-/** Where an invite link lands: connect this phone to the team and sign in. */
-export function JoinPage({ onJoined }: { onJoined: () => void }) {
+/** The team sign-in screen (#/login, and old #/join invite links): connect this device to the studio and sign in. */
+export function JoinPage({ onJoined, onSetUpAlone }: { onJoined: () => void; onSetUpAlone?: () => void }) {
   const [params] = useSearchParams();
-  const invite = readInvite(params.get('i'));
+  // The sign-in link carries the cloud; otherwise the cloud built into the app (just sign in).
+  const linked = readInvite(params.get('i'));
+  const built = builtInCloud();
+  const email = params.get('e') ?? undefined;
+  const invite = linked ? { ...linked, e: linked.e ?? email } : built ? { c: built, e: email, n: undefined } : null;
   const sync = useSyncStatus();
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
@@ -39,13 +43,13 @@ export function JoinPage({ onJoined }: { onJoined: () => void }) {
         <div className="row" style={{ gap: 14 }}>
           <img src={logo} alt="" width={56} height={56} style={{ borderRadius: 14 }} />
           <div>
-            <span className="eyebrow">Team invite</span>
-            <h1>Join JoshWorks Studio</h1>
+            <span className="eyebrow">{linked?.e || linked?.n ? 'Team invite' : 'JoshWorks Studio'}</span>
+            <h1>{linked?.e || linked?.n ? 'Join JoshWorks Studio' : 'Sign in'}</h1>
           </div>
         </div>
         {!invite ? (
-          <Callout tone="bad" title="This invite link is broken">
-            Ask the owner to copy the link again from Team and send it whole.
+          <Callout tone="bad" title="This sign-in link is broken">
+            Ask the owner to copy it again (Team → Copy sign-in link) and send it whole.
           </Callout>
         ) : error ? (
           <Callout tone="bad">{error}</Callout>
@@ -79,10 +83,18 @@ export function JoinPage({ onJoined }: { onJoined: () => void }) {
         ) : (
           <div className="card pad-lg stack">
             <p className="muted">
-              {invite.n ? `Hi ${invite.n}! ` : ''}Sign in with your email{invite.e ? ` (${invite.e})` : ''} and the temporary password from the owner’s message. No email confirmation needed.
+              {invite.n ? `Hi ${invite.n}! ` : ''}Sign in with your email{invite.e ? ` (${invite.e})` : ''} and password. New to the team? Use the temporary password from the owner’s message; you’ll choose your own right after.
             </p>
             {sync.state === 'error' ? <Callout tone="warn">{sync.message}</Callout> : null}
             <AuthForm defaultEmail={invite.e ?? ''} />
+            {onSetUpAlone && !linked ? (
+              <p className="tiny muted">
+                Not on the JoshWorks team?{' '}
+                <button type="button" className="link-btn" onClick={onSetUpAlone}>
+                  Set up this device on its own
+                </button>
+              </p>
+            ) : null}
           </div>
         )}
       </div>

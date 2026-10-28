@@ -28,6 +28,9 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run build
+        env:
+          # The studio's cloud (Settings → Cloud sync → Copy for GitHub), so people just open the app and sign in.
+          VITE_STUDIO_CLOUD: ${{ vars.STUDIO_CLOUD }}
       - uses: actions/upload-pages-artifact@v5
         with:
           path: dist

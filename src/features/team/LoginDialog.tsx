@@ -21,7 +21,7 @@ export function loginMessage(name: string, link: string, email: string, password
   return [
     `Hi ${name}! Your JoshWorks Studio account is ready.`,
     '',
-    `1. Open: ${link}`,
+    `1. Open the team sign-in link (bookmark it): ${link}`,
     `2. Sign in with`,
     `   Email: ${email}`,
     `   Temporary password: ${password}`,
@@ -39,9 +39,9 @@ export function LoginDialog({ value, onClose }: { value: LoginToSend | null; onC
   useEffect(() => {
     if (!value) return;
     void (async () => {
-      const [{ getCloudConfig }, { inviteLink }, email] = await Promise.all([import('../../sync/cloud'), import('../../sync/config'), getSetting('email')]);
+      const [{ getCloudConfig }, { teamSignInLink }, email] = await Promise.all([import('../../sync/cloud'), import('../../sync/config'), getSetting('email')]);
       const cfg = await getCloudConfig();
-      setLink(cfg ? inviteLink(cfg, value.email, value.member.name) : '');
+      setLink(cfg ? teamSignInLink(cfg, value.email) : '');
       setCanEmail(emailReady(email));
     })();
   }, [value]);

@@ -42,10 +42,16 @@ Everything already on this device uploads once you're signed in.
 ## 4. Add the team
 
 1. **Team → Add person**. Enter their **name** and a **working email**. They're **Managers** by default: they see and run everything happening at the studio (jobs, clients, documents, money, marketing) and their own **My pay**; only the owner changes the team and settings. (**Designer** is still there for someone who should only see their jobs, the calendar and their own pay.)
-2. Press **Save**. The app makes their login with a **temporary password** and shows it once, with the app link:
+2. Press **Save**. The app makes their login with a **temporary password** and shows it once, with the team sign-in link (their email already filled in):
    - **Email it** sends it from the studio Gmail ([EMAIL_SETUP.md](EMAIL_SETUP.md)), or
    - **Copy message** to paste in Messenger or Viber.
 3. They open the link, sign in with their email and the temporary password, **choose their own password**, and get a short **welcome guide** to the app. No Google account and no email confirmation.
+
+### The team sign-in link
+
+**Team → Copy sign-in link** copies one link for the whole team. Pin it in the team chat: it opens the app's **Sign in** screen (email and password) on any phone or laptop and connects that device to the studio. A designer who opened the plain app address instead taps **Team member? Sign in** on the welcome screen and pastes the link there. After the first sign-in, the device remembers them.
+
+**Optional: no link at all.** In **Settings → Cloud sync**, open *Optional: show Sign in at the app’s own address* and press **Copy for GitHub**. On GitHub, open the repository → **Settings → Secrets and variables → Actions → Variables → New repository variable**, name it `STUDIO_CLOUD` and paste the value. Then **Actions → Deploy to GitHub Pages → Run workflow**. From then on, `jaderans.github.io/jworks_studio` itself opens Sign in on a new device. The value is your Firebase project's public config, the same thing the sign-in link carries; the security rules and each person's password protect the data.
 
 The Team page shows where each person is: **No login yet** (press **Make login**), **Temporary password** (press **Send login** to show it again on the device that made it), or **Signed in**.
 
@@ -70,4 +76,4 @@ Nothing waits for the internet: changes save on the device first and upload when
 - **"This site isn't allowed to sign in yet"**: add `jaderans.github.io` under **Authentication → Settings → Authorized domains**.
 - **The Google window doesn't open**: allow pop-ups for the site, or sign in with email and password.
 - **Forgot the password**: **Forgot password** on the sign-in form sends a reset link.
-- **Moving to a new phone**: open the invite link again (or ask the owner for a new one) and sign in.
+- **Moving to a new phone**: open the team sign-in link (pinned in the team chat) and sign in.

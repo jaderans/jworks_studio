@@ -10,6 +10,7 @@ import { clearLanding, peekLanding } from './landing';
 import { startSync } from '../sync/engine';
 import { expireTrends, fetchFeed } from '../services/growth';
 import { readAuthAction } from '../features/join/authAction';
+import { builtInCloud } from '../sync/config';
 
 const JoinPage = lazy(() => import('../features/join/JoinPage').then((m) => ({ default: m.JoinPage })));
 const AuthActionPage = lazy(() => import('../features/join/AuthActionPage').then((m) => ({ default: m.AuthActionPage })));
@@ -46,6 +47,8 @@ function Gate() {
   // A link from a Firebase email (confirm the email, reset the password) opens its own page, set up or not.
   const [authAction] = useState(readAuthAction);
   const [done, setDone] = useState<boolean | null>(null);
+  // "Set up this device on its own" from the sign-in screen (a studio without the team cloud).
+  const [ownSetup, setOwnSetup] = useState(false);
   const location = useLocation();
   const app = useApp();
   const navigate = useNavigate();
@@ -83,7 +86,7 @@ function Gate() {
       </Lazy>
     );
   if (done === null) return <Loading />;
-  if (location.pathname === '/join')
+  if (location.pathname === '/join' || location.pathname === '/login')
     return (
       <Lazy>
         <JoinPage
@@ -91,6 +94,18 @@ function Gate() {
             setDone(true);
             window.location.hash = '#/';
           }}
+        />
+      </Lazy>
+    );
+  if (!done && builtInCloud() && !ownSetup)
+    return (
+      <Lazy>
+        <JoinPage
+          onJoined={() => {
+            setDone(true);
+            window.location.hash = '#/';
+          }}
+          onSetUpAlone={() => setOwnSetup(true)}
         />
       </Lazy>
     );

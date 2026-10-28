@@ -8,6 +8,7 @@ import { parseBackup, type BackupFile } from '../../services/backup';
 import { readFileAsText } from '../../lib/files';
 import { useApp } from '../../app/AppContext';
 import { setLanding } from '../../app/landing';
+import { linkRoute } from '../../sync/config';
 import { ImportSection } from '../settings/ImportSection';
 
 type Step = 'welcome' | 'business' | 'import' | 'join' | 'restore';
@@ -24,6 +25,8 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [backup, setBackup] = useState<BackupFile | null>(null);
+  const [pasted, setPasted] = useState('');
+  const [pasteError, setPasteError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
   const create = async () => {
@@ -72,8 +75,8 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
               </button>
               <button type="button" className="card pad-lg" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setStep('join')}>
                 <Users size={28} className="teal" />
-                <h2>Join my team</h2>
-                <p className="muted">I’m a designer; the owner sent me an invite link.</p>
+                <h2>Team member? Sign in</h2>
+                <p className="muted">I’m on the JoshWorks team and have my email and password.</p>
               </button>
             </div>
             <Button variant="link" onClick={() => setStep('restore')}>
@@ -130,9 +133,26 @@ export function SetupWizard({ onDone }: { onDone: () => void }) {
 
         {step === 'join' ? (
           <div className="card pad-lg stack">
-            <h2>Join with your invite link</h2>
-            <p className="muted">Open the invite link the owner sent you (Messenger, Viber or email) on this device. It connects you to the team and asks you to sign in with your email.</p>
-            <Callout tone="info">No link yet? Ask the owner to add your email in Team and tap the link icon next to your name.</Callout>
+            <h2>Sign in to the team</h2>
+            <p className="muted">Open the team’s sign-in link on this device (the owner pins it in the team chat, and it’s in the message with your temporary password). Or paste it here:</p>
+            <form
+              className="row wrap"
+              style={{ alignItems: 'flex-end' }}
+              onSubmit={(e) => {
+                e.preventDefault();
+                const route = linkRoute(pasted);
+                if (route) window.location.hash = route;
+                else setPasteError('That doesn’t look like the JoshWorks sign-in link. Copy the whole link and try again.');
+              }}
+            >
+              <Field label="Sign-in link" htmlFor="sw-link" className="grow" error={pasteError || undefined}>
+                <TextInput id="sw-link" value={pasted} placeholder="https://jaderans.github.io/jworks_studio/#/login?i=…" onChange={(e) => { setPasted(e.target.value); setPasteError(''); }} />
+              </Field>
+              <Button type="submit" variant="primary" disabled={!pasted.trim()}>
+                Continue
+              </Button>
+            </form>
+            <Callout tone="info">No link yet? Ask the owner: it’s on the Team page under “Copy sign-in link”. After you sign in once, this device remembers you.</Callout>
             <div>
               <Button onClick={() => setStep('welcome')}>
                 <ArrowLeft size={16} /> Back
