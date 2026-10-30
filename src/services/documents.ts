@@ -167,3 +167,23 @@ export async function saveTemplate(t: ContractTemplate): Promise<ContractTemplat
   await audit('template', 'contractTemplate', t.id, `Edited the ${t.name} (${t.subtitle}) template`);
   return next;
 }
+
+/**
+ * Delete a contract template: it's no longer offered for new contracts, and the
+ * prices made for it alone are archived. Contracts already made from it keep
+ * working (they still find it, like any deleted record).
+ */
+export async function deleteTemplate(id: string): Promise<{ contracts: number }> {
+  const t = await db.contractTemplates.get(id);
+  if (!t) return { contracts: 0 };
+  await save(db.contractTemplates, { ...t, deleted: 1 });
+  for (const p of alive(await db.packages.toArray()).filter((x) => x.templateId === id && x.active === 1)) await save(db.packages, { ...p, active: 0 as const });
+  await audit('template', 'contractTemplate', id, `Deleted the ${t.name} template`);
+  return { contracts: alive(await db.contracts.toArray()).filter((c) => c.templateId === id).length };
+}
+
+/** Archive the prices made for a template that was never saved (the builder was cancelled). */
+export async function discardTemplatePrices(id: string): Promise<void> {
+  if (await db.contractTemplates.get(id)) return;
+  for (const p of alive(await db.packages.toArray()).filter((x) => x.templateId === id && x.active === 1)) await save(db.packages, { ...p, active: 0 as const });
+}

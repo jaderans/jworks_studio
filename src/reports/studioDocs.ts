@@ -436,8 +436,10 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
   const audience = ctx.audience ?? contractAudience(f.rates, tpl.audience, 'business');
   const blank = (v?: string) => (v && v.trim() ? v.trim() : '______________________');
   const mainCats = tpl.categories.filter((x) => x !== 'Add-ons' && x !== 'Ownership');
-  const pkgs = ctx.packages.filter((p) => p.active === 1 && p.kind !== 'addon' && mainCats.includes(p.category ?? ''));
-  const addOns = ctx.packages.filter((p) => p.active === 1 && p.kind === 'addon' && tpl.categories.includes(p.category ?? ''));
+  // In the template's section order, then the price list's own order.
+  const inOrder = (a: Package, b: Package) => tpl.categories.indexOf(a.category ?? '') - tpl.categories.indexOf(b.category ?? '') || a.sort - b.sort || a.name.localeCompare(b.name);
+  const pkgs = ctx.packages.filter((p) => p.active === 1 && p.kind !== 'addon' && mainCats.includes(p.category ?? '')).sort(inOrder);
+  const addOns = ctx.packages.filter((p) => p.active === 1 && p.kind === 'addon' && tpl.categories.includes(p.category ?? '')).sort(inOrder);
   // The contract's own lines win over the price list: an edited name or price prints as edited.
   const lineOf = (id: string) => items.find((i) => i.packageId === id);
   const linePrice = (l: ProposalItem) => (l.unit === 'percent' ? `+${l.unitPrice / 100}% of package price` : `${peso(l.unitPrice)} ${UNIT_LABEL[l.unit]}`.trim());
@@ -515,9 +517,12 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
 
   const pricing = (): Content[] => {
   const content: Content[] = [];
-  if (pkgs.length) {
-    content.push(sectionTitle(`${mainCats[0] ?? 'Package'} package selection`), { text: 'Selected package marked below.', style: 'muted', margin: [0, 0, 0, 4] });
-    const cells: TableCell[] = pkgs.map((p) => {
+  // One grid per section; a heading for each when the contract offers more than one.
+  const groups = mainCats.map((cat) => ({ cat, list: pkgs.filter((p) => p.category === cat) })).filter((g) => g.list.length);
+  if (groups.length) content.push(sectionTitle(groups.length === 1 ? `${groups[0].cat} package selection` : 'Package selection'), { text: 'Selected package marked below.', style: 'muted', margin: [0, 0, 0, 4] });
+  for (const g of groups) {
+    if (groups.length > 1) content.push({ text: g.cat, bold: true, color: TEAL, fontSize: 10, margin: [0, 4, 0, 3], headlineLevel: 1 } as Content);
+    const cells: TableCell[] = g.list.map((p) => {
       const on = chosen.has(p.id);
       const line = lineOf(p.id);
       return {
@@ -696,6 +701,8 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
     // The terms sit on a page of their own; a page break block starts the next part on a new page.
     let breakNext = false;
     for (const b of blocks) {
+      // Package selection always starts on a page of its own.
+      if (b.kind === 'packages') breakNext ||= content.length > header.length;
       if (b.kind === 'pagebreak') {
         breakNext = content.length > header.length;
         continue;

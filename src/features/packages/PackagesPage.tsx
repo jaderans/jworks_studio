@@ -118,8 +118,10 @@ function PackageList({ kind }: { kind: Package['kind'] }) {
   );
 }
 
-export function PackageDialog({ value, onClose }: { value: Partial<Package> | null; onClose: () => void }) {
+export function PackageDialog({ value, onClose, onSaved }: { value: Partial<Package> | null; onClose: () => void; onSaved?: (p: Package) => void }) {
   const app = useApp();
+  // Section names to pick from: the house ones and any made since.
+  const sections = [...new Set([...CATEGORIES, ...(usePackages() ?? []).map((x) => x.category ?? '').filter(Boolean)])];
   const rates = settingValue(useSettingRows(), 'rates');
   const [p, setP] = useState<Partial<Package>>({});
   const [key, setKey] = useState<string | null>(null);
@@ -156,8 +158,9 @@ export function PackageDialog({ value, onClose }: { value: Partial<Package> | nu
             variant="primary"
             disabled={!p.name?.trim()}
             onClick={async () => {
-              await savePackage({ ...(p as Package), name: p.name!.trim(), kind: p.kind ?? 'smm' });
+              const saved = await savePackage({ ...(p as Package), name: p.name!.trim(), kind: p.kind ?? 'smm', category: p.category?.trim() ?? '' });
               app.toast('Saved', { tone: 'good' });
+              onSaved?.(saved);
               onClose();
             }}
           >
@@ -200,7 +203,7 @@ export function PackageDialog({ value, onClose }: { value: Partial<Package> | nu
         <Field label="Price list section" htmlFor="pk-cat">
           <TextInput id="pk-cat" list="pk-cats" value={p.category ?? ''} onChange={(e) => setP({ ...p, category: e.target.value })} placeholder="e.g. Branding, Merch" />
           <datalist id="pk-cats">
-            {CATEGORIES.map((c) => (
+            {sections.map((c) => (
               <option key={c} value={c} />
             ))}
           </datalist>

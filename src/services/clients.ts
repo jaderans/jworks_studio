@@ -105,6 +105,7 @@ export async function savePackage(p: Partial<Package> & { name: string; kind: Pa
     studentPrice: p.studentPrice ?? null,
     turnaround: p.turnaround ?? '',
     revisions: p.revisions ?? 0,
+    ...(p.templateId ? { templateId: p.templateId } : {}),
   });
 }
 

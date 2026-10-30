@@ -225,5 +225,5 @@ body[data-dialog-open='true'] .toast:not(:last-child) { display: none; }
 .builder-num { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--teal-soft); color: var(--teal); font-weight: 800; font-size: 0.8rem; }
 .builder-title { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 4px 6px; border: 0; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; border-radius: 8px; }
 .builder-title:hover { background: var(--sunk); }
-.builder-title .main-text { display: grid; gap: 1px; min-width: 0; }
+.builder-title .main-text, .builder-block.fixed .main-text { display: grid; gap: 1px; min-width: 0; }
 .builder-body { padding: 4px 14px 14px; border-top: 1px solid var(--line); }

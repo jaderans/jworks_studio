@@ -11,7 +11,8 @@ import { Dialog } from '../../components/Dialog';
 import { priceText } from '../../components/PriceLines';
 import { useContractTemplates, usePackages } from '../../hooks/data';
 import { CATEGORIES } from '../../domain/packages';
-import { saveTemplate } from '../../services/documents';
+import { deleteTemplate, saveTemplate } from '../../services/documents';
+import { TemplatePricing } from './TemplatePricing';
 import { peso } from '../../lib/money';
 import { PackageDialog, Rates } from '../packages/PackagesPage';
 import { QuotesTab } from './QuotesTab';
@@ -124,7 +125,7 @@ function Prices() {
                 {g.list.map((p) => (
                   <tr key={p.id} className={p.active ? '' : 'muted'}>
                     <td data-label="Item">
-                      <b>{p.name}</b> {p.active ? null : <Badge>Archived</Badge>}
+                      <b>{p.name}</b> {p.active ? null : <Badge>Archived</Badge>} {p.templateId ? <Badge tone="teal">Contract only</Badge> : null}
                       {p.notes ? <div className="tiny muted">{p.notes}</div> : null}
                     </td>
                     <td data-label="What’s in it" className="small">{p.includes.join(' · ') || p.tagline || '—'}</td>
@@ -252,7 +253,7 @@ function ResetToLatest({ t, onReset }: { t: ContractTemplate; onReset: (t: Contr
 function TemplateEditor({ value, onClose, onCopy }: { value: ContractTemplate | null; onClose: () => void; onCopy: (t: ContractTemplate) => void }) {
   const app = useApp();
   const [t, setT] = useState<ContractTemplate | null>(null);
-  const [part, setPart] = useState<'about' | 'process' | 'brief' | 'terms'>('about');
+  const [part, setPart] = useState<'about' | 'pricing' | 'process' | 'brief' | 'terms'>('about');
   if (value && (!t || t.id !== value.id)) {
     setT({ ...value });
     setPart('about');
@@ -269,6 +270,17 @@ function TemplateEditor({ value, onClose, onCopy }: { value: ContractTemplate | 
       title={`${t.name} · ${t.subtitle}`}
       footer={
         <>
+          <Button
+            variant="danger"
+            onClick={async () => {
+              if (!(await app.confirm({ title: `Delete ${t.name}?`, message: 'It won’t be offered for new contracts, and the prices made just for it are archived. Contracts already made from it keep working.', confirmLabel: 'Delete', tone: 'danger' }))) return;
+              const { contracts } = await deleteTemplate(t.id);
+              app.toast(`${t.name} deleted${contracts ? `. ${contracts} contract${contracts === 1 ? '' : 's'} made from it still open and print` : ''}.`, { tone: 'good' });
+              onClose();
+            }}
+          >
+            <Trash2 size={16} /> Delete
+          </Button>
           <Toggle id="te-active" checked={t.active === 1} onChange={(v) => setT({ ...t, active: v ? 1 : 0 })} label="Offer it" />
           <span className="grow" />
           <Button onClick={() => onCopy(t)} title="A copy you can rearrange and add your own blocks to; this template stays as it is">
@@ -294,6 +306,7 @@ function TemplateEditor({ value, onClose, onCopy }: { value: ContractTemplate | 
         onChange={setPart}
         options={[
           { value: 'about', label: 'About' },
+          { value: 'pricing', label: 'Pricing' },
           { value: 'process', label: 'Process' },
           { value: 'brief', label: 'Questionnaire & agreement' },
           { value: 'terms', label: 'Terms' },
@@ -325,19 +338,6 @@ function TemplateEditor({ value, onClose, onCopy }: { value: ContractTemplate | 
               <option value="any">Either (by client)</option>
             </Select>
           </Field>
-          <div className="field span-2">
-            <span className="label">Price list sections it offers</span>
-            <div className="chip-row">
-              {CATEGORIES.map((c) => {
-                const on = t.categories.includes(c);
-                return (
-                  <button key={c} type="button" className="chip" aria-pressed={on} onClick={() => setT({ ...t, categories: on ? t.categories.filter((x) => x !== c) : [...t.categories, c] })}>
-                    {c}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
           <Field label="This agreement covers" htmlFor="te-cov" className="span-2">
             <TextArea id="te-cov" rows={2} value={t.covers} onChange={(e) => setT({ ...t, covers: e.target.value })} />
           </Field>
@@ -345,6 +345,9 @@ function TemplateEditor({ value, onClose, onCopy }: { value: ContractTemplate | 
             <TextArea id="te-wel" rows={3} value={t.welcome} onChange={(e) => setT({ ...t, welcome: e.target.value })} />
           </Field>
         </div>
+      ) : null}
+      {part === 'pricing' ? (
+        <TemplatePricing templateId={t.id} templateName={t.name} categories={t.categories} onCategories={(next) => setT((prev) => (prev ? { ...prev, categories: next } : prev))} />
       ) : null}
       {part === 'process' ? (
         <div className="stack">

@@ -8,7 +8,8 @@ import { getSetting } from '../src/db/settings';
 import { runSetup } from '../src/services/setup';
 import { applyReschedule, createPost, decideApproval, deletePost, movePost, previewReschedule, requestApproval, saveIdea, scheduleIdea, setStatus } from '../src/services/content';
 import { launchCampaign, blankCampaign } from '../src/services/campaigns';
-import { newContract, newProposal, saveClient } from '../src/services/clients';
+import { newContract, newProposal, saveClient, savePackage } from '../src/services/clients';
+import { deleteTemplate, discardTemplatePrices, newTemplateContract } from '../src/services/documents';
 import { exportAll, mergeBackup, parseBackup } from '../src/services/backup';
 import { applyPlanner, previewPlanner, type PlannerOptions } from '../src/services/importPlanner';
 import { CAMPAIGN_TEMPLATES, planTemplatePosts } from '../src/domain/campaignTemplates';
@@ -136,6 +137,33 @@ describe('clients, proposals and contracts', () => {
     expect(c.fields.fee).toBe('₱4,500 a month');
     expect(c.fields['studio.signatory']).toContain('Joshua');
     expect(c.sections.length).toBeGreaterThanOrEqual(11);
+  });
+});
+
+describe('contract templates: their own prices, and deleting one', () => {
+  it('keeps contracts working after their template is deleted, and archives its own prices', async () => {
+    await setup();
+    const tpl = alive(await db.contractTemplates.toArray())[0];
+    const own = await savePackage({ name: 'Cafe starter', kind: 'design', price: 500000, category: 'Cafe packages', templateId: tpl.id });
+    expect(own.templateId).toBe(tpl.id);
+    const c = await newTemplateContract({ templateId: tpl.id });
+    const { contracts } = await deleteTemplate(tpl.id);
+    expect(contracts).toBe(1);
+    expect((await db.contractTemplates.get(tpl.id))?.deleted).toBe(1);
+    expect((await db.packages.get(own.id))?.active).toBe(0);
+    // The contract still finds its template: deleted records stay readable.
+    expect((await db.contractTemplates.get(c.templateId!))?.name).toBe(tpl.name);
+  });
+
+  it('archives the prices made for a template that was never saved', async () => {
+    await setup();
+    const kept = alive(await db.contractTemplates.toArray())[0];
+    const draft = await savePackage({ name: 'Menu board', kind: 'design', price: 150000, category: 'Cafe packages', templateId: 'tpl-never-saved' });
+    const mine = await savePackage({ name: 'Logo', kind: 'design', price: 300000, category: 'Mine', templateId: kept.id });
+    await discardTemplatePrices('tpl-never-saved');
+    await discardTemplatePrices(kept.id);
+    expect((await db.packages.get(draft.id))?.active).toBe(0);
+    expect((await db.packages.get(mine.id))?.active).toBe(1);
   });
 });
 

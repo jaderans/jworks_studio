@@ -327,6 +327,8 @@ export interface Package extends Syncable {
   turnaround?: string;
   /** Revision rounds included. */
   revisions?: number;
+  /** Made in a contract template's pricing for that template only: its own prices, kept off the rate card. */
+  templateId?: string;
 }
 
 export interface ProposalItem {

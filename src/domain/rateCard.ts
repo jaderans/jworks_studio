@@ -60,9 +60,9 @@ export interface RateCardSection {
   addOns: Package[];
 }
 
-/** The price list sections that print, in price-list order, with only the items chosen to show. */
+/** The price list sections that print, in price-list order, with only the items chosen to show (never a contract's own prices). */
 export function rateCardSections(packages: readonly Package[], s: Pick<RateCardSettings, 'sections' | 'hidden'>): RateCardSection[] {
-  const shown = packages.filter((p) => p.active === 1 && !p.deleted && !s.hidden.includes(p.id) && (!s.sections.length || s.sections.includes(sectionOf(p))));
+  const shown = packages.filter((p) => p.active === 1 && !p.deleted && !p.templateId && !s.hidden.includes(p.id) && (!s.sections.length || s.sections.includes(sectionOf(p))));
   const names = [...new Set(shown.map(sectionOf))].sort((a, b) => (CATEGORIES.indexOf(a) + 1 || 999) - (CATEGORIES.indexOf(b) + 1 || 999));
   const bySort = (a: Package, b: Package) => a.sort - b.sort || a.name.localeCompare(b.name);
   return names.map((name) => {

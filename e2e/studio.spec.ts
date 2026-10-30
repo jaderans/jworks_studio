@@ -329,9 +329,37 @@ test('build a contract from a blank slate, and download the rate card', async ({
   await borrow.getByRole('button', { name: 'All', exact: true }).click();
   await borrow.getByRole('button', { name: 'Add to my contract' }).click();
   await expect(b.locator('.builder-title b')).toHaveText(['Opening-day support', 'Terms and conditions']);
+  // Its own packages, in a category of its own.
+  await b.getByRole('button', { name: 'Add a block' }).click();
+  await page.getByRole('dialog', { name: 'Add a block' }).getByRole('button', { name: /^Packages & price/ }).click();
+  await b.getByRole('button', { name: 'New package in a new category' }).click();
+  const item = page.getByRole('dialog', { name: 'New' });
+  await expect(item.getByLabel('Price list section')).toHaveValue('Cafe launch kit packages');
+  await item.getByLabel('Name').fill('Opening bundle');
+  await item.getByLabel('Price', { exact: true }).fill('8500');
+  await item.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(b.getByText('Cafe launch kit packages')).toBeVisible();
+  await expect(b.getByText('This contract’s own')).toBeVisible();
   await pdf(page, () => b.getByRole('button', { name: 'Preview PDF' }).click(), /Cafe launch kit \(preview\)\.pdf/);
   await b.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText('Built in the contract builder')).toBeVisible();
+
+  // A contract from it, then the template is deleted: the contract still opens.
+  await page.goto('/#/docs/contracts');
+  await page.getByRole('button', { name: 'New contract' }).first().click();
+  await page.getByRole('radio', { name: /Cafe launch kit/ }).click();
+  await page.getByRole('button', { name: 'Make the contract' }).click();
+  await page.getByRole('dialog').first().getByRole('button', { name: 'Package & price', exact: true }).waitFor();
+  await page.keyboard.press('Escape');
+  await page.goto('/#/docs/templates');
+  await page.getByRole('button', { name: /Cafe launch kit/ }).click();
+  await page.getByRole('dialog', { name: 'Contract builder' }).getByRole('button', { name: 'Delete', exact: true }).click();
+  await page.getByRole('dialog').last().getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(page.getByText('Built in the contract builder')).toHaveCount(0);
+  await page.goto('/#/docs/contracts');
+  await page.getByText('Cafe launch kit').first().click();
+  await expect(page.getByRole('dialog').first().getByRole('button', { name: 'Package & price', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
 
   // The studio profile & rate card for an agency.
   await page.goto('/#/docs/prices');

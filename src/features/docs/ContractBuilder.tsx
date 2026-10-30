@@ -5,10 +5,10 @@ import { Badge, Button, Callout, IconButton, Toggle } from '../../components/ui'
 import { Field, Select, TextArea, TextInput } from '../../components/form';
 import { Dialog } from '../../components/Dialog';
 import { useContractTemplates } from '../../hooks/data';
-import { CATEGORIES } from '../../domain/packages';
+import { TemplatePricing } from './TemplatePricing';
 import { questionsOf } from '../../domain/questionnaire';
 import { BLOCK_INFO, BLOCK_KINDS, borrowFrom, moveBlock, newBlock, type BorrowParts, type TemplateDraft } from '../../domain/contractBlocks';
-import { saveTemplate } from '../../services/documents';
+import { deleteTemplate, discardTemplatePrices, saveTemplate } from '../../services/documents';
 import { getSetting } from '../../db/settings';
 import { db, alive } from '../../db/db';
 import { uid } from '../../lib/ids';
@@ -41,6 +41,13 @@ export function ContractBuilder({ value, onClose }: { value: TemplateDraft | nul
   if (!value || !t) return null;
   const blocks = t.blocks ?? [];
   const setBlocks = (next: ContractBlock[]) => setT({ ...t, blocks: next });
+  // Saving a price list item comes back after a wait: change only the categories of the latest draft.
+  const setCategories = (next: string[]) => setT((prev) => (prev ? { ...prev, categories: next } : prev));
+  // Closing without saving a new template archives the prices made for it.
+  const close = () => {
+    void discardTemplatePrices(t.id);
+    onClose();
+  };
   const setBlock = (id: string, patch: Partial<ContractBlock>) => setBlocks(blocks.map((b) => (b.id === id ? { ...b, ...patch } : b)));
   const add = (kind: ContractBlockKind) => {
     const b = newBlock(kind);
@@ -104,18 +111,31 @@ export function ContractBuilder({ value, onClose }: { value: TemplateDraft | nul
   return (
     <Dialog
       open
-      onClose={onClose}
+      onClose={close}
       size="xwide"
       fullPhone
       title="Contract builder"
       footer={
         <>
+          {t.createdAt ? (
+            <Button
+              variant="danger"
+              onClick={async () => {
+                if (!(await app.confirm({ title: `Delete ${t.name}?`, message: 'It won’t be offered for new contracts, and the prices made just for it are archived. Contracts already made from it keep working.', confirmLabel: 'Delete', tone: 'danger' }))) return;
+                const { contracts } = await deleteTemplate(t.id);
+                app.toast(`${t.name} deleted${contracts ? `. ${contracts} contract${contracts === 1 ? '' : 's'} made from it still open and print` : ''}.`, { tone: 'good' });
+                onClose();
+              }}
+            >
+              <Trash2 size={16} /> Delete
+            </Button>
+          ) : null}
           <Toggle id="cb-active" checked={t.active === 1} onChange={(v) => setT({ ...t, active: v ? 1 : 0 })} label="Offer it" />
           <span className="grow" />
           <Button onClick={preview} disabled={busy}>
             <Eye size={16} /> {busy ? 'Making…' : 'Preview PDF'}
           </Button>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button onClick={close}>Cancel</Button>
           <Button
             variant="primary"
             disabled={!t.name.trim()}
@@ -209,7 +229,7 @@ export function ContractBuilder({ value, onClose }: { value: TemplateDraft | nul
                     <Trash2 size={15} />
                   </IconButton>
                 </div>
-                {isOpen ? <div className="builder-body">{blockEditor(b, t, setT, (patch) => setBlock(b.id, patch))}</div> : null}
+                {isOpen ? <div className="builder-body">{blockEditor(b, t, setT, (patch) => setBlock(b.id, patch), setCategories)}</div> : null}
               </div>
             );
           })}
@@ -228,7 +248,7 @@ export function ContractBuilder({ value, onClose }: { value: TemplateDraft | nul
 }
 
 /** The fields under an opened block: the template's own text that the block prints. */
-function blockEditor(b: ContractBlock, t: TemplateDraft, setT: (t: TemplateDraft) => void, setBlock: (patch: Partial<ContractBlock>) => void) {
+function blockEditor(b: ContractBlock, t: TemplateDraft, setT: (t: TemplateDraft) => void, setBlock: (patch: Partial<ContractBlock>) => void, setCategories: (next: string[]) => void) {
   switch (b.kind) {
     case 'welcome':
       return (
@@ -291,28 +311,7 @@ function blockEditor(b: ContractBlock, t: TemplateDraft, setT: (t: TemplateDraft
     case 'packages':
       return (
         <div className="stack tight">
-          <span className="label">Price list sections it offers (their packages and add-ons print to tick)</span>
-          <div className="chip-row">
-            {CATEGORIES.map((c) => {
-              const on = t.categories.includes(c);
-              return (
-                <button
-                  key={c}
-                  type="button"
-                  className="chip"
-                  aria-pressed={on}
-                  onClick={() =>
-                    setT({
-                      ...t,
-                      categories: on ? t.categories.filter((x) => x !== c) : [...t.categories, c],
-                    })
-                  }
-                >
-                  {c}
-                </button>
-              );
-            })}
-          </div>
+          <TemplatePricing templateId={t.id} templateName={t.name} categories={t.categories} onCategories={setCategories} />
           <p className="tiny muted">With no sections, only the items added on the contract print, with the total.</p>
         </div>
       );

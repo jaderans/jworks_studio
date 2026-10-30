@@ -51,7 +51,7 @@ export function RateCardDialog({ open, onClose }: { open: boolean; onClose: () =
   const fileName = `${safeFileName(`${settingValue(rows, 'business').name || 'JoshWorks'} ${s.title || 'Rate Card'}${who ? ` - ${who}` : ''}`)}.pdf`;
   const shown = rateCardSections(packages, s);
   const itemCount = shown.reduce((a, x) => a + x.items.length + x.addOns.length, 0);
-  const allSections = [...new Set(packages.filter((p) => p.active === 1).map(sectionOf))].sort((a, b) => (CATEGORIES.indexOf(a) + 1 || 999) - (CATEGORIES.indexOf(b) + 1 || 999));
+  const allSections = [...new Set(packages.filter((p) => p.active === 1 && !p.templateId).map(sectionOf))].sort((a, b) => (CATEGORIES.indexOf(a) + 1 || 999) - (CATEGORIES.indexOf(b) + 1 || 999));
   const set = (patch: Partial<RateCardSettings>) => setS({ ...s, ...patch });
   const text = (key: 'about' | 'services' | 'process' | 'why' | 'credentials' | 'clients' | 'notes', label: string, height: number, hint?: string) => (
     <Field label={label} htmlFor={`rc-${key}`} hint={hint}>
@@ -296,7 +296,7 @@ export function RateCardDialog({ open, onClose }: { open: boolean; onClose: () =
           {allSections
             .filter((c) => !s.sections.length || s.sections.includes(c))
             .map((c) => {
-              const list = packages.filter((p) => p.active === 1 && sectionOf(p) === c);
+              const list = packages.filter((p) => p.active === 1 && !p.templateId && sectionOf(p) === c);
               const hiddenHere = list.filter((p) => s.hidden.includes(p.id)).length;
               return (
                 <details key={c} className="disclosure">

@@ -9,7 +9,7 @@ import { Field, MoneyInput, NumberInput, Select, TextArea, TextInput } from '../
 import { QuestionnaireForm } from '../../components/QuestionnaireForm';
 import { Dialog } from '../../components/Dialog';
 import { PriceLinesEditor, TotalsCard } from '../../components/PriceLines';
-import { useClients, useContracts, useContractTemplates, useJobs, usePackages, useSettingRows } from '../../hooks/data';
+import { useClients, useAllContractTemplates, useContracts, useContractTemplates, useJobs, usePackages, useSettingRows } from '../../hooks/data';
 import { settingValue } from '../../db/settings';
 import { CONTRACT_FIELD_GROUPS } from '../../domain/contractTemplates';
 import { RUSH_ID, RUSH_LABEL, completionDate, contractAudience, deliverablesOf, isRushLine, planMilestones, projectDays } from '../../domain/contractPlan';
@@ -37,7 +37,8 @@ export function ContractsTab() {
   const [params, setParams] = useSearchParams();
   const contracts = useContracts();
   const clients = useClients() ?? [];
-  const templates = useContractTemplates() ?? [];
+  // Deleted templates too, so contracts made from them still open.
+  const templates = useAllContractTemplates() ?? [];
   const [open, setOpen] = useState<string | null>(null);
   const [picking, setPicking] = useState<{ clientId: string | null; jobId: string | null; proposalId: string | null } | null>(null);
   const [q, setQ] = useState('');
@@ -256,7 +257,8 @@ function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: (
   const app = useApp();
   const navigate = useNavigate();
   const contracts = useContracts() ?? [];
-  const templates = useContractTemplates() ?? [];
+  // Deleted templates too, so contracts made from them still open.
+  const templates = useAllContractTemplates() ?? [];
   const packages = usePackages() ?? [];
   const clients = useClients() ?? [];
   const jobs = useJobs() ?? [];

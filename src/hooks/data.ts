@@ -29,6 +29,8 @@ export const usePackages = () => useLiveQuery(async () => alive(await db.package
 export const useProposals = () => useLiveQuery(async () => alive(await db.proposals.toArray()).sort((a, b) => b.createdAt - a.createdAt), []);
 export const useContracts = () => useLiveQuery(async () => alive(await db.contracts.toArray()).sort((a, b) => b.createdAt - a.createdAt), []);
 export const useContractTemplates = () => useLiveQuery(async () => alive(await db.contractTemplates.toArray()).sort((a, b) => a.sort - b.sort), []);
+/** Deleted templates too: contracts made from a template that was later deleted still open and print. */
+export const useAllContractTemplates = () => useLiveQuery(() => db.contractTemplates.toArray(), []);
 
 /** Jobs with their progress, newest number first. */
 export const useJobs = () =>
