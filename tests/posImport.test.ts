@@ -7,7 +7,7 @@ import { setActor, setWriterDevice } from '../src/db/write';
 import { runSetup } from '../src/services/setup';
 import { saveMember } from '../src/services/team';
 import { payoutSummary, sharesOfNet } from '../src/domain/money';
-import { defaultChoices, exactPct, parsePosFile, posImportState, type PosEventFeed, type PosOrderFeed } from '../src/domain/posFeed';
+import { defaultChoices, exactPct, parsePosFile, planEventImport, posImportState, type PosEventFeed, type PosOrderFeed } from '../src/domain/posFeed';
 import { applyEventImport, applyOrderImport, readDevicePosFeeds } from '../src/services/importPos';
 
 beforeEach(async () => {
@@ -135,6 +135,36 @@ describe('booth events from JoshWorks POS', () => {
     expect(alive(await db.payments.toArray()).reduce((a, p) => a + p.amount, 0)).toBe(589_500);
     const earned = payoutSummary(alive(await db.earnings.toArray()), []).get(ian.id)?.earned;
     expect(earned).toBe(45_700);
+  });
+
+  it('costs come item by item, each reusable item with its share and how far it’s paid off', async () => {
+    await setup();
+    const members = alive(await db.members.toArray());
+    // First sent by an older POS (totals only), then again item by item.
+    await applyEventImport(event(), defaultChoices(event(), members));
+    const spend: PosEventFeed['spend'] = [
+      { id: 'fee', type: 'booth_fee', name: 'Booth fee', qty: 1, unitCost: 200_000, amount: 200_000 },
+      { id: 'tarp', type: 'consumable', name: 'Tarp', qty: 1, unitCost: 8_475, amount: 8_475 },
+      { id: 'fence', type: 'asset', name: 'Pet Fence', qty: 8, unitCost: 3_900, amount: 5_200, total: 31_200, of: 6, index: 2, paidOff: 10_400, boughtFor: 'Hilway Pop-Up Market' },
+      { id: 'hooks', type: 'asset', name: 'Screen Hooks', qty: 1, unitCost: 9_152, amount: 1_527, total: 9_152, of: 6, index: 6, paidOff: 9_152, boughtFor: 'Hilway Pop-Up Market' },
+    ];
+    const feed = event({ supplies: 8_475 + 5_200 + 1_527, spend });
+    const plan = planEventImport(feed, defaultChoices(feed, members));
+    expect(plan.warnings).toEqual([]);
+    expect(plan.expenses.find((x) => x.id === 'pos-ev1-spend-hooks')?.payoff).toEqual({ index: 6, of: 6, paidOff: 9_152, total: 9_152 });
+    await applyEventImport(feed, defaultChoices(feed, members));
+
+    const expenses = alive(await db.expenses.toArray()).filter((x) => x.jobId === 'pos-ev1');
+    const byId = new Map(expenses.map((x) => [x.id, x]));
+    expect(byId.has('pos-ev1-supplies')).toBe(false);
+    expect(byId.has('pos-ev1-booth')).toBe(false);
+    expect(byId.get('pos-ev1-spend-fee')).toMatchObject({ category: 'Fees & permits', amount: 200_000, note: 'Booth fee, Komiket Iloilo' });
+    expect(byId.get('pos-ev1-spend-tarp')).toMatchObject({ category: 'Other', amount: 8_475 });
+    expect(byId.get('pos-ev1-spend-fence')).toMatchObject({ category: 'Equipment', amount: 5_200, note: 'Pet Fence (reusable, bought for Hilway Pop-Up Market): event 2 of 6, ₱104 of ₱312 paid off, Komiket Iloilo' });
+    expect(byId.get('pos-ev1-spend-hooks')?.note).toContain('event 6 of 6, paid off');
+    expect('payoff' in (byId.get('pos-ev1-spend-hooks') ?? {})).toBe(false);
+    // Lines that don't add up to the totals get a warning.
+    expect(planEventImport(event({ spend }), defaultChoices(event(), members)).warnings.join(' ')).toMatch(/don’t add up/);
   });
 
   it('a commission order becomes a client job with its deposit, then its final payment', async () => {

@@ -1,4 +1,4 @@
-import { sum, type Cents } from '../lib/money';
+import { peso, sum, type Cents } from '../lib/money';
 import { isoDate } from '../lib/time';
 import { sharesOfNet } from './money';
 import type { JobStatus, Member, PayMethod, Payment, SplitShare } from '../db/types';
@@ -33,6 +33,23 @@ export interface PosPerson {
   method: string;
 }
 
+/** One cost counted against the event (newer POS versions; JoshWorks POS StudioFeedSpend). */
+export interface PosSpendLine {
+  id: string;
+  type: 'booth_fee' | 'consumable' | 'asset';
+  name: string;
+  qty: number;
+  unitCost: Cents;
+  /** Counted against this event (a reusable asset: this event's share). */
+  amount: Cents;
+  /** Reusable assets: what it cost, how many events share it, this event's place, paid off so far, the event it was bought for. */
+  total?: Cents;
+  of?: number;
+  index?: number;
+  paidOff?: Cents;
+  boughtFor?: string;
+}
+
 export interface PosEventFeed {
   type: 'event';
   v: 1;
@@ -52,6 +69,8 @@ export interface PosEventFeed {
   cogsMissing: number;
   boothFee: Cents;
   supplies: Cents;
+  /** The booth fee and supplies above, item by item. Older POS versions send only the totals. */
+  spend?: PosSpendLine[];
   people: PosPerson[];
   tradingProfit: Cents;
   joshworksNet: Cents;
@@ -215,6 +234,13 @@ export interface PlannedExpense {
   category: string;
   vendor: string;
   note: string;
+  /** A reusable asset's share: how far it is paid off (shown before importing; not stored). */
+  payoff?: { index: number; of: number; paidOff: Cents; total: Cents };
+}
+
+/** "event 2 of 6, ₱104 of ₱312 paid off", or "event 6 of 6, paid off". */
+export function payoffText(p: { index: number; of: number; paidOff: Cents; total: Cents }): string {
+  return p.paidOff >= p.total ? `event ${p.index} of ${p.of}, paid off` : `event ${p.index} of ${p.of}, ${peso(p.paidOff)} of ${peso(p.total)} paid off`;
 }
 export interface PlannedPayout {
   id: string;
@@ -247,11 +273,25 @@ export function planEventImport(feed: PosEventFeed, choices: PeopleChoices): Eve
   const shares = new Map<string, Cents>();
   const paid = new Map<string, { amount: Cents; at: number; method: string }>();
   const expenses: PlannedExpense[] = [];
-  const cost = (id: string, amount: Cents, category: string, vendor: string, note: string) => {
-    if (amount > 0) expenses.push({ id: `${pre}${id}`, amount, date, category, vendor, note });
+  const cost = (id: string, amount: Cents, category: string, vendor: string, note: string, payoff?: PlannedExpense['payoff']) => {
+    if (amount > 0) expenses.push({ id: `${pre}${id}`, amount, date, category, vendor, note, ...(payoff ? { payoff } : {}) });
   };
-  cost('booth', feed.boothFee, 'Fees & permits', feed.venue || feed.name, `Booth fee, ${feed.name}`);
-  cost('supplies', feed.supplies, 'Other', feed.name, 'Booth supplies (used up, plus this event’s share of stands and displays)');
+  if (feed.spend?.length) {
+    // Item by item: the booth fee, each used-up item, and this event's share of each reusable asset.
+    for (const l of feed.spend) {
+      if (l.type === 'booth_fee') cost(`spend-${l.id}`, l.amount, 'Fees & permits', feed.venue || feed.name, `${l.name || 'Booth fee'}, ${feed.name}`);
+      else if (l.type === 'consumable') cost(`spend-${l.id}`, l.amount, 'Other', feed.name, `${l.name}${l.qty !== 1 ? ` (${l.qty} × ${peso(l.unitCost)})` : ''}, used up at the booth, ${feed.name}`);
+      else {
+        const payoff = l.of && l.index && l.total ? { index: l.index, of: l.of, paidOff: l.paidOff ?? l.amount, total: l.total } : undefined;
+        const bought = l.index && l.index > 1 && l.boughtFor ? `, bought for ${l.boughtFor}` : '';
+        cost(`spend-${l.id}`, l.amount, 'Equipment', feed.name, `${l.name} (reusable${bought})${payoff ? `: ${payoffText(payoff)}` : ''}, ${feed.name}`, payoff);
+      }
+    }
+    if (sum(feed.spend.map((l) => l.amount)) !== feed.boothFee + feed.supplies) warnings.push('The cost lines don’t add up to the booth fee and supplies; check the event’s Booth spend in the POS.');
+  } else {
+    cost('booth', feed.boothFee, 'Fees & permits', feed.venue || feed.name, `Booth fee, ${feed.name}`);
+    cost('supplies', feed.supplies, 'Other', feed.name, 'Booth supplies (used up, plus this event’s share of stands and displays)');
+  }
   cost('cogs', feed.cogs, 'Printing', feed.name, 'Production cost of what sold (materials, labor)');
 
   for (const p of feed.people) {

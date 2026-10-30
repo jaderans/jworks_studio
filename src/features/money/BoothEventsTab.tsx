@@ -317,6 +317,12 @@ function EventDialog({ feed, update, onClose }: { feed: PosEventFeed; update: bo
                 <li key={x.id} className="row between">
                   <span>
                     {x.note.replace(`, ${feed.name}`, '')} <span className="muted small">· {x.category}</span>
+                    {x.payoff && x.payoff.paidOff >= x.payoff.total ? (
+                      <>
+                        {' '}
+                        <Badge tone="good">Paid off</Badge>
+                      </>
+                    ) : null}
                   </span>
                   <b>{peso(x.amount)}</b>
                 </li>

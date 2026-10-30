@@ -143,7 +143,9 @@ export async function applyEventImport(feed: PosEventFeed, choices: PeopleChoice
   });
 
   await writePayments(id, null, plan.payments);
-  for (const x of plan.expenses) {
+  for (const planned of plan.expenses) {
+    // The payoff is shown before importing; the note carries it on the expense.
+    const { payoff, ...x } = planned;
     const prev = await db.expenses.get(x.id);
     await save(db.expenses, { ...(prev ?? build<Expense>({ id: x.id, date: x.date, category: x.category, amount: 0, vendor: '', jobId: id, note: '' })), ...x, jobId: id, deleted: 0 });
   }
