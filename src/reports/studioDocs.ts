@@ -5,12 +5,13 @@ import { invoiceTotals, type MonthRow } from '../domain/money';
 import { AUTHORITY_STATEMENT, BINDING, CLIENT_ACK, DESIGNER_ACK, OUR_GOAL, WHAT_WE_DO } from '../domain/contractTemplates';
 import { UNIT_LABEL } from '../domain/packages';
 import { fillTemplate } from '../domain/contract';
-import { contractAudience, deliverablesOf } from '../domain/contractPlan';
+import { contractAudience, deliverablesOf, isRushLine } from '../domain/contractPlan';
 import { answerFor, parseQuestionnaire } from '../domain/questionnaire';
+import { blocksOf } from '../domain/contractBlocks';
 import { peso } from '../lib/money';
 import { fmtDateTime, fmtIsoDate, fmtMonth, isoDate } from '../lib/time';
 import type {
-  BusinessSettings, Contract, ContractSection, ContractTemplate, Earning, Invoice, Member, MoneySettings, Package, Payment, Payout, PayoutAccount, Proposal, RateSettings, StudioPayMethod,
+  BusinessSettings, Contract, ContractBlock, ContractBlockKind, ContractSection, ContractTemplate, Earning, Invoice, Member, MoneySettings, Package, Payment, Payout, PayoutAccount, Proposal, ProposalItem, RateSettings, StudioPayMethod,
 } from '../db/types';
 
 /**
@@ -401,7 +402,31 @@ function termsBlock(sections: ContractSection[], fields: Record<string, string>,
   ];
 }
 
-/** A v1.0 contract, filled in: the studio's own contract layout, on the matching letterhead. */
+/** "Your own text" in a built contract: a heading, paragraphs, and lines starting "- " as bullets. */
+function textBlock(b: ContractBlock, fields: Record<string, string>): Content[] {
+  const out: Content[] = [];
+  let bullets: string[] = [];
+  const flush = () => {
+    if (bullets.length) out.push({ ul: bullets, fontSize: 9, lineHeight: 1.15, margin: [0, 0, 0, 4] } as Content);
+    bullets = [];
+  };
+  for (const raw of fillTemplate(b.body ?? '', fields).split('\n')) {
+    const line = raw.trim();
+    if (!line) flush();
+    else if (/^[-•*]\s+/.test(line)) bullets.push(line.replace(/^[-•*]\s+/, ''));
+    else {
+      flush();
+      out.push({ text: line, fontSize: 9, margin: [0, 0, 0, 4] });
+    }
+  }
+  flush();
+  const title = b.title?.trim();
+  return title ? [sectionTitle(title), ...out] : out;
+}
+
+const startPage = (node: Content): Content => ({ ...(typeof node === 'object' && !Array.isArray(node) ? node : { stack: [node] }), pageBreak: 'before' }) as Content;
+
+/** A v1.0 contract, filled in: the studio's own contract layout (or the blocks built for it), on the matching letterhead. */
 export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplate, ctx: ContractCtx) {
   const f = c.fields;
   const items = c.items ?? [];
@@ -413,12 +438,16 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
   const mainCats = tpl.categories.filter((x) => x !== 'Add-ons' && x !== 'Ownership');
   const pkgs = ctx.packages.filter((p) => p.active === 1 && p.kind !== 'addon' && mainCats.includes(p.category ?? ''));
   const addOns = ctx.packages.filter((p) => p.active === 1 && p.kind === 'addon' && tpl.categories.includes(p.category ?? ''));
+  // The contract's own lines win over the price list: an edited name or price prints as edited.
+  const lineOf = (id: string) => items.find((i) => i.packageId === id);
+  const linePrice = (l: ProposalItem) => (l.unit === 'percent' ? `+${l.unitPrice / 100}% of package price` : `${peso(l.unitPrice)} ${UNIT_LABEL[l.unit]}`.trim());
+  const rushLine = items.find(isRushLine);
   const priceOf = (p: Package) => (p.unit === 'percent' ? `+${p.price / 100}% of package price` : `${peso(audience === 'student' && p.studentPrice ? p.studentPrice : p.price)} ${UNIT_LABEL[p.unit]}`.trim());
   const made = f.date || new Date(c.createdAt).toISOString().slice(0, 10);
   const dateText = (iso?: string) => (iso ? fmtIsoDate(iso) : '');
   const label = (text: string) => ({ text, bold: true, fontSize: 8.5 });
 
-  const content: Content[] = [
+  const header: Content[] = [
     { text: 'JOSHWORKS', font: 'Sora', fontSize: 22, color: INK, alignment: 'center' },
     { text: c.title || tpl.name, font: 'Sora', fontSize: 14, color: TEAL, alignment: 'center' },
     { text: tpl.tagline, style: 'muted', alignment: 'center', margin: [0, 0, 0, 8] },
@@ -435,14 +464,21 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
       layout: gridLayout,
       margin: [0, 0, 0, 10],
     } as Content,
+  ];
+
+  const welcome = (): Content[] => [
     sectionTitle('Welcome to JoshWorks'),
-    { text: tpl.welcome, fontSize: 9, margin: [0, 0, 0, 4] },
+    ...(tpl.welcome.trim() ? [{ text: tpl.welcome, fontSize: 9, margin: [0, 0, 0, 4] } as Content] : []),
     { text: [{ text: 'What We Do: ', bold: true }, WHAT_WE_DO], fontSize: 9, margin: [0, 0, 0, 4] },
     { text: [{ text: 'Our Goal: ', bold: true }, OUR_GOAL], fontSize: 9, margin: [0, 0, 0, 4] },
-    { text: [{ text: 'This Agreement Covers: ', bold: true }, tpl.covers], fontSize: 9, margin: [0, 0, 0, 4] },
+    ...(tpl.covers.trim() ? [{ text: [{ text: 'This Agreement Covers: ', bold: true }, tpl.covers], fontSize: 9, margin: [0, 0, 0, 4] } as Content] : []),
     ...(f.scope?.trim() ? [{ text: [{ text: 'This Project: ', bold: true }, f.scope.trim()], fontSize: 9, margin: [0, 0, 0, 4] } as Content] : []),
-    sectionTitle('Our process — project phases'),
-    {
+  ];
+  const process = (): Content[] =>
+    tpl.phases.length
+      ? [
+          sectionTitle('Our process — project phases'),
+          {
       table: {
         dontBreakRows: true,
         widths: [46, '*'],
@@ -454,7 +490,10 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
       layout: gridLayout,
       margin: [0, 0, 0, 4],
     } as Content,
-    ...(tpl.phasesNote ? [{ text: tpl.phasesNote, style: 'muted' } as Content] : []),
+          ...(tpl.phasesNote ? [{ text: tpl.phasesNote, style: 'muted' } as Content] : []),
+        ]
+      : [];
+  const client = (): Content[] => [
     sectionTitle('Client information'),
     {
       table: {
@@ -474,14 +513,17 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
     } as Content,
   ];
 
+  const pricing = (): Content[] => {
+  const content: Content[] = [];
   if (pkgs.length) {
     content.push(sectionTitle(`${mainCats[0] ?? 'Package'} package selection`), { text: 'Selected package marked below.', style: 'muted', margin: [0, 0, 0, 4] });
     const cells: TableCell[] = pkgs.map((p) => {
       const on = chosen.has(p.id);
+      const line = lineOf(p.id);
       return {
         stack: [
-          { columns: [box(on, ''), { text: p.name, bold: true, color: on ? TEAL : INK }], columnGap: 2 },
-          { text: priceOf(p), bold: true, margin: [0, 2, 0, 2] },
+          { columns: [{ ...(box(on, '') as object), width: 12 } as Content, { text: line?.label.trim() || p.name, bold: true, color: on ? TEAL : INK, width: '*' }], columnGap: 2 },
+          { text: line ? linePrice(line) : priceOf(p), bold: true, margin: [0, 2, 0, 2] },
           ...(p.includes.length ? [{ ul: p.includes, fontSize: 8 }] : []),
           ...(p.revisions || p.turnaround ? [{ text: [p.revisions ? `Revisions: ${p.revisions}` : '', p.turnaround ? `  |  Turnaround: ${p.turnaround}` : ''].join(''), fontSize: 7.5, color: MUTED, margin: [0, 2, 0, 0] }] : []),
         ],
@@ -501,7 +543,10 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
       table: {
         dontBreakRows: true,
         widths: ['*', 130],
-        body: addOns.map((a) => [box(chosen.has(a.id), `${a.name}${qtyOf(a.id) > 1 ? ` × ${qtyOf(a.id)}` : ''}`), { text: priceOf(a), fontSize: 8.5 }]) as TableCell[][],
+        body: addOns.map((a) => {
+          const line = lineOf(a.id);
+          return [box(!!line, `${line?.label.trim() || a.name}${qtyOf(a.id) > 1 ? ` × ${qtyOf(a.id)}` : ''}`), { text: line ? linePrice(line) : priceOf(a), fontSize: 8.5 }];
+        }) as TableCell[][],
       },
       layout: gridLayout,
       margin: [0, 0, 0, 6],
@@ -529,10 +574,14 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
     layout: gridLayout,
     margin: [0, 6, 0, 6],
   } as Content);
+  return content;
+  };
 
   // What the client receives and by when.
   const deliverables = deliverablesOf(items, ctx.packages);
   const milestones = (c.milestones ?? []).filter((m) => m.title.trim());
+  const schedule = (): Content[] => {
+  const content: Content[] = [];
   if (deliverables.length || milestones.length) {
     content.push(sectionTitle('Deliverables & milestones'));
     if (deliverables.length) content.push({ text: 'You will receive:', bold: true, fontSize: 8.5, margin: [0, 0, 0, 2] }, { ul: deliverables, fontSize: 8.5, margin: [0, 0, 0, 6] } as Content);
@@ -552,16 +601,18 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
       } as Content);
     content.push({ text: 'Dates assume the down payment and complete materials arrive on the start date, and replies within the agreed time.', style: 'muted' });
   }
+  return content;
+  };
 
-  if (tpl.brief.length) content.push(...questionnaireBlock(tpl.briefTitle, tpl.brief, c.brief));
-
-  // Agreement, schedule and signatures share one page; where to pay (with the QR codes) follows.
+  // In the classic order, agreement, schedule and signatures share one page after the terms; where to pay (with the QR codes) follows.
   const tight = { ...gridLayout, paddingTop: () => 3, paddingBottom: () => 3 };
-  const afterTerms: Content[] = [
-    { text: 'CLIENT AGREEMENT STATEMENT', style: 'section', pageBreak: 'before' },
+  const agreement = (): Content[] => [
+    { text: 'CLIENT AGREEMENT STATEMENT', style: 'section' },
     { text: [{ text: 'By signing below, I, ' }, { text: blank(f.signer || f['client.contact']), bold: true }, { text: ', acknowledge and agree to the following:' }], fontSize: 9, margin: [0, 0, 0, 4] },
-    { ul: tpl.agreement.map((a) => ({ text: a, fontSize: 8.2 })), lineHeight: 1.12, margin: [0, 0, 0, 4] } as Content,
+    ...(tpl.agreement.length ? [{ ul: tpl.agreement.map((a) => ({ text: a, fontSize: 8.2 })), lineHeight: 1.12, margin: [0, 0, 0, 4] } as Content] : []),
     { text: AUTHORITY_STATEMENT, bold: true, fontSize: 8.2, margin: [0, 0, 0, 4] },
+  ];
+  const timeline = (): Content[] => [
     sectionTitle('Project timeline & payment schedule'),
     {
       table: {
@@ -569,7 +620,12 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
         widths: [150, '*', 110, '*'],
         body: [
           [label('Project Start Date:'), { text: dateText(f.startDate) }, label('Expected Completion:'), { text: dateText(f.endDate) }],
-          [label('Rush Service (+25% of package)?'), { columns: [box(!!c.rush, 'Yes'), box(!c.rush, 'No')], columnGap: 8 }, label('Payment Method:'), { text: f.paymentMethod || '' }],
+          [
+            label(`Rush Service (+${rushLine?.unit === 'percent' ? rushLine.unitPrice / 100 : 25}% of package)?`),
+            { stack: [{ columns: [box(!!c.rush, 'Yes'), box(!c.rush, 'No')], columnGap: 8 }, ...(c.rush && rushLine ? [{ text: rushLine.label, fontSize: 7.5, color: MUTED, margin: [0, 2, 0, 0] }] : [])] },
+            label('Payment Method:'),
+            { text: f.paymentMethod || '' },
+          ],
           [label('Initial Payment Due:'), { text: `${peso(down)} (upon signing)` }, label('Final Payment Due:'), { text: `${peso(totals.net - down)} (before file delivery)` }],
           [
             label('Payment Received:'),
@@ -586,6 +642,8 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
       layout: tight,
       margin: [0, 0, 0, 4],
     } as Content,
+  ];
+  const communication = (): Content[] => [
     sectionTitle('Communication & delivery'),
     {
       table: {
@@ -600,6 +658,8 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
       layout: tight,
       margin: [0, 0, 0, 4],
     } as Content,
+  ];
+  const signatures = (): Content[] => [
     {
       unbreakable: true,
       stack: [
@@ -614,11 +674,40 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
         { text: BINDING, style: 'muted', margin: [0, 10, 0, 0] },
       ],
     } as Content,
-    ...paymentDetails(ctx.payMethods, ctx.business.paymentDetails),
   ];
 
-  const doc = (size: number, twoCols: boolean) =>
-    frame({ title: `${c.title || tpl.name} ${c.number}`, business: ctx.business.name, footerNote: c.number, letterhead: { frame: c.frame ?? tpl.frame } }, [...content, ...termsBlock(c.sections, f, size, twoCols), ...afterTerms]);
+  const parts: Record<Exclude<ContractBlockKind, 'terms' | 'text' | 'pagebreak'>, () => Content[]> = {
+    welcome,
+    process,
+    client,
+    packages: pricing,
+    deliverables: schedule,
+    questionnaire: () => (tpl.brief.length ? questionnaireBlock(tpl.briefTitle, tpl.brief, c.brief) : []),
+    agreement,
+    schedule: timeline,
+    communication,
+    signatures,
+    payment: () => paymentDetails(ctx.payMethods, ctx.business.paymentDetails),
+  };
+  const blocks = blocksOf(tpl);
+  const hasTerms = blocks.some((b) => b.kind === 'terms') && c.sections.some((s) => s.on);
+  const doc = (size: number, twoCols: boolean) => {
+    const content: Content[] = [...header];
+    // The terms sit on a page of their own; a page break block starts the next part on a new page.
+    let breakNext = false;
+    for (const b of blocks) {
+      if (b.kind === 'pagebreak') {
+        breakNext = content.length > header.length;
+        continue;
+      }
+      const part = b.kind === 'terms' ? (hasTerms ? termsBlock(c.sections, f, size, twoCols) : []) : b.kind === 'text' ? textBlock(b, f) : parts[b.kind]();
+      if (!part.length) continue;
+      content.push(...(breakNext ? [startPage(part[0]), ...part.slice(1)] : part));
+      breakNext = b.kind === 'terms';
+    }
+    return frame({ title: `${c.title || tpl.name} ${c.number}`, business: ctx.business.name, footerNote: c.number, letterhead: { frame: c.frame ?? tpl.frame } }, content);
+  };
+  if (!hasTerms) return doc(8.5, false);
   // The terms always fit on one page: try the house size first, then tighter, then two columns.
   for (const [size, two] of [[8.5, false], [8, false], [7.5, false], [8, true], [7.5, true]] as [number, boolean][]) {
     const d = await doc(size, two);

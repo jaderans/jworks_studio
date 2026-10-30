@@ -23,6 +23,12 @@ export function turnaroundDays(text: string | undefined): number | null {
 /** Rush service promises 3–5 days. */
 export const RUSH_DAYS = 5;
 
+/** The rush add-on on the price list (+25% of the package). */
+export const RUSH_ID = 'cat-add-ons-rush-3-5-day-turnaround';
+export const RUSH_LABEL = 'Rush (3–5 day turnaround)';
+/** A contract's rush line, also after its name was edited (e.g. "Rush (1–2 week turnaround)"). */
+export const isRushLine = (i: Pick<ProposalItem, 'packageId' | 'label' | 'unit'>) => i.packageId === RUSH_ID || (i.unit === 'percent' && /^rush\b/i.test(i.label.trim()));
+
 /** The longest turnaround among the chosen packages (add-ons don't count). */
 export function projectDays(items: readonly ProposalItem[], packages: readonly Package[], rush = false): number | null {
   const byId = new Map(packages.map((p) => [p.id, p]));
@@ -31,9 +37,12 @@ export function projectDays(items: readonly ProposalItem[], packages: readonly P
     .filter((p): p is Package => !!p && p.kind !== 'addon')
     .map((p) => turnaroundDays(p.turnaround))
     .filter((d): d is number => d !== null);
-  if (!days.length) return rush ? RUSH_DAYS : null;
+  // The rush line's own wording sets its speed: "Rush (1–2 week turnaround)" is 14 days.
+  const rushLine = items.find(isRushLine);
+  const rushDays = (rushLine && turnaroundDays(rushLine.label)) || RUSH_DAYS;
+  if (!days.length) return rush ? rushDays : null;
   const longest = Math.max(...days);
-  return rush ? Math.min(longest, RUSH_DAYS) : longest;
+  return rush ? Math.min(longest, rushDays) : longest;
 }
 
 export function completionDate(start: string, items: readonly ProposalItem[], packages: readonly Package[], rush = false): string {

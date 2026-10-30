@@ -311,3 +311,35 @@ test('client link pages: preview to sign, and a broken link', async ({ page }) =
   await expect(page.getByRole('heading', { name: /This link doesn’t work/ })).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('build a contract from a blank slate, and download the rate card', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-21T10:00:00+08:00') });
+  const errors = watchErrors(page);
+  await freshSetup(page);
+  await page.goto('/#/docs/templates');
+  await page.getByRole('button', { name: 'Build a new contract' }).click();
+  const b = page.getByRole('dialog', { name: 'Contract builder' });
+  await b.getByLabel('Contract name').fill('Cafe launch kit');
+  await b.getByRole('button', { name: 'Add a block' }).click();
+  await page.getByRole('dialog', { name: 'Add a block' }).getByRole('button', { name: /^Your own text/ }).click();
+  await b.getByLabel('Heading', { exact: true }).fill('Opening-day support');
+  await b.getByRole('button', { name: 'Borrow from a template' }).click();
+  const borrow = page.getByRole('dialog', { name: 'Borrow from a template' });
+  await borrow.getByLabel('Template').selectOption({ index: 1 });
+  await borrow.getByRole('button', { name: 'All', exact: true }).click();
+  await borrow.getByRole('button', { name: 'Add to my contract' }).click();
+  await expect(b.locator('.builder-title b')).toHaveText(['Opening-day support', 'Terms and conditions']);
+  await pdf(page, () => b.getByRole('button', { name: 'Preview PDF' }).click(), /Cafe launch kit \(preview\)\.pdf/);
+  await b.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Built in the contract builder')).toBeVisible();
+
+  // The studio profile & rate card for an agency.
+  await page.goto('/#/docs/prices');
+  await page.getByRole('button', { name: 'Rate card PDF' }).click();
+  const rc = page.getByRole('dialog', { name: 'Studio profile & rate card' });
+  await rc.getByLabel('Prepared for').fill('Sample Agency');
+  await rc.getByRole('button', { name: /^Price list/ }).click();
+  await rc.getByRole('button', { name: 'Both', exact: true }).click();
+  await pdf(page, () => rc.getByRole('button', { name: 'Download PDF' }).click(), /Rate Card.*Sample Agency\.pdf/);
+  expect(errors).toEqual([]);
+});

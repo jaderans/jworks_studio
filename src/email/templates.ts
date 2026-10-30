@@ -221,6 +221,22 @@ export function quoteEmail(b: BusinessSettings, o: { clientName: string; number:
   });
 }
 
+/** The studio profile & rate card, sent to a client or agency that asked for "all your rates". */
+export function rateCardEmail(b: BusinessSettings, o: { name: string; company: string; validUntil: string; portfolioUrl?: string; confidential: boolean }): EmailContent {
+  const studio = b.name || 'JoshWorks';
+  const url = o.portfolioUrl?.trim();
+  return build(b, `${studio} studio profile & rate card${o.company ? ` for ${o.company}` : ''}`, {
+    preheader: `Our services, process and rates, valid until ${fmtIsoDate(o.validUntil)}.`,
+    heading: 'Our studio profile & rate card',
+    paragraphs: [
+      `Hi ${esc(o.name || 'there')}, thank you for your interest in ${esc(studio)}. Attached is our studio profile and rate card: who we are, what we do, how we work and our current rates.`,
+      'These are baseline rates. Send us the scope and timeline of a project, and we’ll reply with an exact quote.',
+    ],
+    ...(url ? { button: { label: 'See our portfolio', url: /^https?:\/\//i.test(url) ? url : `https://${url}` } } : {}),
+    note: `The rates are valid until ${fmtIsoDate(o.validUntil)}.${o.confidential ? ' They are shared for your internal reference only.' : ''} Reply to this email anytime; we usually answer within a business day.`,
+  });
+}
+
 export function contractEmail(
   b: BusinessSettings,
   o: { clientName: string; number: string; title: string; total: number; down: number; signUrl?: string },

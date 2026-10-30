@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router';
-import { Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Blocks, Copy, FileDown, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { latestTemplate, upgradeTemplates } from '../../services/catalog';
 import { questionsOf } from '../../domain/questionnaire';
 import { FilterBar } from '../../components/FilterBar';
@@ -17,6 +17,9 @@ import { PackageDialog, Rates } from '../packages/PackagesPage';
 import { QuotesTab } from './QuotesTab';
 import { ContractsTab } from './ContractsTab';
 import { CatalogBanner } from './CatalogBanner';
+import { ContractBuilder } from './ContractBuilder';
+import { RateCardDialog } from './RateCardDialog';
+import { blankTemplate, builtCopy, type TemplateDraft } from '../../domain/contractBlocks';
 import type { ContractTemplate, FrameKey, Package } from '../../db/types';
 
 export default function DocsPage() {
@@ -59,6 +62,7 @@ function Prices() {
   const [cat, setCat] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [edit, setEdit] = useState<Partial<Package> | null>(null);
+  const [rateCard, setRateCard] = useState(false);
   if (!packages) return null;
   const needle = q.trim().toLowerCase();
   const catOf = (p: Package) => p.category || (p.kind === 'smm' ? 'Social media management' : p.kind === 'addon' ? 'Add-ons' : 'Other');
@@ -71,9 +75,14 @@ function Prices() {
         title="Price list"
         subtitle="Everything JoshWorks sells. Quotes, contracts and jobs pick from here; student orgs get the student price automatically."
         actions={
-          <Button variant="primary" onClick={() => setEdit({ kind: 'design', unit: 'project', deliverables: [], includes: [], platforms: [], revisionsPerPost: 0, category: cat || '' })}>
-            <Plus size={18} /> New item
-          </Button>
+          <>
+            <Button onClick={() => setRateCard(true)}>
+              <FileDown size={18} /> Rate card PDF
+            </Button>
+            <Button variant="primary" onClick={() => setEdit({ kind: 'design', unit: 'project', deliverables: [], includes: [], platforms: [], revisionsPerPost: 0, category: cat || '' })}>
+              <Plus size={18} /> New item
+            </Button>
+          </>
         }
       />
       <CatalogBanner />
@@ -135,6 +144,7 @@ function Prices() {
         </section>
       ))}
       <PackageDialog value={edit} onClose={() => setEdit(null)} />
+      <RateCardDialog open={rateCard} onClose={() => setRateCard(false)} />
     </div>
   );
 }
@@ -142,6 +152,7 @@ function Prices() {
 function Templates() {
   const templates = useContractTemplates();
   const [open, setOpen] = useState<ContractTemplate | null>(null);
+  const [building, setBuilding] = useState<TemplateDraft | null>(null);
   const [q, setQ] = useState('');
   const [audience, setAudience] = useState('');
   const [archived, setArchived] = useState(false);
@@ -155,7 +166,15 @@ function Templates() {
   );
   return (
     <div className="stack loose">
-      <PageHeader title="Contract templates" subtitle="The v1.0 contract set. Edits here apply to new contracts; contracts already made keep their own copy." />
+      <PageHeader
+        title="Contract templates"
+        subtitle="The v1.0 contract set and the ones you build. Edits here apply to new contracts; contracts already made keep their own terms."
+        actions={
+          <Button variant="primary" onClick={() => setBuilding(blankTemplate())}>
+            <Blocks size={18} /> Build a new contract
+          </Button>
+        }
+      />
       <CatalogBanner />
       {templates.length === 0 ? (
         <EmptyState title="No templates yet">Load them with the button above.</EmptyState>
@@ -182,17 +201,26 @@ function Templates() {
       {templates.length && !shown.length ? <EmptyState title="Nothing matches" /> : null}
       <div className="template-grid">
         {shown.map((t) => (
-          <button key={t.id} type="button" className={`template-card ${t.active ? '' : 'muted'}`} onClick={() => setOpen(t)}>
+          <button key={t.id} type="button" className={`template-card ${t.active ? '' : 'muted'}`} onClick={() => (t.blocks ? setBuilding(t) : setOpen(t))}>
             <b>{t.name}</b>
-            <span className="tiny strong teal">{t.subtitle}</span>
+            <span className="tiny strong teal">{t.blocks ? 'Built in the contract builder' : t.subtitle}</span>
             <span className="small muted">{t.tagline}</span>
             <span className="tiny muted">
+              {t.blocks ? `${t.blocks.length} blocks · ` : ''}
               {t.phases.length} phases · {questionsOf(t.brief).length} questions · {t.sections.filter((s) => s.on).length} terms
             </span>
           </button>
         ))}
       </div>
-      <TemplateEditor value={open} onClose={() => setOpen(null)} />
+      <TemplateEditor
+        value={open}
+        onClose={() => setOpen(null)}
+        onCopy={(t) => {
+          setOpen(null);
+          setBuilding(builtCopy(t));
+        }}
+      />
+      <ContractBuilder value={building} onClose={() => setBuilding(null)} />
     </div>
   );
 }
@@ -221,7 +249,7 @@ function ResetToLatest({ t, onReset }: { t: ContractTemplate; onReset: (t: Contr
   );
 }
 
-function TemplateEditor({ value, onClose }: { value: ContractTemplate | null; onClose: () => void }) {
+function TemplateEditor({ value, onClose, onCopy }: { value: ContractTemplate | null; onClose: () => void; onCopy: (t: ContractTemplate) => void }) {
   const app = useApp();
   const [t, setT] = useState<ContractTemplate | null>(null);
   const [part, setPart] = useState<'about' | 'process' | 'brief' | 'terms'>('about');
@@ -243,6 +271,9 @@ function TemplateEditor({ value, onClose }: { value: ContractTemplate | null; on
         <>
           <Toggle id="te-active" checked={t.active === 1} onChange={(v) => setT({ ...t, active: v ? 1 : 0 })} label="Offer it" />
           <span className="grow" />
+          <Button onClick={() => onCopy(t)} title="A copy you can rearrange and add your own blocks to; this template stays as it is">
+            <Copy size={16} /> Copy into the builder
+          </Button>
           <Button onClick={onClose}>Cancel</Button>
           <Button
             variant="primary"

@@ -460,6 +460,21 @@ export interface ContractTemplate extends Syncable {
   agreement: string[];
   active: 0 | 1;
   sort: number;
+  /** Made in the contract builder: its parts, in print order. Without it, the classic layout prints. */
+  blocks?: ContractBlock[];
+}
+
+/** One part of a contract in the builder. Most print the template's own text (welcome, phases, questionnaire…). */
+export type ContractBlockKind =
+  | 'welcome' | 'process' | 'client' | 'packages' | 'deliverables' | 'questionnaire' | 'terms'
+  | 'agreement' | 'schedule' | 'communication' | 'signatures' | 'payment' | 'text' | 'pagebreak';
+
+export interface ContractBlock {
+  id: string;
+  kind: ContractBlockKind;
+  /** Your own text: its heading and body (lines starting "- " print as bullets; {{placeholders}} fill in). */
+  title?: string;
+  body?: string;
 }
 
 // ----- the studio's work and money -----
@@ -823,7 +838,37 @@ export interface EmailSettings {
 
 export type SettingKey =
   | 'business' | 'voice' | 'cadence' | 'checklist' | 'rates' | 'ai' | 'contract' | 'security'
-  | 'money' | 'bir' | 'payMethods' | 'email';
+  | 'money' | 'bir' | 'payMethods' | 'email' | 'rateCard';
+
+/** The studio profile & rate card sent to clients and agencies (Documents → Price list → Rate card). */
+export interface RateCardSettings {
+  title: string;
+  /** About JoshWorks, one paragraph per line. */
+  about: string;
+  /** What we do: one service per line, "Name: what it covers". */
+  services: string;
+  /** How we work: one step per line, "Step: what happens". */
+  process: string;
+  /** Why JoshWorks: one point per line. */
+  why: string;
+  portfolioUrl: string;
+  /** Credentials, one per line (e.g. "7 years designing for brands and schools"). */
+  credentials: string;
+  /** Notable clients and industries, one per line. */
+  clients: string;
+  /** Rate notes and terms, one per line. */
+  notes: string;
+  /** Days the rates hold from the date on the cover. */
+  validDays: number;
+  /** Price list sections to include ([] = every section). */
+  sections: string[];
+  /** Price columns: business rates, student-org rates, or both. */
+  prices: 'business' | 'student' | 'both';
+  /** Price list items left out. */
+  hidden: string[];
+  /** Which parts print. */
+  parts: { intro: boolean; portfolio: boolean; prices: boolean; notes: boolean };
+}
 
 // ----- device-only -----
 

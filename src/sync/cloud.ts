@@ -39,7 +39,7 @@ const WRITE: Record<AppRole, readonly SyncedTableName[]> = {
 };
 const SETTINGS_READ: Record<AppRole, readonly string[]> = {
   owner: [],
-  manager: ['business', 'voice', 'cadence', 'checklist', 'rates', 'ai', 'contract', 'money', 'bir', 'payMethods', 'email'],
+  manager: ['business', 'voice', 'cadence', 'checklist', 'rates', 'ai', 'contract', 'money', 'bir', 'payMethods', 'email', 'rateCard'],
   designer: ['business', 'voice', 'cadence', 'checklist', 'ai'],
 };
 

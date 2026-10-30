@@ -12,7 +12,7 @@ import { PriceLinesEditor, TotalsCard } from '../../components/PriceLines';
 import { useClients, useContracts, useContractTemplates, useJobs, usePackages, useSettingRows } from '../../hooks/data';
 import { settingValue } from '../../db/settings';
 import { CONTRACT_FIELD_GROUPS } from '../../domain/contractTemplates';
-import { completionDate, contractAudience, deliverablesOf, planMilestones, projectDays } from '../../domain/contractPlan';
+import { RUSH_ID, RUSH_LABEL, completionDate, contractAudience, deliverablesOf, isRushLine, planMilestones, projectDays } from '../../domain/contractPlan';
 import { CLIENT_KINDS } from '../../domain/clients';
 import { docTotals } from '../../domain/pricing';
 import { deleteContract, saveContract } from '../../services/clients';
@@ -30,8 +30,6 @@ import { ContractEditor } from '../contracts/ContractsPage';
 import { InvoiceDialog } from '../money/InvoiceDialog';
 import { ClientLinkDialog } from './ClientLinkDialog';
 import type { Contract, ContractSection, Milestone, ProposalItem, StudioPayMethod } from '../../db/types';
-
-const RUSH_LABEL = 'Rush (3–5 day turnaround)';
 
 const sameTerms = (a: ContractSection[], b: ContractSection[]) => JSON.stringify(a.map((s) => [s.id, s.title, s.body, s.on])) === JSON.stringify(b.map((s) => [s.id, s.title, s.body, s.on]));
 
@@ -304,8 +302,8 @@ function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: (
   const milestones = c.milestones ?? planMilestones(tpl.phases, c.fields.startDate ?? '', c.fields.endDate ?? '');
   const setMilestones = (m: Milestone[]) => setC({ ...c, milestones: m });
   const setRush = (on: boolean) => {
-    const rest = items.filter((i) => i.label !== RUSH_LABEL);
-    const line: ProposalItem = { packageId: 'cat-add-ons-rush-3-5-day-turnaround', label: RUSH_LABEL, qty: 1, unitPrice: 2500, unit: 'percent', months: 1 };
+    const rest = items.filter((i) => !isRushLine(i));
+    const line: ProposalItem = { packageId: RUSH_ID, label: RUSH_LABEL, qty: 1, unitPrice: 2500, unit: 'percent', months: 1 };
     setC({ ...c, rush: on, items: on ? [...rest, line] : rest });
   };
 
@@ -414,12 +412,13 @@ function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: (
             value={part}
             onChange={setPart}
             options={[
-              { value: 'details', label: 'Client & dates' },
-              { value: 'price', label: 'Package & price' },
-              { value: 'schedule', label: 'Schedule' },
-              { value: 'brief', label: tpl.briefTitle || 'Questionnaire' },
-              { value: 'terms', label: 'Terms' },
-            ]}
+              { value: 'details' as Part, label: 'Client & dates' },
+              { value: 'price' as Part, label: 'Package & price' },
+              { value: 'schedule' as Part, label: 'Schedule' },
+              { value: 'brief' as Part, label: tpl.briefTitle || 'Questionnaire' },
+              { value: 'terms' as Part, label: 'Terms' },
+              // A built contract shows only the parts it prints.
+            ].filter((o) => !tpl.blocks || (o.value === 'brief' ? tpl.blocks.some((b) => b.kind === 'questionnaire') : o.value === 'terms' ? tpl.blocks.some((b) => b.kind === 'terms') : true))}
           />
           <label className="row small strong" style={{ gap: 8 }}>
             Status
@@ -535,7 +534,7 @@ function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: (
         {part === 'price' ? (
           <div className="editor-grid">
             <div className="stack">
-              <PriceLinesEditor items={items} onChange={(next) => setC({ ...c, items: next, rush: next.some((i) => i.label === RUSH_LABEL) })} audience={audience} categories={tpl.categories} />
+              <PriceLinesEditor items={items} onChange={(next) => setC({ ...c, items: next, rush: next.some(isRushLine) })} audience={audience} categories={tpl.categories} />
               <div className="form-grid">
                 <Field label="Discount" htmlFor="ct-disc">
                   <MoneyInput id="ct-disc" value={c.discountAmount ?? 0} onChange={(v) => setC({ ...c, discountAmount: v ?? 0 })} />
@@ -544,7 +543,12 @@ function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: (
                   <NumberInput id="ct-down" suffix="%" value={c.downPct ?? 50} onChange={(v) => setC({ ...c, downPct: v ?? 50 })} />
                 </Field>
               </div>
-              <Toggle id="ct-rush" checked={!!c.rush} onChange={setRush} label="Rush service requested (+25% of the package price)" />
+              <Toggle
+                id="ct-rush"
+                checked={!!c.rush}
+                onChange={setRush}
+                label={`Rush service requested (${items.find(isRushLine)?.label.trim() || '+25% of the package price'})`}
+              />
             </div>
             <aside className="side-panel">
               <div className="card">
