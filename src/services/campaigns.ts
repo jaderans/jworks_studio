@@ -4,6 +4,7 @@ import { getSetting } from '../db/settings';
 import { FUNNEL_TEMPLATES, emptyStages } from '../domain/funnel';
 import { themeForDate } from '../domain/calendar';
 import { createPost } from './content';
+import { addDays, daysFrom } from '../lib/time';
 import type { Campaign, Funnel, FunnelStage, Persona } from '../db/types';
 
 export const EMPTY_PERSONA: Persona = { name: '', who: '', pains: '', wants: '', objections: '', whereTheyAre: '', triggers: '' };
@@ -40,6 +41,21 @@ export async function saveCampaign(c: Partial<Campaign> & { name: string }): Pro
   const rec = await create<Campaign>(db.campaigns, blankCampaign(c));
   await audit('create', 'campaign', rec.id, `Started the campaign “${rec.name}”`);
   return rec;
+}
+
+/**
+ * Save an edited campaign. When its start moves and `movePosts` is on, its posts
+ * not yet posted move by the same number of days (posted ones stay put).
+ */
+export async function updateCampaign(c: Campaign, movePosts: boolean): Promise<{ moved: number }> {
+  const prev = await db.campaigns.get(c.id);
+  await save(db.campaigns, { ...c, endDate: c.endDate && c.endDate >= c.startDate ? c.endDate : c.startDate });
+  await audit('edit', 'campaign', c.id, `Edited the campaign “${c.name}”`);
+  const days = prev?.startDate && c.startDate ? daysFrom(prev.startDate, c.startDate) : 0;
+  if (!movePosts || !days) return { moved: 0 };
+  const posts = alive(await db.posts.where('campaignId').equals(c.id).toArray()).filter((p) => p.date && p.status !== 'posted' && p.status !== 'skipped');
+  for (const p of posts) await patch(db.posts, p.id, { date: addDays(p.date as string, days) });
+  return { moved: posts.length };
 }
 
 export interface PlannedRow {

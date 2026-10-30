@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CAMPAIGN_TEMPLATES, planTemplatePosts } from '../src/domain/campaignTemplates';
 import { DEFAULT_CADENCE } from '../src/domain/calendar';
+import { CAMPAIGN_COLORS, campaignColor, campaignEnd, campaignsBetween, campaignsOn, nextCampaignColor } from '../src/domain/campaignDays';
 
 describe('video series campaign', () => {
   const t = CAMPAIGN_TEMPLATES.find((x) => x.id === 'video-series')!;
@@ -38,5 +39,29 @@ describe('video series campaign', () => {
 
   it('other campaigns keep moving one post at a time', () => {
     expect(CAMPAIGN_TEMPLATES.find((x) => x.id === 'motion')!.keepRhythm).toBeFalsy();
+  });
+});
+
+describe('campaigns on the calendar', () => {
+  const hilway = { id: 'c-hilway', startDate: '2026-10-31', endDate: '2026-11-08', color: '#E4572E' };
+  const promo = { id: 'c-promo', startDate: '2026-11-05', endDate: '' };
+
+  it('runs from the start to the end date (just the start when there is no end)', () => {
+    expect(campaignEnd(hilway)).toBe('2026-11-08');
+    expect(campaignEnd(promo)).toBe('2026-11-05');
+    expect(campaignEnd({ startDate: '2026-11-05', endDate: '2026-11-01' })).toBe('2026-11-05');
+    expect(campaignsOn([hilway, promo], '2026-10-30')).toEqual([]);
+    expect(campaignsOn([hilway, promo], '2026-11-05').map((c) => c.id)).toEqual(['c-hilway', 'c-promo']);
+    expect(campaignsOn([hilway, promo], '2026-11-08').map((c) => c.id)).toEqual(['c-hilway']);
+    expect(campaignsBetween([hilway, promo], '2026-11-06', '2026-11-30').map((c) => c.id)).toEqual(['c-hilway']);
+  });
+
+  it('keeps a chosen color, gives others a steady palette color, and new ones the next free color', () => {
+    expect(campaignColor(hilway)).toBe('#E4572E');
+    expect(campaignColor(promo)).toBe(campaignColor({ id: 'c-promo' }));
+    expect(CAMPAIGN_COLORS).toContain(campaignColor(promo));
+    expect(campaignColor({ id: 'x', color: 'red' })).toBe(campaignColor({ id: 'x' }));
+    const used = [{ id: 'a', color: CAMPAIGN_COLORS[0] }, { id: 'b', color: CAMPAIGN_COLORS[1] }];
+    expect(nextCampaignColor(used)).toBe(CAMPAIGN_COLORS[2]);
   });
 });

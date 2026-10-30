@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import { Route, Routes, useNavigate, useSearchParams } from 'react-router';
-import { Megaphone, Plus, Rocket, Trash2, Wand2 } from 'lucide-react';
+import { Megaphone, Pencil, Plus, Rocket, Trash2, Wand2 } from 'lucide-react';
 import { useApp } from '../../app/AppContext';
-import { Badge, Button, Callout, EmptyState, PageHeader, Tabs } from '../../components/ui';
+import { Badge, Button, Callout, EmptyState, PageHeader, Segmented, Tabs, Toggle } from '../../components/ui';
 import { Field, MoneyInput, Select, TextArea, TextInput } from '../../components/form';
 import { FilterBar } from '../../components/FilterBar';
 import { Dialog } from '../../components/Dialog';
@@ -16,7 +16,8 @@ import { SEASONS, nextWindow, upcomingDates } from '../../domain/seasons';
 import { restartDay, spreadToFreeDays } from '../../domain/calendar';
 import { PLATFORMS, PLATFORM_ORDER } from '../../domain/platforms';
 import { compactNumber, totals } from '../../domain/metrics';
-import { EMPTY_PERSONA, blankCampaign, deleteCampaign, deleteFunnel, launchCampaign, saveCampaign, saveFunnel, type PlannedRow } from '../../services/campaigns';
+import { EMPTY_PERSONA, blankCampaign, deleteCampaign, deleteFunnel, launchCampaign, saveCampaign, saveFunnel, updateCampaign, type PlannedRow } from '../../services/campaigns';
+import { CAMPAIGN_COLORS, campaignColor, campaignEnd, nextCampaignColor } from '../../domain/campaignDays';
 import { addDays, daysFrom, fmtDateRange, fmtIsoDate, fmtIsoWeekday, mondayOnOrAfter, todayISO } from '../../lib/time';
 import { PostDialog } from '../calendar/PostDialog';
 import type { Campaign, CampaignGoal, Funnel, FunnelStage, Kpi, Persona, ServiceKey } from '../../db/types';
@@ -65,7 +66,13 @@ function CampaignList({ onNew }: { onNew: () => void }) {
   const posts = usePosts() ?? [];
   const metrics = useMetrics() ?? [];
   const clients = useClients() ?? [];
-  const [open, setOpen] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
+  // The calendar links here with ?open=<campaign>.
+  const [open, setOpen] = useState<string | null>(() => params.get('open'));
+  const closeOne = () => {
+    setOpen(null);
+    if (params.get('open')) setParams({}, { replace: true });
+  };
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<'' | Campaign['status']>('');
   const [goal, setGoal] = useState<'' | CampaignGoal>('');
@@ -120,14 +127,14 @@ function CampaignList({ onNew }: { onNew: () => void }) {
           const res = totals(metrics.filter((m) => m.postId && mine.some((p) => p.id === m.postId)));
           const client = clients.find((x) => x.id === c.clientId);
           return (
-            <button key={c.id} type="button" className="card trend-card" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setOpen(c.id)}>
+            <button key={c.id} type="button" className="card trend-card" style={{ textAlign: 'left', cursor: 'pointer', boxShadow: `inset 4px 0 0 ${campaignColor(c)}` }} onClick={() => setOpen(c.id)}>
               <div className="row between top">
                 <h3>{c.name}</h3>
                 <Badge tone={c.status === 'active' ? 'good' : c.status === 'draft' ? 'teal' : undefined}>{c.status}</Badge>
               </div>
               <span className="small muted">
                 {client ? `${client.name} · ` : ''}
-                {fmtDateRange(c.startDate, c.endDate)} · {GOAL_LABEL[c.goal]}
+                {fmtDateRange(c.startDate, campaignEnd(c))} · {GOAL_LABEL[c.goal]}
               </span>
               {c.offer ? (
                 <span className="small">
@@ -145,7 +152,7 @@ function CampaignList({ onNew }: { onNew: () => void }) {
           );
         })}
       </div>
-      <CampaignDetail id={open} onClose={() => setOpen(null)} />
+      <CampaignDetail id={open} onClose={closeOne} />
     </div>
   );
 }
@@ -158,6 +165,7 @@ function CampaignDetail({ id, onClose }: { id: string | null; onClose: () => voi
   const funnels = useFunnels() ?? [];
   const memberMap = useMemberMap();
   const [postOpen, setPostOpen] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
   const c = campaigns.find((x) => x.id === id);
   if (!c) return null;
   const mine = posts.filter((p) => p.campaignId === c.id).sort((a, b) => (a.date ?? '9999').localeCompare(b.date ?? '9999'));
@@ -187,6 +195,9 @@ function CampaignDetail({ id, onClose }: { id: string | null; onClose: () => voi
               <Trash2 size={16} /> Delete
             </Button>
             <span className="grow" />
+            <Button onClick={() => setEditing(true)}>
+              <Pencil size={16} /> Edit
+            </Button>
             <Select aria-label="Status" value={c.status} onChange={(e) => saveCampaign({ ...c, status: e.target.value as Campaign['status'] })} style={{ width: 'auto' }}>
               <option value="draft">Draft</option>
               <option value="active">Active</option>
@@ -199,7 +210,9 @@ function CampaignDetail({ id, onClose }: { id: string | null; onClose: () => voi
     >
       <dl className="kv">
         <dt>Dates</dt>
-        <dd>{fmtDateRange(c.startDate, c.endDate)}</dd>
+        <dd>
+          <span className="camp-dot" style={{ '--camp': campaignColor(c) } as CSSProperties} aria-hidden="true" /> {fmtDateRange(c.startDate, campaignEnd(c))}
+        </dd>
         <dt>Goal</dt>
         <dd>{GOAL_LABEL[c.goal]}</dd>
         {c.offer ? (
@@ -264,7 +277,230 @@ function CampaignDetail({ id, onClose }: { id: string | null; onClose: () => voi
         </div>
       </div>
       <PostDialog open={!!postOpen} postId={postOpen} onClose={() => setPostOpen(null)} />
+      <CampaignEditor campaign={editing ? c : null} onClose={() => setEditing(false)} />
     </Dialog>
+  );
+}
+
+type CampaignFields = Omit<Campaign, 'id' | 'createdAt' | 'updatedAt' | 'funnelId'>;
+
+/** Change a campaign after it's made: its basics, dates and color, audience, targets and notes. */
+function CampaignEditor({ campaign, onClose }: { campaign: Campaign | null; onClose: () => void }) {
+  const app = useApp();
+  const posts = usePosts() ?? [];
+  const [c, setC] = useState<Campaign | null>(null);
+  const [part, setPart] = useState<'basics' | 'audience' | 'kpis' | 'notes'>('basics');
+  const [movePosts, setMovePosts] = useState(true);
+  const [busy, setBusy] = useState(false);
+  if (campaign && (!c || c.id !== campaign.id)) {
+    setC({ ...structuredClone(campaign), color: campaignColor(campaign), endDate: campaignEnd(campaign) });
+    setPart('basics');
+    setMovePosts(true);
+  }
+  if (!campaign && c) setC(null);
+  if (!campaign || !c) return null;
+  const shift = campaign.startDate && c.startDate ? daysFrom(campaign.startDate, c.startDate) : 0;
+  const movable = posts.filter((p) => p.campaignId === c.id && p.date && p.status !== 'posted' && p.status !== 'skipped').length;
+  const save = async () => {
+    setBusy(true);
+    try {
+      const { moved } = await updateCampaign({ ...c, name: c.name.trim() }, movePosts && shift !== 0);
+      app.toast(moved ? `Saved. ${moved} post${moved === 1 ? '' : 's'} moved ${Math.abs(shift)} day${Math.abs(shift) === 1 ? '' : 's'} ${shift > 0 ? 'later' : 'earlier'}.` : 'Campaign saved', { tone: 'good' });
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      size="wide"
+      fullPhone
+      title={`Edit ${campaign.name}`}
+      footer={
+        <>
+          <span className="grow" />
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={busy || !c.name.trim() || !c.startDate} onClick={save}>
+            Save
+          </Button>
+        </>
+      }
+    >
+      <Segmented<typeof part>
+        label="Part"
+        value={part}
+        onChange={setPart}
+        options={[
+          { value: 'basics', label: 'Basics & dates' },
+          { value: 'audience', label: 'Audience' },
+          { value: 'kpis', label: 'Targets' },
+          { value: 'notes', label: 'Notes' },
+        ]}
+      />
+      {part === 'basics' ? (
+        <div className="stack">
+          <BasicsFields c={c} setC={setC} endHint="The calendar highlights every day from the start to the end." />
+          {shift && movable ? (
+            <Toggle
+              id="ce-move"
+              checked={movePosts}
+              onChange={setMovePosts}
+              label={`Move its ${movable} unposted post${movable === 1 ? '' : 's'} ${Math.abs(shift)} day${Math.abs(shift) === 1 ? '' : 's'} ${shift > 0 ? 'later' : 'earlier'} too`}
+            />
+          ) : null}
+        </div>
+      ) : null}
+      {part === 'audience' ? <AudienceFields c={c} setC={setC} /> : null}
+      {part === 'kpis' ? <KpiFields c={c} setC={setC} /> : null}
+      {part === 'notes' ? (
+        <Field label="Notes" htmlFor="ce-notes">
+          <TextArea id="ce-notes" rows={8} value={c.notes} onChange={(e) => setC({ ...c, notes: e.target.value })} />
+        </Field>
+      ) : null}
+    </Dialog>
+  );
+}
+
+/** Name, who it's for, dates, color, goal, offer and message: the builder's first step and the editor's first part. */
+function BasicsFields<T extends CampaignFields>({ c, setC, startHint, endHint, onStart }: { c: T; setC: (c: T) => void; startHint?: string; endHint?: string; onStart?: (v: string) => void }) {
+  const clients = useClients() ?? [];
+  return (
+    <div className="form-grid">
+      <Field label="Campaign name" htmlFor="cb-name" className="span-2">
+        <TextInput id="cb-name" value={c.name} onChange={(e) => setC({ ...c, name: e.target.value })} />
+      </Field>
+      <Field label="For" htmlFor="cb-client">
+        <Select id="cb-client" value={c.clientId ?? ''} onChange={(e) => setC({ ...c, clientId: e.target.value || null })}>
+          <option value="">JoshWorks (our pages)</option>
+          {clients.map((x) => (
+            <option key={x.id} value={x.id}>
+              {x.name}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="Color on the calendar" htmlFor="cb-color">
+        <ColorField id="cb-color" value={c.color ?? CAMPAIGN_COLORS[0]} onChange={(color) => setC({ ...c, color })} />
+      </Field>
+      <Field label="Starts" htmlFor="cb-start" hint={startHint}>
+        <input id="cb-start" type="date" className="input" value={c.startDate} onChange={(e) => (onStart ? onStart(e.target.value) : setC({ ...c, startDate: e.target.value }))} />
+      </Field>
+      <Field label="Ends" htmlFor="cb-end" hint={endHint} error={c.endDate && c.startDate && c.endDate < c.startDate ? 'The end is before the start.' : undefined}>
+        <input id="cb-end" type="date" className="input" min={c.startDate || undefined} value={c.endDate} onChange={(e) => setC({ ...c, endDate: e.target.value })} />
+      </Field>
+      <Field label="Goal" htmlFor="cb-goal">
+        <Select id="cb-goal" value={c.goal} onChange={(e) => setC({ ...c, goal: e.target.value as CampaignGoal })}>
+          {(Object.keys(GOAL_LABEL) as CampaignGoal[]).map((g) => (
+            <option key={g} value={g}>
+              {GOAL_LABEL[g]}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="Service" htmlFor="cb-svc">
+        <Select id="cb-svc" value={c.service} onChange={(e) => setC({ ...c, service: e.target.value as ServiceKey })}>
+          <option value="">None</option>
+          {(Object.keys(SERVICE_LABEL) as ServiceKey[]).map((x) => (
+            <option key={x} value={x}>
+              {SERVICE_LABEL[x]}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="The offer" htmlFor="cb-offer" className="span-2" hint="One clear offer per campaign.">
+        <TextInput id="cb-offer" value={c.offer} onChange={(e) => setC({ ...c, offer: e.target.value })} />
+      </Field>
+      <Field label="Key message" htmlFor="cb-msg" className="span-2">
+        <TextInput id="cb-msg" value={c.keyMessage} onChange={(e) => setC({ ...c, keyMessage: e.target.value })} />
+      </Field>
+      <Field label="DM / comment keyword" htmlFor="cb-kw" hint="People comment or DM this word; reply with the rate sheet or link.">
+        <TextInput id="cb-kw" value={c.ctaKeyword} onChange={(e) => setC({ ...c, ctaKeyword: e.target.value.toUpperCase().replace(/\s+/g, '') })} />
+      </Field>
+      <Field label="Lead magnet" htmlFor="cb-lm" hint="A freebie worth messaging for.">
+        <TextInput id="cb-lm" value={c.leadMagnet} onChange={(e) => setC({ ...c, leadMagnet: e.target.value })} />
+      </Field>
+      <Field label="Ad budget (optional)" htmlFor="cb-budget">
+        <MoneyInput id="cb-budget" value={c.budget} onChange={(v) => setC({ ...c, budget: v })} />
+      </Field>
+      <Field label="Channels" className="span-2">
+        <div className="chip-row">
+          {PLATFORM_ORDER.slice(0, 7).map((k) => {
+            const on = c.channels.includes(k);
+            return (
+              <button key={k} type="button" className="chip" aria-pressed={on} onClick={() => setC({ ...c, channels: on ? c.channels.filter((x) => x !== k) : [...c.channels, k] })}>
+                {PLATFORMS[k].label}
+              </button>
+            );
+          })}
+        </div>
+      </Field>
+    </div>
+  );
+}
+
+/** Swatches from the campaign palette, plus any color. */
+function ColorField({ id, value, onChange }: { id: string; value: string; onChange: (color: string) => void }) {
+  return (
+    <div className="row wrap" style={{ gap: 6 }}>
+      {CAMPAIGN_COLORS.map((col) => (
+        <button key={col} type="button" className="swatch" aria-label={`Color ${col}`} aria-pressed={value.toLowerCase() === col.toLowerCase()} style={{ background: col }} onClick={() => onChange(col)} />
+      ))}
+      <input id={id} type="color" className="swatch-input" aria-label="Any color" title="Any color" value={value} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
+const PERSONA_FIELDS = [
+  ['name', 'Persona name', 'e.g. Iloilo café owner'],
+  ['who', 'Who they are', 'Age, job, where they live'],
+  ['pains', 'What frustrates them', ''],
+  ['wants', 'What they want', ''],
+  ['objections', 'What makes them hesitate', '“Too expensive”, “I can do it in Canva”'],
+  ['whereTheyAre', 'Where they hang out online', ''],
+  ['triggers', 'When they buy', 'Opening, payday, peak season'],
+] as [keyof Persona, string, string][];
+
+function AudienceFields<T extends CampaignFields>({ c, setC }: { c: T; setC: (c: T) => void }) {
+  return (
+    <div className="form-grid">
+      <Callout tone="info">Write one real person. The clearer the persona, the better the hooks — and the assistant uses this too.</Callout>
+      <span />
+      {PERSONA_FIELDS.map(([k, label, ph]) => (
+        <Field key={k} label={label} htmlFor={`pe-${k}`}>
+          <TextArea id={`pe-${k}`} rows={2} value={c.audience[k]} placeholder={ph} onChange={(e) => setC({ ...c, audience: { ...c.audience, [k]: e.target.value } })} />
+        </Field>
+      ))}
+    </div>
+  );
+}
+
+function KpiFields<T extends CampaignFields>({ c, setC }: { c: T; setC: (c: T) => void }) {
+  return (
+    <div className="stack">
+      <p className="muted">What would make this campaign a win? Results logged on its posts fill these in.</p>
+      {c.kpis.map((k, i) => (
+        <div key={i} className="row wrap">
+          <select className="select" style={{ width: 'auto' }} value={k.metric} onChange={(e) => setC({ ...c, kpis: c.kpis.map((x, j) => (j === i ? { ...x, metric: e.target.value as Kpi['metric'] } : x)) })} aria-label="Measure">
+            {(['reach', 'views', 'saves', 'shares', 'comments', 'follows', 'leads', 'sales'] as Kpi['metric'][]).map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+          <input className="input num" style={{ width: 140 }} inputMode="numeric" value={k.target} onChange={(e) => setC({ ...c, kpis: c.kpis.map((x, j) => (j === i ? { ...x, target: Number(e.target.value.replace(/\D/g, '')) || 0 } : x)) })} aria-label="Target" />
+          <Button size="sm" variant="ghost" onClick={() => setC({ ...c, kpis: c.kpis.filter((_, j) => j !== i) })}>
+            Remove
+          </Button>
+        </div>
+      ))}
+      <div>
+        <Button size="sm" onClick={() => setC({ ...c, kpis: [...c.kpis, { metric: 'leads', target: 5 }] })}>
+          <Plus size={16} /> Target
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -274,9 +510,9 @@ function CampaignBuilder({ start, onClose }: { start: CampaignTemplate | 'blank'
   const app = useApp();
   const navigate = useNavigate();
   const cadence = settingValue(useSettingRows(), 'cadence');
-  const clients = useClients() ?? [];
   const members = useMembers() ?? [];
   const posts = usePosts() ?? [];
+  const campaigns = useCampaigns() ?? [];
   const today = todayISO();
   const [step, setStep] = useState<Step>('pick');
   const [tpl, setTpl] = useState<CampaignTemplate | null>(null);
@@ -297,7 +533,7 @@ function CampaignBuilder({ start, onClose }: { start: CampaignTemplate | 'blank'
     const moved = next.filter((r, i) => r.date !== rows[i].date).length;
     setRows(next);
     const last = next.filter((r) => r.include).reduce((m, r) => (r.date > m ? r.date : m), '');
-    if (last) setC((cur) => ({ ...cur, endDate: last }));
+    if (last) setC((cur) => ({ ...cur, endDate: cur.endDate > last ? cur.endDate : last }));
     app.toast(moved ? `Moved ${moved} ${moved === 1 ? 'post' : 'posts'} to free days` : 'No free days in the next 3 months; keep them as extra posts or pick days yourself', { tone: moved ? 'good' : 'info' });
   };
 
@@ -327,6 +563,7 @@ function CampaignBuilder({ start, onClose }: { start: CampaignTemplate | 'blank'
       leadMagnet: t?.leadMagnet ?? '',
       kpis: t ? t.kpis.map((k) => ({ ...k })) : [{ metric: 'reach', target: 10000 }],
       status: 'active',
+      color: nextCampaignColor(campaigns),
     });
     setStep('basics');
   };
@@ -344,7 +581,8 @@ function CampaignBuilder({ start, onClose }: { start: CampaignTemplate | 'blank'
     setRows(
       planned.map((p, i) => ({ ...p, include: true, assignees: pool.length ? [pool[i % pool.length].id] : [] })),
     );
-    if (planned.length) setC((cur) => ({ ...cur, endDate: planned[planned.length - 1].date }));
+    const last = planned[planned.length - 1]?.date;
+    if (last) setC((cur) => ({ ...cur, endDate: cur.endDate > last ? cur.endDate : last }));
   };
 
   const launch = async () => {
@@ -369,8 +607,6 @@ function CampaignBuilder({ start, onClose }: { start: CampaignTemplate | 'blank'
     if (n === 'plan' && !rows.length) buildRows();
     setStep(n);
   };
-  const persona = c.audience;
-  const setPersona = (k: keyof Persona, v: string) => setC({ ...c, audience: { ...persona, [k]: v } });
 
   return (
     <Dialog
@@ -429,93 +665,19 @@ function CampaignBuilder({ start, onClose }: { start: CampaignTemplate | 'blank'
       ) : null}
 
       {step === 'basics' ? (
-        <div className="form-grid">
-          <Field label="Campaign name" htmlFor="cb-name" className="span-2">
-            <TextInput id="cb-name" value={c.name} onChange={(e) => setC({ ...c, name: e.target.value })} />
-          </Field>
-          <Field label="For" htmlFor="cb-client">
-            <Select id="cb-client" value={c.clientId ?? ''} onChange={(e) => setC({ ...c, clientId: e.target.value || null })}>
-              <option value="">JoshWorks (our pages)</option>
-              {clients.map((x) => (
-                <option key={x.id} value={x.id}>
-                  {x.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Starts" htmlFor="cb-start" hint={cadence.resumeOn && cadence.resumeOn > today ? `Posting restarts ${fmtIsoDate(restartDay(cadence))}.` : undefined}>
-            <input id="cb-start" type="date" className="input" value={c.startDate} onChange={(e) => { setC({ ...c, startDate: e.target.value }); setRows([]); }} />
-          </Field>
-          <Field label="Goal" htmlFor="cb-goal">
-            <Select id="cb-goal" value={c.goal} onChange={(e) => setC({ ...c, goal: e.target.value as CampaignGoal })}>
-              {(Object.keys(GOAL_LABEL) as CampaignGoal[]).map((g) => (
-                <option key={g} value={g}>
-                  {GOAL_LABEL[g]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Service" htmlFor="cb-svc">
-            <Select id="cb-svc" value={c.service} onChange={(e) => setC({ ...c, service: e.target.value as ServiceKey })}>
-              <option value="">None</option>
-              {(Object.keys(SERVICE_LABEL) as ServiceKey[]).map((s) => (
-                <option key={s} value={s}>
-                  {SERVICE_LABEL[s]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="The offer" htmlFor="cb-offer" className="span-2" hint="One clear offer per campaign.">
-            <TextInput id="cb-offer" value={c.offer} onChange={(e) => setC({ ...c, offer: e.target.value })} />
-          </Field>
-          <Field label="Key message" htmlFor="cb-msg" className="span-2">
-            <TextInput id="cb-msg" value={c.keyMessage} onChange={(e) => setC({ ...c, keyMessage: e.target.value })} />
-          </Field>
-          <Field label="DM / comment keyword" htmlFor="cb-kw" hint="People comment or DM this word; reply with the rate sheet or link.">
-            <TextInput id="cb-kw" value={c.ctaKeyword} onChange={(e) => setC({ ...c, ctaKeyword: e.target.value.toUpperCase().replace(/\s+/g, '') })} />
-          </Field>
-          <Field label="Lead magnet" htmlFor="cb-lm" hint="A freebie worth messaging for.">
-            <TextInput id="cb-lm" value={c.leadMagnet} onChange={(e) => setC({ ...c, leadMagnet: e.target.value })} />
-          </Field>
-          <Field label="Ad budget (optional)" htmlFor="cb-budget">
-            <MoneyInput id="cb-budget" value={c.budget} onChange={(v) => setC({ ...c, budget: v })} />
-          </Field>
-          <Field label="Channels" className="span-2">
-            <div className="chip-row">
-              {PLATFORM_ORDER.slice(0, 7).map((k) => {
-                const on = c.channels.includes(k);
-                return (
-                  <button key={k} type="button" className="chip" aria-pressed={on} onClick={() => setC({ ...c, channels: on ? c.channels.filter((x) => x !== k) : [...c.channels, k] })}>
-                    {PLATFORMS[k].label}
-                  </button>
-                );
-              })}
-            </div>
-          </Field>
-        </div>
+        <BasicsFields
+          c={c}
+          setC={setC}
+          startHint={cadence.resumeOn && cadence.resumeOn > today ? `Posting restarts ${fmtIsoDate(restartDay(cadence))}.` : undefined}
+          endHint="Filled from the last planned post; change it any time."
+          onStart={(v) => {
+            setC({ ...c, startDate: v });
+            setRows([]);
+          }}
+        />
       ) : null}
 
-      {step === 'audience' ? (
-        <div className="form-grid">
-          <Callout tone="info">Write one real person. The clearer the persona, the better the hooks — and the assistant uses this too.</Callout>
-          <span />
-          {(
-            [
-              ['name', 'Persona name', 'e.g. Iloilo café owner'],
-              ['who', 'Who they are', 'Age, job, where they live'],
-              ['pains', 'What frustrates them', ''],
-              ['wants', 'What they want', ''],
-              ['objections', 'What makes them hesitate', '“Too expensive”, “I can do it in Canva”'],
-              ['whereTheyAre', 'Where they hang out online', ''],
-              ['triggers', 'When they buy', 'Opening, payday, peak season'],
-            ] as [keyof Persona, string, string][]
-          ).map(([k, label, ph]) => (
-            <Field key={k} label={label} htmlFor={`pe-${k}`}>
-              <TextArea id={`pe-${k}`} rows={2} value={persona[k]} placeholder={ph} onChange={(e) => setPersona(k, e.target.value)} />
-            </Field>
-          ))}
-        </div>
-      ) : null}
+      {step === 'audience' ? <AudienceFields c={c} setC={setC} /> : null}
 
       {step === 'plan' ? (
         <div className="stack">
@@ -595,27 +757,7 @@ function CampaignBuilder({ start, onClose }: { start: CampaignTemplate | 'blank'
 
       {step === 'kpis' ? (
         <div className="stack">
-          <p className="muted">What would make this campaign a win? Results logged on its posts fill these in.</p>
-          {c.kpis.map((k, i) => (
-            <div key={i} className="row wrap">
-              <select className="select" style={{ width: 'auto' }} value={k.metric} onChange={(e) => setC({ ...c, kpis: c.kpis.map((x, j) => (j === i ? { ...x, metric: e.target.value as Kpi['metric'] } : x)) })} aria-label="Measure">
-                {(['reach', 'views', 'saves', 'shares', 'comments', 'follows', 'leads', 'sales'] as Kpi['metric'][]).map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-              <input className="input num" style={{ width: 140 }} inputMode="numeric" value={k.target} onChange={(e) => setC({ ...c, kpis: c.kpis.map((x, j) => (j === i ? { ...x, target: Number(e.target.value.replace(/\D/g, '')) || 0 } : x)) })} aria-label="Target" />
-              <Button size="sm" variant="ghost" onClick={() => setC({ ...c, kpis: c.kpis.filter((_, j) => j !== i) })}>
-                Remove
-              </Button>
-            </div>
-          ))}
-          <div>
-            <Button size="sm" onClick={() => setC({ ...c, kpis: [...c.kpis, { metric: 'leads', target: 5 }] })}>
-              <Plus size={16} /> Target
-            </Button>
-          </div>
+          <KpiFields c={c} setC={setC} />
           <Callout tone="good" title="Ready">
             {rows.filter((r) => r.include).length} posts from {rows[0] ? fmtIsoDate(rows[0].date) : fmtIsoDate(c.startDate)}, with a funnel from the “{FUNNEL_TEMPLATES.find((f) => f.id === (tpl?.funnelTemplateId ?? 'studio-leads'))?.name}” template.
           </Callout>

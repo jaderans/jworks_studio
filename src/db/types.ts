@@ -135,6 +135,8 @@ export interface Campaign extends Syncable {
   kpis: Kpi[];
   funnelId: string | null;
   notes: string;
+  /** Its color on the calendar (hex); a palette color when not set. */
+  color?: string;
 }
 
 export interface FunnelStageDef {

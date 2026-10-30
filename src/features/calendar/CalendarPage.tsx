@@ -1,21 +1,22 @@
-import { useMemo, useState, type DragEvent } from 'react';
-import { useSearchParams } from 'react-router';
+import { useMemo, useState, type CSSProperties, type DragEvent } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
 import { CalendarClock, CalendarPlus, ChevronLeft, ChevronRight, Download, Plus, Wand2 } from 'lucide-react';
 import { useApp } from '../../app/AppContext';
 import { Badge, Button, Callout, EmptyState, PageHeader, Segmented } from '../../components/ui';
 import { Field, SearchInput, Select } from '../../components/form';
 import { Dialog } from '../../components/Dialog';
 import { MemberDots, MemberPicker, StatusBadge, useMemberMap } from '../../components/people';
-import { useIdeas, useMembers, usePosts, useSettingRows } from '../../hooks/data';
+import { useCampaigns, useIdeas, useMembers, usePosts, useSettingRows } from '../../hooks/data';
 import { settingValue } from '../../db/settings';
 import { STATUS_LABEL, STATUS_ORDER, isBreak, isDone, planMonth, restartDay, themeForDate, weekInfo, type MonthPlanRow } from '../../domain/calendar';
 import { holidayName } from '../../domain/seasons';
+import { campaignColor, campaignEnd, campaignsBetween, campaignsOn } from '../../domain/campaignDays';
 import { applyReschedule, createPost, movePost, previewReschedule } from '../../services/content';
 import { downloadBlob, toCSV } from '../../lib/files';
-import { DOW_SHORT, addDays, fmtIsoDate, fmtIsoWeekday, fmtMonth, isoDate, mondayOf, nextMonthStart, mondayOnOrAfter, todayISO } from '../../lib/time';
+import { DOW_SHORT, addDays, fmtDateRange, fmtIsoDate, fmtIsoWeekday, fmtMonth, isoDate, mondayOf, nextMonthStart, mondayOnOrAfter, todayISO } from '../../lib/time';
 import { useNow } from '../../hooks/useNow';
 import { PostDialog } from './PostDialog';
-import type { Post, PostStatus } from '../../db/types';
+import type { Campaign, Post, PostStatus } from '../../db/types';
 
 type View = 'month' | 'week' | 'list';
 
@@ -27,6 +28,9 @@ export default function CalendarPage() {
   const members = useMembers() ?? [];
   const memberMap = useMemberMap();
   const cadence = settingValue(useSettingRows(), 'cadence');
+  const navigate = useNavigate();
+  const campaigns = (useCampaigns() ?? []).filter((c) => app.inScope(c.clientId));
+  const openCampaign = (id: string) => navigate(`/campaigns?open=${id}`);
   const [view, setView] = useState<View>(() => (params.get('view') as View) || (window.innerWidth < 760 ? 'list' : 'month'));
   const [anchor, setAnchor] = useState(() => params.get('date') ?? today);
   const [who, setWho] = useState<string[]>([]);
@@ -180,16 +184,23 @@ export default function CalendarPage() {
       </div>
       {members.length ? <MemberPicker value={who} onChange={setWho} members={members} label="Show posts by" /> : null}
 
+      {view !== 'list' ? (
+        <CampaignLegend
+          campaigns={view === 'month' ? campaignsBetween(campaigns, mondayOf(`${anchor.slice(0, 7)}-01`), addDays(mondayOf(`${anchor.slice(0, 7)}-01`), 41)) : campaignsBetween(campaigns, mondayOf(anchor), addDays(mondayOf(anchor), 6))}
+          onOpen={openCampaign}
+        />
+      ) : null}
       {view === 'month' ? (
-        <MonthView anchor={anchor} today={today} byDate={byDate} memberMap={memberMap} onOpen={openPost} onNew={newOn} onMore={setDayOpen} dropProps={dropProps} />
+        <MonthView anchor={anchor} today={today} byDate={byDate} memberMap={memberMap} campaigns={campaigns} onCampaign={openCampaign} onOpen={openPost} onNew={newOn} onMore={setDayOpen} dropProps={dropProps} />
       ) : view === 'week' ? (
         <div className="week">
           {Array.from({ length: 7 }, (_, i) => addDays(mondayOf(anchor), i)).map((d) => {
             const theme = themeForDate(cadence, d);
             const brk = isBreak(cadence, d);
             const hol = holidayName(d);
+            const on = campaignsOn(campaigns, d);
             return (
-              <div key={d} className={`wday ${d === today ? 'today' : ''} ${brk ? 'brk' : ''}`} {...dropProps(d)}>
+              <div key={d} className={`wday ${d === today ? 'today' : ''} ${brk ? 'brk' : ''} ${on.length ? 'in-camp' : ''}`} style={campStyle(on)} {...dropProps(d)}>
                 <div className="row between">
                   <b>{fmtIsoWeekday(d)}</b>
                   <button type="button" className="icon-btn sm plain" aria-label={`New post on ${fmtIsoWeekday(d)}`} onClick={() => newOn(d)}>
@@ -197,6 +208,7 @@ export default function CalendarPage() {
                   </button>
                 </div>
                 <span className="mtheme">{brk ? 'Break week' : hol ? hol : theme?.name ?? ''}</span>
+                <CampaignBands list={on} day={d} rowStart onOpen={openCampaign} />
                 {(byDate.get(d) ?? []).map((p) => (
                   <PostCard key={p.id} p={p} memberMap={memberMap} onOpen={() => openPost(p.id)} />
                 ))}
@@ -253,6 +265,8 @@ function MonthView({
   today,
   byDate,
   memberMap,
+  campaigns,
+  onCampaign,
   onOpen,
   onNew,
   onMore,
@@ -262,6 +276,8 @@ function MonthView({
   today: string;
   byDate: Map<string, Post[]>;
   memberMap: ReturnType<typeof useMemberMap>;
+  campaigns: Campaign[];
+  onCampaign: (id: string) => void;
   onOpen: (id: string) => void;
   onNew: (d: string) => void;
   onMore: (d: string) => void;
@@ -272,6 +288,7 @@ function MonthView({
   const start = mondayOf(`${month}-01`);
   const days = Array.from({ length: 42 }, (_, i) => addDays(start, i));
   const weeks = days.slice(35).some((d) => d.slice(0, 7) === month) ? days : days.slice(0, 35);
+  const colorOf = new Map(campaigns.map((c) => [c.id, campaignColor(c)]));
   return (
     <div className="month" role="grid" aria-label={fmtMonth(month)}>
       {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
@@ -279,13 +296,14 @@ function MonthView({
           {d}
         </div>
       ))}
-      {weeks.map((d) => {
+      {weeks.map((d, i) => {
         const list = byDate.get(d) ?? [];
         const theme = themeForDate(cadence, d);
         const brk = isBreak(cadence, d);
         const hol = holidayName(d);
+        const on = campaignsOn(campaigns, d);
         return (
-          <div key={d} role="gridcell" className={`mday ${d.slice(0, 7) !== month ? 'out' : ''} ${d === today ? 'today' : ''} ${brk ? 'brk' : ''}`} {...dropProps(d)}>
+          <div key={d} role="gridcell" className={`mday ${d.slice(0, 7) !== month ? 'out' : ''} ${d === today ? 'today' : ''} ${brk ? 'brk' : ''} ${on.length ? 'in-camp' : ''}`} style={campStyle(on)} {...dropProps(d)}>
             <div className="mday-head">
               <span className="mnum">{Number(d.slice(8))}</span>
               <span className="mtheme">{brk ? 'Break' : theme && !theme.flex ? theme.short : ''}</span>
@@ -293,12 +311,14 @@ function MonthView({
                 <Plus size={14} />
               </button>
             </div>
+            <CampaignBands list={on} day={d} rowStart={i % 7 === 0} onOpen={onCampaign} />
             {hol ? <span className="mholiday">{hol}</span> : null}
             {list.slice(0, 3).map((p) => (
               <button
                 key={p.id}
                 type="button"
-                className={`post-chip ${p.status}`}
+                className={`post-chip ${p.status} ${p.campaignId && colorOf.has(p.campaignId) ? 'in-campaign' : ''}`}
+                style={p.campaignId && colorOf.has(p.campaignId) ? ({ '--camp': colorOf.get(p.campaignId) } as CSSProperties) : undefined}
                 draggable
                 onDragStart={(e) => {
                   e.dataTransfer.setData('text/post-id', p.id);
@@ -322,6 +342,52 @@ function MonthView({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/** A day in a campaign is tinted in the campaign's color (the earliest one, when several overlap). */
+const campStyle = (on: Campaign[]): CSSProperties | undefined => (on.length ? ({ '--camp': campaignColor(on[0]) } as CSSProperties) : undefined);
+
+/** The campaigns running that day: a band in each one's color, named on its first day and at the start of each week row. */
+function CampaignBands({ list, day, rowStart, onOpen }: { list: Campaign[]; day: string; rowStart: boolean; onOpen: (id: string) => void }) {
+  if (!list.length) return null;
+  return (
+    <>
+      {list.slice(0, 2).map((c) => {
+        const start = c.startDate === day;
+        const end = campaignEnd(c) === day;
+        return (
+          <button
+            key={c.id}
+            type="button"
+            className={`camp-band ${start ? 'start' : ''} ${end ? 'end' : ''}`}
+            style={{ '--camp': campaignColor(c) } as CSSProperties}
+            title={`${c.name} · ${fmtDateRange(c.startDate, campaignEnd(c))}`}
+            aria-label={`Campaign ${c.name}, ${fmtDateRange(c.startDate, campaignEnd(c))}`}
+            onClick={() => onOpen(c.id)}
+          >
+            {start || rowStart ? c.name : '\u00a0'}
+          </button>
+        );
+      })}
+      {list.length > 2 ? <span className="tiny muted">+{list.length - 2} more campaigns</span> : null}
+    </>
+  );
+}
+
+/** The campaigns in view, in their colors; each opens its campaign. */
+function CampaignLegend({ campaigns, onOpen }: { campaigns: Campaign[]; onOpen: (id: string) => void }) {
+  if (!campaigns.length) return null;
+  return (
+    <div className="camp-legend" aria-label="Campaigns">
+      {campaigns.map((c) => (
+        <button key={c.id} type="button" className="camp-chip" style={{ '--camp': campaignColor(c) } as CSSProperties} onClick={() => onOpen(c.id)}>
+          <span className="camp-dot" aria-hidden="true" />
+          {c.name}
+          <span className="muted">{fmtDateRange(c.startDate, campaignEnd(c))}</span>
+        </button>
+      ))}
     </div>
   );
 }

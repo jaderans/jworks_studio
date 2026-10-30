@@ -371,3 +371,34 @@ test('build a contract from a blank slate, and download the rate card', async ({
   await pdf(page, () => rc.getByRole('button', { name: 'Download PDF' }).click(), /Rate Card.*Sample Agency\.pdf/);
   expect(errors).toEqual([]);
 });
+
+test('campaigns: edit the dates and color, and see the run on the calendar', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-21T10:00:00+08:00') });
+  const errors = watchErrors(page);
+  await freshSetup(page);
+  await page.goto('/#/campaigns');
+  await page.getByRole('button', { name: 'New campaign' }).click();
+  await page.getByRole('button', { name: 'Start blank' }).click();
+  const b = page.getByRole('dialog').first();
+  await b.getByLabel('Campaign name').fill('Hilway Pop-Up Market');
+  await b.getByLabel('Starts').fill('2026-11-02');
+  for (let i = 0; i < 3; i++) await b.getByRole('button', { name: 'Next' }).click();
+  await b.getByRole('button', { name: 'Create campaign' }).click();
+  await page.getByRole('button', { name: /Hilway Pop-Up Market/ }).click();
+  const d = page.getByRole('dialog', { name: 'Hilway Pop-Up Market' });
+  await d.getByRole('button', { name: 'Edit' }).click();
+  const e = page.getByRole('dialog', { name: 'Edit Hilway Pop-Up Market' });
+  await e.getByLabel('Ends').fill('2026-11-08');
+  await e.getByRole('button', { name: 'Color #7B61FF' }).click();
+  await e.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(e).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  await page.goto('/#/calendar?date=2026-11-02&view=month');
+  await expect(page.locator('.camp-chip', { hasText: 'Hilway Pop-Up Market' })).toBeVisible();
+  await expect(page.locator('.mday.in-camp')).toHaveCount(7);
+  await page.screenshot({ path: `${SHOTS}/calendar-campaign.png` });
+  await page.locator('.camp-band.start').click();
+  await expect(page.getByRole('dialog', { name: 'Hilway Pop-Up Market' })).toBeVisible();
+  expect(errors).toEqual([]);
+});

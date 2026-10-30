@@ -7,7 +7,7 @@ import { setActor, setWriterDevice } from '../src/db/write';
 import { getSetting } from '../src/db/settings';
 import { runSetup } from '../src/services/setup';
 import { applyReschedule, createPost, decideApproval, deletePost, movePost, previewReschedule, requestApproval, saveIdea, scheduleIdea, setStatus } from '../src/services/content';
-import { launchCampaign, blankCampaign } from '../src/services/campaigns';
+import { launchCampaign, blankCampaign, updateCampaign } from '../src/services/campaigns';
 import { newContract, newProposal, saveClient, savePackage } from '../src/services/clients';
 import { deleteTemplate, discardTemplatePrices, newTemplateContract } from '../src/services/documents';
 import { exportAll, mergeBackup, parseBackup } from '../src/services/backup';
@@ -16,6 +16,7 @@ import { CAMPAIGN_TEMPLATES, planTemplatePosts } from '../src/domain/campaignTem
 import { readXlsx } from '../src/domain/xlsx';
 import { parsePlanner } from '../src/domain/planner';
 import { DEFAULT_CADENCE } from '../src/domain/calendar';
+import { addDays } from '../src/lib/time';
 
 beforeEach(async () => {
   await db.delete();
@@ -106,6 +107,25 @@ describe('campaigns', () => {
     const funnel = await db.funnels.get(c.funnelId as string);
     expect(funnel?.stages).toHaveLength(5);
     expect(funnel?.stages.find((s) => s.key === 'action')?.offer).toBe(t.offer);
+  });
+
+  it('edits a campaign: new dates and color, and its unposted posts move with the start', async () => {
+    await setup();
+    const t = CAMPAIGN_TEMPLATES.find((x) => x.id === 'smm-launch')!;
+    const rows = planTemplatePosts(t, '2026-11-02', DEFAULT_CADENCE).map((r) => ({ ...r, include: true, assignees: [] }));
+    const c = await launchCampaign({ ...blankCampaign(), name: t.name, startDate: '2026-11-02', endDate: rows[rows.length - 1].date }, rows, t.funnelTemplateId);
+    const before = alive(await db.posts.where('campaignId').equals(c.id).toArray());
+    await db.posts.update(before[0].id, { status: 'posted' });
+    const { moved } = await updateCampaign({ ...c, startDate: '2026-11-09', endDate: '2026-12-20', color: '#7B61FF' }, true);
+    expect(moved).toBe(before.length - 1);
+    const saved = await db.campaigns.get(c.id);
+    expect(saved).toMatchObject({ startDate: '2026-11-09', endDate: '2026-12-20', color: '#7B61FF' });
+    const after = new Map(alive(await db.posts.where('campaignId').equals(c.id).toArray()).map((p) => [p.id, p.date]));
+    expect(after.get(before[0].id)).toBe(before[0].date);
+    expect(after.get(before[1].id)).toBe(addDays(before[1].date as string, 7));
+    // An end before the start is saved as the start.
+    await updateCampaign({ ...(saved as typeof c), endDate: '2026-11-01' }, false);
+    expect((await db.campaigns.get(c.id))?.endDate).toBe('2026-11-09');
   });
 });
 

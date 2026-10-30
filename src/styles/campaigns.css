@@ -207,3 +207,23 @@
 .month .post-chip, .post-chip.wrap { align-items: flex-start; }
 .month .post-chip .t, .post-chip.wrap .t { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.25; }
 .month .post-chip .sdot, .post-chip.wrap .sdot { margin-top: 4px; }
+
+/* Campaigns on the calendar: their days tinted in the campaign color, a band with the name, a legend */
+.mday.in-camp { background: color-mix(in srgb, var(--camp) 11%, var(--surface)); }
+.mday.in-camp.out { background: color-mix(in srgb, var(--camp) 7%, var(--surface-2)); }
+.wday.in-camp { background: color-mix(in srgb, var(--camp) 9%, var(--surface)); border-color: color-mix(in srgb, var(--camp) 45%, var(--line)); }
+.camp-band { display: block; align-self: stretch; margin: 0 -6px; height: 18px; padding: 0 8px; border: 0; background: color-mix(in srgb, var(--camp) 34%, transparent); color: var(--ink); font-family: inherit; font-size: 0.66rem; font-weight: 800; line-height: 18px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.camp-band:hover { background: color-mix(in srgb, var(--camp) 50%, transparent); }
+.camp-band.start { margin-left: 0; border-radius: 9px 0 0 9px; box-shadow: inset 3px 0 0 var(--camp); }
+.camp-band.end { margin-right: 0; border-radius: 0 9px 9px 0; }
+.camp-band.start.end { border-radius: 9px; }
+.wday .camp-band { margin: 0; border-radius: 8px; }
+.post-chip.in-campaign { box-shadow: inset 3px 0 0 var(--camp); }
+.camp-legend { display: flex; flex-wrap: wrap; gap: 8px; }
+.camp-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--camp) 45%, var(--line)); background: color-mix(in srgb, var(--camp) 14%, var(--surface)); color: var(--ink); font-family: inherit; font-size: 0.8rem; font-weight: 700; cursor: pointer; }
+.camp-chip .muted { font-weight: 600; }
+.camp-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--camp); flex: none; vertical-align: middle; }
+.swatch { width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--line); cursor: pointer; }
+@media (hover: hover) { .swatch:hover { box-shadow: 0 0 0 2px var(--line-strong); } }
+.swatch[aria-pressed='true'] { box-shadow: 0 0 0 2px var(--ink); }
+.swatch-input { width: 36px; height: 28px; padding: 0 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer; }
