@@ -484,7 +484,7 @@ export interface ContractBlock {
 // ----- the studio's work and money -----
 
 export type JobType =
-  | 'Branding' | 'General' | 'Merch' | '3D Model' | 'Video Editing' | 'Campaign' | 'SMM / Retainer' | 'Pop-up / Stickers'
+  | 'Branding' | 'General' | 'Merch' | '3D Model' | 'Video Editing' | 'Campaign' | 'SMM / Retainer' | 'Pop-up / Stickers' | 'Sticker Printing'
   | 'Publication' | 'Web' | 'Motion' | 'Training';
 
 export type JobStatus = 'inquiry' | 'not-started' | 'in-progress' | 'review' | 'revisions' | 'completed' | 'blocked' | 'cancelled';

@@ -3,7 +3,7 @@ import type { Job, JobProgress, JobStatus, JobType, JobView, Priority, Syncable 
 /** Jobs are the commission tracker's rows: one client commission each. */
 
 export const JOB_TYPES: JobType[] = [
-  'Branding', 'General', 'Merch', 'Publication', 'Campaign', 'Video Editing', 'Motion', '3D Model', 'Web', 'SMM / Retainer', 'Pop-up / Stickers', 'Training',
+  'Branding', 'General', 'Merch', 'Publication', 'Campaign', 'Video Editing', 'Motion', '3D Model', 'Web', 'SMM / Retainer', 'Pop-up / Stickers', 'Sticker Printing', 'Training',
 ];
 
 export const JOB_STATUS_LABEL: Record<JobStatus, string> = {

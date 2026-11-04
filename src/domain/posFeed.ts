@@ -104,7 +104,32 @@ export interface PosOrderFeed {
   notes: string;
 }
 
-export type PosFeed = PosEventFeed | PosOrderFeed;
+/** A sticker printing job (JoshWorks POS → Printing). The printer's share is worked out in the POS. */
+export interface PosPrintFeed {
+  type: 'print';
+  v: 1;
+  orderId: string;
+  number: string;
+  status: 'quote' | 'printing' | 'ready' | 'done' | 'cancelled';
+  customer: { name: string; email: string; phone: string; handle: string };
+  printer: { memberId: string; name: string; email: string } | null;
+  printerPct: number;
+  printerShare: Cents;
+  lines: { label: string; qty: number; unitPrice: Cents; amount: Cents }[];
+  subtotal: Cents;
+  delivery: { method: 'pickup' | 'courier'; courier: string; fee: Cents; tracking: string };
+  total: Cents;
+  materialCost: Cents;
+  a4: number;
+  payments: { id: string; date: string; name: string; kind: PosPayKind; amount: Cents; stage: 'down' | 'balance'; ref: string }[];
+  createdAt: number;
+  approvedAt: number | null;
+  dueDate: string;
+  doneAt: number | null;
+  notes: string;
+}
+
+export type PosFeed = PosEventFeed | PosOrderFeed | PosPrintFeed;
 
 const isNum = (x: unknown) => typeof x === 'number' && Number.isFinite(x);
 const isStr = (x: unknown) => typeof x === 'string';
@@ -114,7 +139,7 @@ export function isPosFeed(x: unknown): x is PosFeed {
   const f = x as Record<string, unknown> | null;
   if (!f || typeof f !== 'object' || f.v !== 1) return false;
   if (f.type === 'event') return isStr(f.eventId) && isStr(f.name) && isNum(f.gross) && Array.isArray(f.methods) && Array.isArray(f.people);
-  if (f.type === 'order') return isStr(f.orderId) && isStr(f.number) && isNum(f.total) && Array.isArray(f.payments) && Array.isArray(f.lines);
+  if (f.type === 'order' || f.type === 'print') return isStr(f.orderId) && isStr(f.number) && isNum(f.total) && Array.isArray(f.payments) && Array.isArray(f.lines);
   return false;
 }
 
@@ -132,8 +157,8 @@ export function parsePosFile(text: string): PosFeed[] {
   return d.feeds.filter(isPosFeed);
 }
 
-export const posKey = (f: PosFeed) => (f.type === 'event' ? `event:${f.eventId}` : `order:${f.orderId}`);
-export const posJobId = (f: PosFeed) => (f.type === 'event' ? `pos-${f.eventId}` : `pos-order-${f.orderId}`);
+export const posKey = (f: PosFeed) => (f.type === 'event' ? `event:${f.eventId}` : f.type === 'order' ? `order:${f.orderId}` : `print:${f.orderId}`);
+export const posJobId = (f: PosFeed) => (f.type === 'event' ? `pos-${f.eventId}` : f.type === 'order' ? `pos-order-${f.orderId}` : `pos-print-${f.orderId}`);
 /** Every payment, expense and payout an import writes starts with this. */
 export const posPrefix = (f: PosFeed) => `${posJobId(f)}-`;
 
@@ -370,4 +395,53 @@ export function planOrderImport(feed: PosOrderFeed): OrderPlan {
     });
   const title = feed.lines.map((l) => (l.qty > 1 ? `${l.qty} × ${l.name}` : l.name)).join(', ').slice(0, 80) || `Order ${feed.number}`;
   return { jobId: posJobId(feed), title, status: ORDER_STATUS[feed.status] ?? 'not-started', payments };
+}
+
+// ----- sticker printing -----
+
+export interface PrintPlan {
+  jobId: string;
+  title: string;
+  status: JobStatus;
+  split: SplitShare[];
+  printerShare: Cents;
+  payments: PlannedPayment[];
+  expenses: PlannedExpense[];
+  /** What the studio keeps: the total less the printer's share and the costs. */
+  studioKeeps: Cents;
+}
+
+/** A print order as a Sticker Printing job: its payments, the printer's exact share, materials and courier as expenses. */
+export function planPrintImport(feed: PosPrintFeed, printerId: string | null): PrintPlan {
+  const pre = posPrefix(feed);
+  const date = feed.doneAt ? isoDate(feed.doneAt) : isoDate(feed.createdAt);
+  const share = printerId && feed.total > 0 ? feed.printerShare : 0;
+  const single = feed.payments.length === 1 && feed.payments[0].amount >= feed.total;
+  const payments: PlannedPayment[] = feed.payments
+    .filter((p) => p.amount !== 0)
+    .map((p) => ({
+      id: `${pre}${p.id}`,
+      amount: p.amount,
+      date: p.date,
+      method: payMethodFor(p),
+      kind: single ? 'full' : p.stage === 'down' ? 'down' : 'final',
+      note: `${p.stage === 'down' ? 'Down payment' : 'Payment'} for print order ${feed.number}, from JoshWorks POS${p.ref ? ` (ref ${p.ref})` : ''}`,
+    }));
+  const expenses: PlannedExpense[] = [];
+  if (feed.materialCost > 0) expenses.push({ id: `${pre}materials`, amount: feed.materialCost, date, category: 'Printing', vendor: 'Sticker printing', note: `Materials for ${feed.a4} A4 sheet${feed.a4 === 1 ? '' : 's'}, print order ${feed.number}` });
+  if (feed.delivery.method === 'courier' && feed.delivery.fee > 0)
+    expenses.push({ id: `${pre}courier`, amount: feed.delivery.fee, date, category: 'Transport', vendor: feed.delivery.courier || 'Courier', note: `Delivery of print order ${feed.number}${feed.delivery.tracking ? `, tracking ${feed.delivery.tracking}` : ''}` });
+  const status: JobStatus =
+    feed.status === 'cancelled' ? 'cancelled' : feed.status === 'done' || feed.status === 'ready' ? 'completed' : feed.status === 'printing' ? 'in-progress' : feed.payments.length ? 'not-started' : 'inquiry';
+  const title = `Sticker printing: ${feed.lines.map((l) => l.label).join(', ')}`.slice(0, 80);
+  return {
+    jobId: posJobId(feed),
+    title,
+    status,
+    split: share > 0 && printerId ? [{ memberId: printerId, pct: exactPct(share, feed.total) }] : [],
+    printerShare: share,
+    payments,
+    expenses,
+    studioKeeps: feed.total - share - sum(expenses.map((x) => x.amount)),
+  };
 }

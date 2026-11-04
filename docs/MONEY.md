@@ -37,6 +37,7 @@ Everything is in pesos. Owners and managers see all of it; designers see only th
 - **Each person's pay is their share.** The split is set so each share comes out to the POS amount exactly, to the centavo; what's left stays with the studio. Pay the POS already marked paid comes in as a payout, so Payouts shows only what's still owed.
 - People not on the Studio team (a cashier friend, a partner selling their own stickers) are recorded as **expenses** on the job, with the booth fee, supplies and production cost.
 - Commission orders become client jobs: the customer is added to Clients, deposits are down payments and the balance at pickup is the final payment. Set the team split on the job.
+- **Sticker printing** orders from the POS (Selling → Printing) come in under *Sticker printing* as **Sticker Printing** jobs. The customer becomes a client; the 50% down payment and the balance come in as the down and final payments. Whoever prints it earns the POS printer's share (20% of the print work to start, not the delivery fee), exactly, released as the customer pays. The courier fee (Transport) and material costs (Printing, when the POS rate card has costs) are expenses on the job, and the studio keeps the rest.
 - Importing again updates the same job. When the POS numbers change after an import, the event shows **Changed in the POS**; **Update** brings it in line and removes anything that's no longer there.
 
 ## BIR (8% option)

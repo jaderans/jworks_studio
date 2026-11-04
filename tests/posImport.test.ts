@@ -7,8 +7,8 @@ import { setActor, setWriterDevice } from '../src/db/write';
 import { runSetup } from '../src/services/setup';
 import { saveMember } from '../src/services/team';
 import { payoutSummary, sharesOfNet } from '../src/domain/money';
-import { defaultChoices, exactPct, parsePosFile, planEventImport, posImportState, type PosEventFeed, type PosOrderFeed } from '../src/domain/posFeed';
-import { applyEventImport, applyOrderImport, readDevicePosFeeds } from '../src/services/importPos';
+import { defaultChoices, exactPct, parsePosFile, planEventImport, planPrintImport, posImportState, type PosEventFeed, type PosOrderFeed, type PosPrintFeed } from '../src/domain/posFeed';
+import { applyEventImport, applyOrderImport, applyPrintImport, printDesigner, readDevicePosFeeds } from '../src/services/importPos';
 
 beforeEach(async () => {
   await db.delete();
@@ -182,5 +182,53 @@ describe('booth events from JoshWorks POS', () => {
     expect(pays.map((p) => [p.kind, p.method, p.amount])).toEqual([['down', 'GCash', 25_000], ['final', 'On Hand', 25_000]]);
     expect((await db.jobProgress.get(jobId))?.status).toBe('completed');
     expect(alive(await db.clients.toArray()).filter((c) => c.name === 'Kaye Santos')).toHaveLength(1);
+  });
+});
+
+const print = (over: Partial<PosPrintFeed> = {}): PosPrintFeed => ({
+  type: 'print', v: 1, orderId: 'pr1', number: 'PA-001', status: 'printing',
+  customer: { name: 'Mira Bakeshop', email: 'mira@example.com', phone: '0917', handle: '' },
+  printer: { memberId: 'p-ian', name: 'Ian', email: 'ian@example.com' },
+  printerPct: 20, printerShare: 17_000,
+  lines: [
+    { label: 'Premium Matte or Glossy, die cut', qty: 5, unitPrice: 9_000, amount: 45_000 },
+    { label: 'Packaging: Full pack, laminated card, small', qty: 20, unitPrice: 2_000, amount: 40_000 },
+  ],
+  subtotal: 85_000, delivery: { method: 'courier', courier: 'J&T', fee: 12_000, tracking: '' }, total: 97_000,
+  materialCost: 12_500, a4: 5,
+  payments: [{ id: 'pay1', date: '2026-11-04', name: 'GCash', kind: 'ewallet', amount: 48_500, stage: 'down', ref: '5012' }],
+  createdAt: new Date('2026-11-04T10:00:00').getTime(), approvedAt: new Date('2026-11-04T12:00:00').getTime(), dueDate: '2026-11-13', doneAt: null, notes: '',
+  ...over,
+});
+
+describe('sticker printing from JoshWorks POS', () => {
+  it('a print order becomes a Sticker Printing job; the printer earns their exact share as the customer pays', async () => {
+    const { ian } = await setup();
+    expect(await printDesigner(print())).toBe(ian.id);
+    const { jobId } = await applyPrintImport(print(), ian.id);
+    const job = (await db.jobs.get(jobId))!;
+    expect(job).toMatchObject({ type: 'Sticker Printing', lead: ian.id, clientName: 'Mira Bakeshop', dueDate: '2026-11-13', source: 'JoshWorks POS' });
+    expect((await db.jobProgress.get(jobId))?.status).toBe('in-progress');
+    expect((await db.jobMoney.get(jobId))?.total).toBe(97_000);
+    expect(posImportState(print(), job)).toBe('current');
+    const expenses = alive(await db.expenses.toArray()).filter((x) => x.jobId === jobId);
+    expect(expenses.map((x) => [x.category, x.amount]).sort()).toEqual([['Printing', 12_500], ['Transport', 12_000]]);
+
+    // Paid in full and shipped: the share comes out to the POS amount exactly
+    const done = print({ status: 'done', doneAt: new Date('2026-11-12T16:00:00').getTime(), delivery: { method: 'courier', courier: 'J&T', fee: 12_000, tracking: 'JT001' }, payments: [...print().payments, { id: 'pay2', date: '2026-11-12', name: 'GCash', kind: 'ewallet', amount: 48_500, stage: 'balance', ref: '5013' }] });
+    await applyPrintImport(done, ian.id);
+    const pays = alive(await db.payments.where('jobId').equals(jobId).toArray()).sort((a, b) => a.date.localeCompare(b.date));
+    expect(pays.map((p) => [p.kind, p.amount])).toEqual([['down', 48_500], ['final', 48_500]]);
+    expect(payoutSummary(alive(await db.earnings.toArray()), []).get(ian.id)?.earned).toBe(17_000);
+    expect((await db.jobProgress.get(jobId))?.status).toBe('completed');
+    expect(alive(await db.clients.toArray()).filter((c) => c.name === 'Mira Bakeshop')).toHaveLength(1);
+  });
+
+  it('with no printer the studio keeps it all; the plan shows what it keeps', () => {
+    const plan = planPrintImport(print(), null);
+    expect(plan.split).toEqual([]);
+    expect(plan.printerShare).toBe(0);
+    expect(plan.studioKeeps).toBe(97_000 - 12_500 - 12_000);
+    expect(planPrintImport(print({ status: 'quote', payments: [] }), null).status).toBe('inquiry');
   });
 });

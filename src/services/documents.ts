@@ -24,6 +24,7 @@ export function suggestTemplate(templates: ContractTemplate[], o: { jobType?: Jo
     Branding: 'tpl-branding',
     Merch: 'tpl-merch',
     'Pop-up / Stickers': 'tpl-merch',
+    'Sticker Printing': 'tpl-merch',
     Campaign: 'tpl-event',
     Publication: 'tpl-workbook',
     General: 'tpl-event',

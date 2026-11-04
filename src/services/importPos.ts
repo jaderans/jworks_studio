@@ -4,8 +4,8 @@ import { audit, build, save } from '../db/write';
 import { getSetting } from '../db/settings';
 import { nextJobNumber } from '../domain/jobs';
 import {
-  isPosFeed, personKey, planEventImport, planOrderImport, posJobId, posPrefix, posStamp, matchMember,
-  type PeopleChoices, type PosEventFeed, type PosFeed, type PosOrderFeed,
+  isPosFeed, personKey, planEventImport, planOrderImport, planPrintImport, posJobId, posPrefix, posStamp, matchMember,
+  type PeopleChoices, type PosEventFeed, type PosFeed, type PosOrderFeed, type PosPrintFeed,
 } from '../domain/posFeed';
 import { recomputeEarnings } from './money';
 import { blankClient } from './clients';
@@ -226,4 +226,79 @@ export async function orderDesigner(feed: PosOrderFeed): Promise<string | null> 
   if (existing?.lead) return existing.lead;
   if (!feed.designer) return null;
   return matchMember(feed.designer, alive(await db.members.toArray()))?.id ?? null;
+}
+
+/** The customer as a client: by email, then by name; added when new. */
+async function clientFor(c: { name: string; email: string; phone: string }, keep: string | null, stage: Client['stage'], since: number): Promise<string | null> {
+  if (keep) return keep;
+  if (!c.name.trim()) return null;
+  const clients = alive(await db.clients.toArray());
+  const email = c.email.trim().toLowerCase();
+  const found = (email && clients.find((x) => x.email && x.email.toLowerCase() === email)) || clients.find((x) => clientKey(x.name) === clientKey(c.name));
+  if (found) return found.id;
+  const rec = build<Client>({ ...blankClient({ name: c.name.trim(), email: c.email, phone: c.phone, source: 'JoshWorks POS', stage, startDate: isoDate(since), platforms: [] }) });
+  await save(db.clients, rec);
+  return rec.id;
+}
+
+/** Add or update a sticker printing job: the customer, the printer's exact share, every payment, materials and courier as expenses. */
+export async function applyPrintImport(feed: PosPrintFeed, printerId: string | null): Promise<{ jobId: string; created: boolean }> {
+  const plan = planPrintImport(feed, printerId);
+  const id = plan.jobId;
+  const { existing, number } = await jobNumberFor(id);
+  const clientId = await clientFor(feed.customer, existing?.clientId ?? null, feed.status === 'done' ? 'completed' : 'active', feed.createdAt);
+
+  await save(db.jobs, {
+    ...(existing ?? blankJob(id, number)),
+    number,
+    title: existing?.title || plan.title,
+    type: existing?.type ?? 'Sticker Printing',
+    clientId,
+    clientName: feed.customer.name,
+    startDate: existing?.startDate || isoDate(feed.createdAt),
+    dueDate: feed.dueDate,
+    designers: printerId ? [printerId] : (existing?.designers ?? []),
+    lead: printerId ?? existing?.lead ?? null,
+    brief: `POS print order ${feed.number}: ${feed.lines.map((l) => `${l.qty} × ${l.label}`).join(', ')}.${feed.delivery.method === 'courier' ? ` Courier${feed.delivery.courier ? ` (${feed.delivery.courier})` : ''}${feed.delivery.tracking ? `, tracking ${feed.delivery.tracking}` : ''}.` : ' Pickup.'}${feed.notes ? ` ${feed.notes}` : ''} ${posStamp(feed)}`,
+    source: 'JoshWorks POS',
+    deleted: 0,
+  });
+  const prevProgress = await db.jobProgress.get(id);
+  await save(db.jobProgress, {
+    ...(prevProgress ?? blankProgress(id)),
+    status: plan.status,
+    completedOn: plan.status === 'completed' ? prevProgress?.completedOn || (feed.doneAt ? isoDate(feed.doneAt) : todayISO()) : '',
+    deleted: 0,
+  });
+  const prevMoney = await db.jobMoney.get(id);
+  await save(db.jobMoney, {
+    ...(prevMoney ?? blankJobMoney(id, 0)),
+    total: feed.total,
+    items: [
+      ...feed.lines.map((l) => ({ packageId: null, label: l.label, qty: l.qty, unitPrice: l.unitPrice, unit: 'piece' as const, months: 1, base: true })),
+      ...(feed.delivery.fee ? [{ packageId: null, label: `Delivery${feed.delivery.courier ? ` (${feed.delivery.courier})` : ''}`, qty: 1, unitPrice: feed.delivery.fee, unit: 'project' as const, months: 1, base: true }] : []),
+    ],
+    discountAmount: 0,
+    deductionPct: 0,
+    split: plan.split,
+    notes: `From JoshWorks POS. ${feed.printer ? `${feed.printer.name} prints it: ${feed.printerPct}% of the print work, ${peso(plan.printerShare)}.` : 'No printer set in the POS yet.'}`,
+    deleted: 0,
+  });
+  await writePayments(id, clientId, plan.payments);
+  for (const x of plan.expenses) {
+    const prev = await db.expenses.get(x.id);
+    await save(db.expenses, { ...(prev ?? build<Expense>({ id: x.id, date: x.date, category: x.category, amount: 0, vendor: '', jobId: id, note: '' })), id: x.id, date: x.date, category: x.category, amount: x.amount, vendor: x.vendor, note: x.note, jobId: id, deleted: 0 });
+  }
+  await retire(posPrefix(feed), new Set([...plan.payments, ...plan.expenses].map((r) => r.id)));
+  await recomputeEarnings([id]);
+  await audit('import', 'job', id, `${existing ? 'Updated' : 'Added'} print order ${feed.number} (${feed.customer.name}) from JoshWorks POS: ${peso(feed.total)}`);
+  return { jobId: id, created: !existing };
+}
+
+/** Default printer for a print order: who it's set to already, else the POS printer matched by email or name. */
+export async function printDesigner(feed: PosPrintFeed): Promise<string | null> {
+  const existing = await db.jobs.get(posJobId(feed));
+  if (existing?.lead) return existing.lead;
+  if (!feed.printer) return null;
+  return matchMember(feed.printer, alive(await db.members.toArray()))?.id ?? null;
 }

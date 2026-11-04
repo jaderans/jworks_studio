@@ -9,10 +9,10 @@ import { useJobs, useMembers } from '../../hooks/data';
 import { peso, sum } from '../../lib/money';
 import { fmtDateRange } from '../../lib/time';
 import {
-  defaultChoices, parsePosFile, payMethodFor, personKey, planEventImport, planOrderImport, posImportState, posJobId, posKey,
-  type PeopleChoices, type PosEventFeed, type PosFeed, type PosImportState, type PosOrderFeed,
+  defaultChoices, parsePosFile, payMethodFor, personKey, planEventImport, planOrderImport, planPrintImport, posImportState, posJobId, posKey,
+  type PeopleChoices, type PosEventFeed, type PosFeed, type PosImportState, type PosOrderFeed, type PosPrintFeed,
 } from '../../domain/posFeed';
-import { applyEventImport, applyOrderImport, expenseChoices, orderDesigner, readDevicePosFeeds, rememberedPeople } from '../../services/importPos';
+import { applyEventImport, applyOrderImport, applyPrintImport, expenseChoices, orderDesigner, printDesigner, readDevicePosFeeds, rememberedPeople } from '../../services/importPos';
 
 const STATE_BADGE: Record<PosImportState, { tone: 'outline' | 'good' | 'warn'; label: string }> = {
   new: { tone: 'outline', label: 'Not in Studio' },
@@ -21,6 +21,7 @@ const STATE_BADGE: Record<PosImportState, { tone: 'outline' | 'good' | 'warn'; l
 };
 
 const ORDER_LABEL: Record<PosOrderFeed['status'], string> = { new: 'New', 'in-progress': 'Being made', ready: 'Ready', 'picked-up': 'Picked up', cancelled: 'Cancelled' };
+const PRINT_LABEL: Record<PosPrintFeed['status'], string> = { quote: 'Quote', printing: 'Printing', ready: 'Ready', done: 'Done', cancelled: 'Cancelled' };
 
 /** Money → Booth events: sales from JoshWorks POS, added as jobs. */
 export function BoothEventsTab() {
@@ -52,6 +53,7 @@ export function BoothEventsTab() {
   const stateOf = (f: PosFeed) => posImportState(f, jobById.get(posJobId(f)));
   const events = feeds.filter((f): f is PosEventFeed => f.type === 'event').sort((a, b) => b.startDate.localeCompare(a.startDate));
   const orders = feeds.filter((f): f is PosOrderFeed => f.type === 'order').sort((a, b) => b.createdAt - a.createdAt);
+  const prints = feeds.filter((f): f is PosPrintFeed => f.type === 'print').sort((a, b) => b.createdAt - a.createdAt);
 
   const openFile = async (file: File | undefined) => {
     if (!file) return;
@@ -194,8 +196,53 @@ export function BoothEventsTab() {
         </section>
       ) : null}
 
+      {prints.length ? (
+        <section className="stack">
+          <h2>Sticker printing</h2>
+          <div className="table-wrap">
+            <table className="table cards-on-phone">
+              <thead>
+                <tr>
+                  <th>Print order</th>
+                  <th className="r">Total</th>
+                  <th>Status</th>
+                  <th>In Studio</th>
+                  <th className="r">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {prints.map((f) => {
+                  const s = STATE_BADGE[stateOf(f)];
+                  return (
+                    <tr key={posKey(f)}>
+                      <td data-label="Print order">
+                        <b>
+                          {f.number} · {f.customer.name || 'No name'}
+                        </b>
+                        <div className="muted small">{f.lines.map((l) => `${l.qty} × ${l.label}`).join(', ')}</div>
+                      </td>
+                      <td className="r" data-label="Total">
+                        {peso(f.total)}
+                      </td>
+                      <td data-label="Status">{PRINT_LABEL[f.status] ?? f.status}</td>
+                      <td data-label="In Studio">
+                        <Badge tone={s.tone}>{s.label}</Badge>
+                      </td>
+                      <td className="r">{action(f)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
+
       {importing?.type === 'event' ? <EventDialog feed={importing} update={stateOf(importing) !== 'new'} onClose={() => setImporting(null)} /> : null}
       {importing?.type === 'order' ? <OrderDialog feed={importing} update={stateOf(importing) !== 'new'} onClose={() => setImporting(null)} /> : null}
+      {importing?.type === 'print' ? <PrintDialog feed={importing} update={stateOf(importing) !== 'new'} onClose={() => setImporting(null)} /> : null}
     </div>
   );
 }
@@ -395,6 +442,100 @@ function OrderDialog({ feed, update, onClose }: { feed: PosOrderFeed; update: bo
           </Select>
         </Field>
         <p className="muted small">The customer is added to Clients if they aren’t there yet. Deposits come in as down payments; the balance paid at pickup as the final payment.</p>
+      </div>
+    </Dialog>
+  );
+}
+
+function PrintDialog({ feed, update, onClose }: { feed: PosPrintFeed; update: boolean; onClose: () => void }) {
+  const app = useApp();
+  const members = useMembers();
+  const [printer, setPrinter] = useState<string | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void printDesigner(feed).then((d) => setPrinter(d ?? ''));
+  }, [feed]);
+  const plan = planPrintImport(feed, printer || null);
+  const paid = sum(feed.payments.map((p) => p.amount));
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const r = await applyPrintImport(feed, printer || null);
+      app.toast(r.created ? `${feed.number} added as a Sticker Printing job` : `${feed.number} updated`, { tone: 'good' });
+      onClose();
+    } catch (e) {
+      app.toast(e instanceof Error ? e.message : 'Couldn’t add it', { tone: 'bad' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={update ? `Update print order ${feed.number}` : `Add print order ${feed.number} as a job`}
+      size="wide"
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={busy || printer === undefined} onClick={save}>
+            {update ? 'Update the job' : 'Add to Studio'}
+          </Button>
+        </>
+      }
+    >
+      <div className="stack">
+        <p>
+          Sticker printing for <b>{feed.customer.name || 'a customer'}</b>
+          {feed.delivery.method === 'courier' ? <span className="muted"> · courier{feed.delivery.courier ? ` (${feed.delivery.courier})` : ''}</span> : <span className="muted"> · pickup</span>}
+        </p>
+        <div className="grid-2">
+          <Stat label="Total" value={peso(feed.total)} hint={paid < feed.total ? `${peso(paid)} paid, ${peso(feed.total - paid)} due` : 'Paid in full'} />
+          <Stat label="Studio keeps" value={peso(plan.studioKeeps)} hint="The total less the printer’s share and the costs below" />
+        </div>
+        <Field label="Who prints it" htmlFor="pos-printer" hint={feed.printer ? `In the POS: ${feed.printer.name}, ${feed.printerPct}% of the print work.` : 'No printer set in the POS; their share is set there.'}>
+          <Select id="pos-printer" value={printer ?? ''} onChange={(e) => setPrinter(e.target.value)}>
+            <option value="">No one (the studio keeps it all)</option>
+            {(members ?? []).map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        {plan.printerShare ? <p className="small">Their share of the job: <b>{peso(plan.printerShare)}</b>, earned as the customer pays.</p> : null}
+        <h3>Payments</h3>
+        {feed.payments.length ? (
+          <ul className="pos-lines">
+            {feed.payments.map((p) => (
+              <li key={p.id} className="row between">
+                <span>
+                  {p.stage === 'down' ? 'Down payment' : 'Payment'}, {p.name} <span className="muted small">→ {payMethodFor(p)} · {p.date}</span>
+                </span>
+                <b>{peso(p.amount)}</b>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted small">No payment yet.</p>
+        )}
+        <h3>Expenses</h3>
+        {plan.expenses.length ? (
+          <ul className="pos-lines">
+            {plan.expenses.map((x) => (
+              <li key={x.id} className="row between">
+                <span>
+                  {x.note} <span className="muted small">· {x.category}</span>
+                </span>
+                <b>{peso(x.amount)}</b>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted small">None. Add material costs per sheet to the POS rate card to see them here.</p>
+        )}
       </div>
     </Dialog>
   );

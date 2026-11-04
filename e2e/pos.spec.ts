@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { SHOTS, freshSetup, horizontalOverflow, overlappingFields } from './helpers';
-import type { PosEventFeed, PosOrderFeed } from '../src/domain/posFeed';
+import type { PosEventFeed, PosOrderFeed, PosPrintFeed } from '../src/domain/posFeed';
 
 test.use({ timezoneId: 'Asia/Manila' });
 
@@ -28,6 +28,17 @@ const order: PosOrderFeed = {
   total: 50_000, dueAt: '2026-10-31T15:00', status: 'in-progress', createdAt: Date.parse('2026-10-24T13:00:00+08:00'),
   payments: [{ saleId: 's1', date: '2026-10-24', name: 'GCash', kind: 'ewallet', amount: 25_000, stage: 'deposit' }],
   notes: '',
+};
+
+const print: PosPrintFeed = {
+  type: 'print', v: 1, orderId: 'pr1', number: 'PA-001', status: 'printing',
+  customer: { name: 'Mira Bakeshop', email: 'mira@example.com', phone: '0917', handle: '' },
+  printer: { memberId: 'p-josh', name: 'Joshua', email: '' },
+  printerPct: 20, printerShare: 17_000,
+  lines: [{ label: 'Premium Matte or Glossy, die cut', qty: 5, unitPrice: 9_000, amount: 45_000 }, { label: 'Packaging: Full pack, laminated card, small', qty: 20, unitPrice: 2_000, amount: 40_000 }],
+  subtotal: 85_000, delivery: { method: 'courier', courier: 'J&T', fee: 12_000, tracking: '' }, total: 97_000, materialCost: 0, a4: 5,
+  payments: [{ id: 'pay1', date: '2026-11-04', name: 'GCash', kind: 'ewallet', amount: 48_500, stage: 'down', ref: '5012' }],
+  createdAt: Date.parse('2026-11-04T10:00:00+08:00'), approvedAt: Date.parse('2026-11-04T12:00:00+08:00'), dueDate: '2026-11-13', doneAt: null, notes: '',
 };
 
 test('booth events and orders from JoshWorks POS become jobs', async ({ page }) => {
@@ -79,7 +90,7 @@ test('booth events and orders from JoshWorks POS become jobs', async ({ page }) 
   await page.getByLabel('POS file').setInputFiles({
     name: 'JoshWorks - for JoshWorks Studio.json',
     mimeType: 'application/json',
-    buffer: Buffer.from(JSON.stringify({ app: 'jworks-pos', kind: 'studio-feed', v: 1, exportedAt: 1, feeds: [order] })),
+    buffer: Buffer.from(JSON.stringify({ app: 'jworks-pos', kind: 'studio-feed', v: 1, exportedAt: 1, feeds: [order, print] })),
   });
   const orderRow = page.getByRole('row', { name: /QA-07/ });
   await orderRow.getByRole('button', { name: 'Add to Studio' }).click();
@@ -87,6 +98,16 @@ test('booth events and orders from JoshWorks POS become jobs', async ({ page }) 
   await expect(od.getByLabel('Who makes it').locator('option:checked')).toHaveText('Joshua');
   await od.getByRole('button', { name: 'Add to Studio' }).click();
   await expect(orderRow.getByText('In Studio')).toBeVisible();
+
+  // A sticker printing job from the same file: the printer's share and the courier fee
+  const printRow = page.getByRole('row', { name: /PA-001/ });
+  await printRow.getByRole('button', { name: 'Add to Studio' }).click();
+  const pd = page.getByRole('dialog', { name: 'Add print order PA-001 as a job' });
+  await expect(pd.getByLabel('Who prints it').locator('option:checked')).toHaveText('Joshua');
+  await expect(pd.getByText('₱170', { exact: true })).toBeVisible();
+  await expect(pd.getByText(/Delivery of print order PA-001/)).toBeVisible();
+  await pd.getByRole('button', { name: 'Add to Studio' }).click();
+  await expect(printRow.getByText('In Studio')).toBeVisible();
   expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
   await page.screenshot({ path: `${SHOTS}/pos-booth-events.png`, fullPage: true });
 
