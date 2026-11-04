@@ -7,6 +7,7 @@ import { setActor, setWriterDevice } from '../src/db/write';
 import { runSetup } from '../src/services/setup';
 import { saveMember } from '../src/services/team';
 import { payoutSummary, sharesOfNet } from '../src/domain/money';
+import { docTotals } from '../src/domain/pricing';
 import { defaultChoices, exactPct, parsePosFile, planEventImport, planPrintImport, posImportState, type PosEventFeed, type PosOrderFeed, type PosPrintFeed } from '../src/domain/posFeed';
 import { applyEventImport, applyOrderImport, applyPrintImport, printDesigner, readDevicePosFeeds } from '../src/services/importPos';
 
@@ -222,6 +223,20 @@ describe('sticker printing from JoshWorks POS', () => {
     expect(payoutSummary(alive(await db.earnings.toArray()), []).get(ian.id)?.earned).toBe(17_000);
     expect((await db.jobProgress.get(jobId))?.status).toBe('completed');
     expect(alive(await db.clients.toArray()).filter((c) => c.name === 'Mira Bakeshop')).toHaveLength(1);
+  });
+
+  it('a service coupon is the job’s discount; the printer’s share is of the work after it, to the centavo', async () => {
+    const { ian } = await setup();
+    // ₱50 off the print work: the POS works the share out on ₱800, the total is ₱920.
+    const withCoupon = print({ discount: 5_000, couponCode: 'KI26-7F3QX', printerShare: 16_000, total: 92_000, status: 'done', doneAt: new Date('2026-11-12T16:00:00').getTime(), payments: [
+      { id: 'pay1', date: '2026-11-04', name: 'GCash', kind: 'ewallet', amount: 46_000, stage: 'down', ref: '5012' },
+      { id: 'pay2', date: '2026-11-12', name: 'GCash', kind: 'ewallet', amount: 46_000, stage: 'balance', ref: '5013' },
+    ] });
+    const { jobId } = await applyPrintImport(withCoupon, ian.id);
+    const money = (await db.jobMoney.get(jobId))!;
+    expect(money).toMatchObject({ total: 92_000, discountAmount: 5_000, couponCode: 'KI26-7F3QX' });
+    expect(docTotals(money.items, money.discountAmount).net).toBe(92_000);
+    expect(payoutSummary(alive(await db.earnings.toArray()), []).get(ian.id)?.earned).toBe(16_000);
   });
 
   it('with no printer the studio keeps it all; the plan shows what it keeps', () => {

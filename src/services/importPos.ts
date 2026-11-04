@@ -211,6 +211,9 @@ export async function applyOrderImport(feed: PosOrderFeed, designerId: string | 
     ...(prevMoney ?? blankJobMoney(id, money.deductionPct)),
     total: feed.total,
     items: feed.lines.map((l) => ({ packageId: null, label: l.name, qty: l.qty, unitPrice: l.unitPrice, unit: 'piece' as const, months: 1, base: true })),
+    // The lines are at full price; a POS service coupon is the discount.
+    discountAmount: feed.discount ?? 0,
+    couponCode: feed.couponCode,
     deleted: 0,
   });
   await writePayments(id, clientId, plan.payments);
@@ -278,10 +281,11 @@ export async function applyPrintImport(feed: PosPrintFeed, printerId: string | n
       ...feed.lines.map((l) => ({ packageId: null, label: l.label, qty: l.qty, unitPrice: l.unitPrice, unit: 'piece' as const, months: 1, base: true })),
       ...(feed.delivery.fee ? [{ packageId: null, label: `Delivery${feed.delivery.courier ? ` (${feed.delivery.courier})` : ''}`, qty: 1, unitPrice: feed.delivery.fee, unit: 'project' as const, months: 1, base: true }] : []),
     ],
-    discountAmount: 0,
+    discountAmount: feed.discount ?? 0,
+    couponCode: feed.couponCode,
     deductionPct: 0,
     split: plan.split,
-    notes: `From JoshWorks POS. ${feed.printer ? `${feed.printer.name} prints it: ${feed.printerPct}% of the print work, ${peso(plan.printerShare)}.` : 'No printer set in the POS yet.'}`,
+    notes: `From JoshWorks POS. ${feed.printer ? `${feed.printer.name} prints it: ${feed.printerPct}% of the print work${feed.discount ? ' after the coupon' : ''}, ${peso(plan.printerShare)}.` : 'No printer set in the POS yet.'}${feed.couponCode ? ` Coupon ${feed.couponCode}: ${peso(feed.discount ?? 0)} off.` : ''}`,
     deleted: 0,
   });
   await writePayments(id, clientId, plan.payments);

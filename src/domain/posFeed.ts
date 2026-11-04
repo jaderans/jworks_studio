@@ -96,7 +96,11 @@ export interface PosOrderFeed {
   customer: { name: string; email: string; phone: string; handle: string };
   designer: { memberId: string; name: string; email: string } | null;
   lines: { name: string; qty: number; unitPrice: Cents }[];
+  /** After the coupon. */
   total: Cents;
+  /** A service coupon's discount (lines are at full price); feeds from before coupons have none. */
+  discount?: Cents;
+  couponCode?: string;
   dueAt: string;
   status: 'new' | 'in-progress' | 'ready' | 'picked-up' | 'cancelled';
   createdAt: number;
@@ -117,6 +121,9 @@ export interface PosPrintFeed {
   printerShare: Cents;
   lines: { label: string; qty: number; unitPrice: Cents; amount: Cents }[];
   subtotal: Cents;
+  /** A service coupon's discount off the print work; total is after it, and printerShare is of the work after it. */
+  discount?: Cents;
+  couponCode?: string;
   delivery: { method: 'pickup' | 'courier'; courier: string; fee: Cents; tracking: string };
   total: Cents;
   materialCost: Cents;

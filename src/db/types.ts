@@ -555,6 +555,9 @@ export interface JobMoney extends Syncable {
   /** Tracker invoice no., when it came from the commission tracker. */
   invoiceNo: string;
   notes: string;
+  /** A JoshWorks POS service coupon; discountAmount is what it takes off. */
+  couponCode?: string;
+  couponId?: string;
 }
 
 export type PayMethod = 'GCash' | 'Mari Bank' | 'Union Bank' | 'On Hand' | 'Bank transfer' | 'PayPal' | 'Wise' | 'Other';

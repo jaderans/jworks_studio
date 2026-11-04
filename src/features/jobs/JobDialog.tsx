@@ -16,6 +16,7 @@ import { cleanSplit, invoiceTotals, jobBalance, splitTotal } from '../../domain/
 import { docTotals } from '../../domain/pricing';
 import { deleteJob, saveJob, saveProgress } from '../../services/jobs';
 import { invoiceForJob, saveJobMoney } from '../../services/money';
+import { checkCouponForJob } from '../../services/posCoupons';
 import { peso } from '../../lib/money';
 import { fmtIsoDate, todayISO } from '../../lib/time';
 import { PaymentDialog } from '../money/PaymentDialog';
@@ -55,6 +56,7 @@ export function JobDialog({ id, onClose }: { id: string | null; onClose: () => v
   const [paying, setPaying] = useState(false);
   const [invoiceId, setInvoiceId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [couponTyped, setCouponTyped] = useState('');
 
   if (view && loadedFor !== view.id) {
     const { status, completedOn, revisionsUsed, checklist, links, notes, progressAt, ...job } = view;
@@ -90,12 +92,33 @@ export function JobDialog({ id, onClose }: { id: string | null; onClose: () => v
   const setG = (patch: Partial<JobProgress>) => setProg({ ...prog, ...patch });
   const setM = (patch: Partial<JobMoney>) => setMoney({ ...(money ?? {}), ...patch });
 
+  // A POS service coupon comes off the price lines; the price before it is what its minimum is checked on.
+  // Jobs imported from the POS (pos-…) bring their coupon with them; the POS holds that use.
+  const fromPos = plan.id.startsWith('pos-');
+  const priceBefore = items.length ? docTotals(items, 0).net : 0;
+  const applyCoupon = async () => {
+    if (!items.length) return app.toast('Add the price lines first; the coupon comes off them.', { tone: 'bad' });
+    const r = await checkCouponForJob(couponTyped, priceBefore, plan.id);
+    if (!r.ok) return app.toast(r.reason, { tone: 'bad' });
+    setM({ couponCode: r.code, couponId: r.couponId, discountAmount: r.discount });
+    setCouponTyped('');
+    app.toast(`${r.code}: ${peso(r.discount)} off`, { tone: 'good' });
+  };
+
   const save = async (close = true) => {
     setBusy(true);
     try {
+      let m = money;
+      // The price may have changed since the coupon went on: check it again (when the POS is on this device).
+      if (canMoney && m?.couponCode && !fromPos) {
+        const r = await checkCouponForJob(m.couponCode, priceBefore, plan.id);
+        if (r.ok) m = { ...m, discountAmount: r.discount };
+        else if (!r.offline) throw new Error(`Coupon ${m.couponCode}: ${r.reason}`);
+      }
       if (canPlan) await saveJob(plan);
       await saveProgress(plan.id, prog);
-      if (canMoney && money) await saveJobMoney(plan.id, { ...money, total, split: cleanSplit(split) });
+      const t = items.length ? docTotals(items, m?.discountAmount ?? 0).net : (m?.total ?? 0);
+      if (canMoney && m) await saveJobMoney(plan.id, { ...m, total: t, split: cleanSplit(split) });
       app.toast('Saved', { tone: 'good' });
       if (close) onClose();
     } catch (e) {
@@ -348,10 +371,34 @@ export function JobDialog({ id, onClose }: { id: string | null; onClose: () => v
                         <MoneyInput id="jm-total" value={money.total ?? 0} onChange={(v) => setM({ total: v ?? 0 })} />
                       </Field>
                     ) : null}
-                    <Field label="Discount" htmlFor="jm-disc" hint="e.g. REPYOURORG15 or a bulk discount, in pesos.">
-                      <MoneyInput id="jm-disc" value={money.discountAmount ?? 0} onChange={(v) => setM({ discountAmount: v ?? 0 })} />
+                    <Field label="Discount" htmlFor="jm-disc" hint={money.couponCode ? 'The service coupon below.' : 'e.g. REPYOURORG15 or a bulk discount, in pesos.'}>
+                      <MoneyInput id="jm-disc" value={money.discountAmount ?? 0} onChange={(v) => setM({ discountAmount: v ?? 0 })} disabled={!!money.couponCode} />
                     </Field>
                   </div>
+                  {money.couponCode ? (
+                    <div className="row wrap" role="status">
+                      <Badge tone="yellow">Coupon {money.couponCode}</Badge>
+                      <span className="small muted grow">
+                        {peso(money.discountAmount ?? 0)} off · a JoshWorks POS service coupon; the team split is worked out on the price after it.{fromPos ? ' It came with the POS order; change it there.' : ''}
+                      </span>
+                      {fromPos ? null : (
+                        <Button size="sm" variant="ghost" onClick={() => setM({ couponCode: undefined, couponId: undefined, discountAmount: 0 })}>
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+                  ) : fromPos ? (
+                    <p className="muted small">Service coupons for jobs from the POS go on the print order or order in the POS.</p>
+                  ) : (
+                    <Field label="Service coupon" htmlFor="jm-coupon" hint="A code from a JoshWorks event (made in JoshWorks POS), for services of ₱2,500 or more.">
+                      <div className="row">
+                        <TextInput id="jm-coupon" className="grow" value={couponTyped} onChange={(e) => setCouponTyped(e.target.value)} placeholder="e.g. KI26-7F3QX" />
+                        <Button onClick={() => void applyCoupon()} disabled={!couponTyped.trim()}>
+                          Apply
+                        </Button>
+                      </div>
+                    </Field>
+                  )}
                 </section>
 
                 <section className="stack tight">
