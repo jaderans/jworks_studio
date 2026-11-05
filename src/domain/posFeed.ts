@@ -164,6 +164,12 @@ export function parsePosFile(text: string): PosFeed[] {
   return d.feeds.filter(isPosFeed);
 }
 
+/** What the POS deleted before it saved this file. Files from before this was added have none. */
+export function removedInPosFile(text: string): PosFeed[] {
+  const removed = (JSON.parse(text) as { removed?: unknown }).removed;
+  return Array.isArray(removed) ? removed.filter(isPosFeed) : [];
+}
+
 export const posKey = (f: PosFeed) => (f.type === 'event' ? `event:${f.eventId}` : f.type === 'order' ? `order:${f.orderId}` : `print:${f.orderId}`);
 export const posJobId = (f: PosFeed) => (f.type === 'event' ? `pos-${f.eventId}` : f.type === 'order' ? `pos-order-${f.orderId}` : `pos-print-${f.orderId}`);
 /** Every payment, expense and payout an import writes starts with this. */

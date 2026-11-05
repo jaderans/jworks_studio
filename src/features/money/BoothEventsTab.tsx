@@ -9,10 +9,10 @@ import { useJobs, useMembers } from '../../hooks/data';
 import { peso, sum } from '../../lib/money';
 import { fmtDateRange } from '../../lib/time';
 import {
-  defaultChoices, parsePosFile, payMethodFor, personKey, planEventImport, planOrderImport, planPrintImport, posImportState, posJobId, posKey,
+  defaultChoices, parsePosFile, payMethodFor, personKey, planEventImport, planOrderImport, planPrintImport, posImportState, posJobId, posKey, removedInPosFile,
   type PeopleChoices, type PosEventFeed, type PosFeed, type PosImportState, type PosOrderFeed, type PosPrintFeed,
 } from '../../domain/posFeed';
-import { applyEventImport, applyOrderImport, applyPrintImport, expenseChoices, orderDesigner, printDesigner, readDevicePosFeeds, rememberedPeople } from '../../services/importPos';
+import { applyEventImport, applyOrderImport, applyPrintImport, expenseChoices, orderDesigner, printDesigner, readDevicePosFeeds, rememberedPeople, removePosJob } from '../../services/importPos';
 
 const STATE_BADGE: Record<PosImportState, { tone: 'outline' | 'good' | 'warn'; label: string }> = {
   new: { tone: 'outline', label: 'Not in Studio' },
@@ -23,13 +23,16 @@ const STATE_BADGE: Record<PosImportState, { tone: 'outline' | 'good' | 'warn'; l
 const ORDER_LABEL: Record<PosOrderFeed['status'], string> = { new: 'New', 'in-progress': 'Being made', ready: 'Ready', 'picked-up': 'Picked up', cancelled: 'Cancelled' };
 const PRINT_LABEL: Record<PosPrintFeed['status'], string> = { quote: 'Quote', printing: 'Printing', ready: 'Ready', done: 'Done', cancelled: 'Cancelled' };
 
+const feedName = (f: PosFeed) => (f.type === 'event' ? f.name : `${f.number} · ${f.customer.name || 'No name'}`);
+
 /** Money → Booth events: sales from JoshWorks POS, added as jobs. */
 export function BoothEventsTab() {
   const app = useApp();
   const navigate = useNavigate();
   const jobs = useJobs();
-  const [device, setDevice] = useState<{ found: boolean; feeds: PosFeed[] } | null>(null);
+  const [device, setDevice] = useState<{ found: boolean; feeds: PosFeed[]; removed: PosFeed[] } | null>(null);
   const [fromFile, setFromFile] = useState<PosFeed[]>([]);
+  const [removedInFile, setRemovedInFile] = useState<PosFeed[]>([]);
   const [importing, setImporting] = useState<PosFeed | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -54,17 +57,40 @@ export function BoothEventsTab() {
   const events = feeds.filter((f): f is PosEventFeed => f.type === 'event').sort((a, b) => b.startDate.localeCompare(a.startDate));
   const orders = feeds.filter((f): f is PosOrderFeed => f.type === 'order').sort((a, b) => b.createdAt - a.createdAt);
   const prints = feeds.filter((f): f is PosPrintFeed => f.type === 'print').sort((a, b) => b.createdAt - a.createdAt);
+  // Deleted in the POS but still a job here. Sent again since, it's back in the lists above.
+  const sent = new Set(feeds.map(posKey));
+  const gone = new Map([...device.removed, ...removedInFile].map((f) => [posKey(f), f]));
+  const deleted = [...gone.values()].filter((f) => !sent.has(posKey(f)) && jobById.has(posJobId(f)));
 
   const openFile = async (file: File | undefined) => {
     if (!file) return;
     try {
-      const got = parsePosFile(await file.text());
+      const text = await file.text();
+      const got = parsePosFile(text);
       setFromFile((cur) => [...cur.filter((f) => !got.some((g) => posKey(g) === posKey(f))), ...got]);
+      setRemovedInFile(removedInPosFile(text));
       app.toast(got.length ? `Opened ${got.length} from the POS file` : 'Nothing to add in that file', { tone: got.length ? 'good' : 'info' });
     } catch (e) {
       app.toast(e instanceof Error ? e.message : 'Couldn’t open that file', { tone: 'bad' });
     } finally {
       if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const removeJob = async (f: PosFeed) => {
+    const job = jobById.get(posJobId(f));
+    const ok = await app.confirm({
+      title: `Delete ${job?.number ?? 'this job'}?`,
+      message: `${feedName(f)} was deleted in the POS. This removes its job, with the payments, expenses and earnings that came from the POS. The client stays.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await removePosJob(f);
+      app.toast(`${job?.number ?? 'The job'} deleted`, { tone: 'good' });
+    } catch (e) {
+      app.toast(e instanceof Error ? e.message : 'Couldn’t delete it', { tone: 'bad' });
     }
   };
 
@@ -103,6 +129,41 @@ export function BoothEventsTab() {
           In JoshWorks POS on this device, open the event, then Report → <b>Send to Studio</b>; it shows up here. From another phone or laptop, use <b>Download Studio file</b> there and{' '}
           <b>Open a POS file</b> here.
         </EmptyState>
+      ) : null}
+
+      {deleted.length ? (
+        <section className="stack">
+          <h2>Deleted in the POS</h2>
+          <p className="muted small">These are gone from the POS, but their jobs are still here. Delete each one, or keep the job and ignore this.</p>
+          <div className="table-wrap">
+            <table className="table cards-on-phone">
+              <thead>
+                <tr>
+                  <th>From the POS</th>
+                  <th>Job</th>
+                  <th className="r">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {deleted.map((f) => (
+                  <tr key={posKey(f)}>
+                    <td data-label="From the POS">
+                      <b>{feedName(f)}</b>
+                    </td>
+                    <td data-label="Job">{jobById.get(posJobId(f))?.number}</td>
+                    <td className="r">
+                      <Button size="sm" variant="danger" onClick={() => void removeJob(f)}>
+                        Delete from Studio
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       ) : null}
 
       {events.length ? (

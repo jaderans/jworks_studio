@@ -113,5 +113,29 @@ test('booth events and orders from JoshWorks POS become jobs', async ({ page }) 
 
   await page.goto('/#/clients');
   await expect(page.getByText('Kaye Santos').first()).toBeVisible();
+
+  // The POS deletes the order: Studio offers to delete its job, and it's gone
+  await page.evaluate(async (feed) => {
+    await new Promise<void>((resolve, reject) => {
+      const req = indexedDB.open('jworks-pos');
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        const tx = req.result.transaction('studioFeed', 'readwrite');
+        tx.objectStore('studioFeed').put({ id: 'order:o1', feed, sentBy: 'Joshua', deleted: 1, createdAt: 1, updatedAt: 2 });
+        tx.oncomplete = () => {
+          req.result.close();
+          resolve();
+        };
+      };
+    });
+  }, order);
+  await page.goto('/#/money/pos');
+  await expect(page.getByRole('heading', { name: 'Deleted in the POS' })).toBeVisible();
+  const goneRow = page.getByRole('row', { name: /QA-07/ });
+  await page.screenshot({ path: `${SHOTS}/pos-deleted.png`, fullPage: true });
+  await goneRow.getByRole('button', { name: 'Delete from Studio' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
+  await expect(page.getByRole('heading', { name: 'Deleted in the POS' })).toHaveCount(0);
+  await expect(page.getByRole('row', { name: /QA-07/ })).toHaveCount(0);
   expect(errors).toEqual([]);
 });

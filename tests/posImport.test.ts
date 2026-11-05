@@ -4,12 +4,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { alive, db } from '../src/db/db';
 import { ensureDevice } from '../src/db/local';
 import { setActor, setWriterDevice } from '../src/db/write';
+import { savePayment } from '../src/services/money';
 import { runSetup } from '../src/services/setup';
 import { saveMember } from '../src/services/team';
 import { payoutSummary, sharesOfNet } from '../src/domain/money';
 import { docTotals } from '../src/domain/pricing';
-import { defaultChoices, exactPct, parsePosFile, planEventImport, planPrintImport, posImportState, type PosEventFeed, type PosOrderFeed, type PosPrintFeed } from '../src/domain/posFeed';
-import { applyEventImport, applyOrderImport, applyPrintImport, printDesigner, readDevicePosFeeds } from '../src/services/importPos';
+import { defaultChoices, exactPct, parsePosFile, planEventImport, planPrintImport, posImportState, removedInPosFile, type PosEventFeed, type PosOrderFeed, type PosPrintFeed } from '../src/domain/posFeed';
+import { applyEventImport, applyOrderImport, applyPrintImport, printDesigner, readDevicePosFeeds, removePosJob } from '../src/services/importPos';
 
 beforeEach(async () => {
   await db.delete();
@@ -69,7 +70,7 @@ describe('booth events from JoshWorks POS', () => {
   });
 
   it('reads what the POS on this device sent, without creating its database', async () => {
-    expect(await readDevicePosFeeds()).toEqual({ found: false, feeds: [] });
+    expect(await readDevicePosFeeds()).toEqual({ found: false, feeds: [], removed: [] });
     expect(await Dexie.exists('jworks-pos')).toBe(false);
     const pos = new Dexie('jworks-pos');
     pos.version(60).stores({ studioFeed: 'id, updatedAt', sales: 'id' });
@@ -82,6 +83,7 @@ describe('booth events from JoshWorks POS', () => {
     const read = await readDevicePosFeeds();
     expect(read.found).toBe(true);
     expect(read.feeds.map((f) => f.type === 'event' && f.eventId)).toEqual(['ev1']);
+    expect(read.removed.map((f) => f.type === 'event' && f.eventId)).toEqual(['old']);
   });
 
   it('opens the POS file and refuses anything else', () => {
@@ -89,6 +91,12 @@ describe('booth events from JoshWorks POS', () => {
     expect(parsePosFile(file)).toHaveLength(2);
     expect(() => parsePosFile('{"hello":1}')).toThrow(/isn’t a JoshWorks POS file/);
     expect(() => parsePosFile('not json')).toThrow(/isn’t a JoshWorks POS file/);
+  });
+
+  it('a POS file says what was deleted; older files say nothing', () => {
+    const base = { app: 'jworks-pos', kind: 'studio-feed', v: 1, exportedAt: 1, feeds: [event()] };
+    expect(removedInPosFile(JSON.stringify({ ...base, removed: [order(), { type: 'order', v: 9 }] })).map((f) => f.type)).toEqual(['order']);
+    expect(removedInPosFile(JSON.stringify(base))).toEqual([]);
   });
 
   it('an event becomes a job: payments add up to sales, shares match the POS to the centavo, costs are expenses', async () => {
@@ -200,6 +208,35 @@ const print = (over: Partial<PosPrintFeed> = {}): PosPrintFeed => ({
   payments: [{ id: 'pay1', date: '2026-11-04', name: 'GCash', kind: 'ewallet', amount: 48_500, stage: 'down', ref: '5012' }],
   createdAt: new Date('2026-11-04T10:00:00').getTime(), approvedAt: new Date('2026-11-04T12:00:00').getTime(), dueDate: '2026-11-13', doneAt: null, notes: '',
   ...over,
+});
+
+describe('orders deleted in JoshWorks POS', () => {
+  it('deleting the job takes what the import wrote: payments, expenses and earnings', async () => {
+    const { ian } = await setup();
+    const feed = print();
+    const { jobId } = await applyPrintImport(feed, ian.id);
+    expect(alive(await db.payments.where('jobId').equals(jobId).toArray()).length).toBeGreaterThan(0);
+    expect(alive(await db.earnings.where('jobId').equals(jobId).toArray()).length).toBeGreaterThan(0);
+
+    await removePosJob(feed);
+    expect((await db.jobs.get(jobId))?.deleted).toBe(1);
+    expect((await db.jobMoney.get(jobId))?.deleted).toBe(1);
+    expect(alive(await db.payments.where('jobId').equals(jobId).toArray())).toEqual([]);
+    expect(alive(await db.earnings.where('jobId').equals(jobId).toArray())).toEqual([]);
+    expect(alive(await db.expenses.toArray()).filter((e) => e.jobId === jobId)).toEqual([]);
+  });
+
+  it('a payment entered by hand in Studio stops it, and nothing is lost', async () => {
+    const { ian } = await setup();
+    const feed = order();
+    const { jobId } = await applyOrderImport(feed, ian.id);
+    const before = alive(await db.payments.where('jobId').equals(jobId).toArray()).length;
+    await savePayment({ jobId, amount: 10_000, date: '2026-11-06', method: 'GCash', kind: 'final' });
+
+    await expect(removePosJob(feed)).rejects.toThrow(/payments entered in Studio/);
+    expect((await db.jobs.get(jobId))?.deleted).not.toBe(1);
+    expect(alive(await db.payments.where('jobId').equals(jobId).toArray())).toHaveLength(before + 1);
+  });
 });
 
 describe('sticker printing from JoshWorks POS', () => {

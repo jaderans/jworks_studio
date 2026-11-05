@@ -8,6 +8,7 @@ import {
   type PeopleChoices, type PosEventFeed, type PosFeed, type PosOrderFeed, type PosPrintFeed,
 } from '../domain/posFeed';
 import { recomputeEarnings } from './money';
+import { deleteJob } from './jobs';
 import { blankClient } from './clients';
 import { peso } from '../lib/money';
 import { isoDate, todayISO } from '../lib/time';
@@ -17,20 +18,21 @@ import type { Client, Expense, Job, JobMoney, JobProgress, Payment, Payout } fro
 const POS_DB = 'jworks-pos';
 
 /**
- * Summaries the POS on this device has sent ("Send to Studio"). Opened
- * read-only and closed straight away; nothing is created when the POS has
- * never been used here.
+ * Summaries the POS on this device has sent ("Send to Studio"), and the ones
+ * it has since deleted. Opened read-only and closed straight away; nothing is
+ * created when the POS has never been used here.
  */
-export async function readDevicePosFeeds(): Promise<{ found: boolean; feeds: PosFeed[] }> {
-  if (!(await Dexie.exists(POS_DB))) return { found: false, feeds: [] };
+export async function readDevicePosFeeds(): Promise<{ found: boolean; feeds: PosFeed[]; removed: PosFeed[] }> {
+  if (!(await Dexie.exists(POS_DB))) return { found: false, feeds: [], removed: [] };
   const pos = new Dexie(POS_DB);
   try {
     await pos.open();
-    if (!pos.tables.some((t) => t.name === 'studioFeed')) return { found: true, feeds: [] };
+    if (!pos.tables.some((t) => t.name === 'studioFeed')) return { found: true, feeds: [], removed: [] };
     const rows = (await pos.table('studioFeed').toArray()) as { deleted?: 0 | 1; feed?: unknown }[];
-    return { found: true, feeds: rows.filter((r) => r.deleted !== 1).map((r) => r.feed).filter(isPosFeed) };
+    const of = (deleted: boolean) => rows.filter((r) => (r.deleted === 1) === deleted).map((r) => r.feed).filter(isPosFeed);
+    return { found: true, feeds: of(false), removed: of(true) };
   } catch {
-    return { found: true, feeds: [] };
+    return { found: true, feeds: [], removed: [] };
   } finally {
     pos.close();
   }
@@ -71,6 +73,21 @@ async function retire(prefix: string, keep: Set<string>) {
     const rows = await (table as Dexie.Table<Payment | Expense | Payout, string>).where('id').startsWith(prefix).toArray();
     for (const r of rows) if (r.deleted !== 1 && !keep.has(r.id)) await save(table as Dexie.Table<typeof r, string>, { ...r, deleted: 1 });
   }
+}
+
+/**
+ * The POS deleted this: its job goes, with the payments, expenses, payouts and
+ * earnings the import wrote. Payments entered by hand in Studio stop it, so
+ * they're looked at first.
+ */
+export async function removePosJob(feed: PosFeed): Promise<void> {
+  const id = posJobId(feed);
+  const job = await db.jobs.get(id);
+  const payments = alive(await db.payments.where('jobId').equals(id).toArray());
+  if (payments.some((p) => !p.id.startsWith(posPrefix(feed)))) throw new Error(`${job?.number ?? 'This job'} has payments entered in Studio. Remove them first, or mark the job Cancelled to keep them.`);
+  await retire(posPrefix(feed), new Set());
+  await deleteJob(id);
+  await recomputeEarnings([id]);
 }
 
 async function jobNumberFor(id: string): Promise<{ existing: Job | undefined; number: string }> {
