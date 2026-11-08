@@ -12,7 +12,7 @@ import {
   defaultChoices, parsePosFile, payMethodFor, personKey, planEventImport, planOrderImport, planPrintImport, posImportState, posJobId, posKey, removedInPosFile,
   type PeopleChoices, type PosEventFeed, type PosFeed, type PosImportState, type PosOrderFeed, type PosPrintFeed,
 } from '../../domain/posFeed';
-import { applyEventImport, applyOrderImport, applyPrintImport, expenseChoices, orderDesigner, printDesigner, readDevicePosFeeds, rememberedPeople, removePosJob } from '../../services/importPos';
+import { applyEventImport, applyOrderImport, applyPrintImport, expenseChoices, orderDesigner, printDesigner, printIllustrator, readDevicePosFeeds, rememberedPeople, removePosJob } from '../../services/importPos';
 
 const STATE_BADGE: Record<PosImportState, { tone: 'outline' | 'good' | 'warn'; label: string }> = {
   new: { tone: 'outline', label: 'Not in Studio' },
@@ -512,17 +512,21 @@ function PrintDialog({ feed, update, onClose }: { feed: PosPrintFeed; update: bo
   const app = useApp();
   const members = useMembers();
   const [printer, setPrinter] = useState<string | undefined>(undefined);
+  const [artist, setArtist] = useState('');
   const [busy, setBusy] = useState(false);
+  // An order with sticker illustration has an illustrator's share (it may be ₱0 until one is picked).
+  const hasArt = feed.illustratorShare !== undefined;
   useEffect(() => {
     void printDesigner(feed).then((d) => setPrinter(d ?? ''));
+    void printIllustrator(feed).then((d) => setArtist(d ?? ''));
   }, [feed]);
-  const plan = planPrintImport(feed, printer || null);
+  const plan = planPrintImport(feed, printer || null, artist || null);
   const paid = sum(feed.payments.map((p) => p.amount));
 
   const save = async () => {
     setBusy(true);
     try {
-      const r = await applyPrintImport(feed, printer || null);
+      const r = await applyPrintImport(feed, printer || null, artist || null);
       app.toast(r.created ? `${feed.number} added as a Sticker Printing job` : `${feed.number} updated`, { tone: 'good' });
       onClose();
     } catch (e) {
@@ -554,7 +558,7 @@ function PrintDialog({ feed, update, onClose }: { feed: PosPrintFeed; update: bo
         </p>
         <div className="grid-2">
           <Stat label="Total" value={peso(feed.total)} hint={paid < feed.total ? `${peso(paid)} paid, ${peso(feed.total - paid)} due` : 'Paid in full'} />
-          <Stat label="Studio keeps" value={peso(plan.studioKeeps)} hint="The total less the printer’s share and the costs below" />
+          <Stat label="Studio keeps" value={peso(plan.studioKeeps)} hint={`The total less the printer’s${hasArt ? ' and illustrator’s shares' : ' share'} and the costs below`} />
         </div>
         <Field label="Who prints it" htmlFor="pos-printer" hint={feed.printer ? `In the POS: ${feed.printer.name}, ${feed.printerPct}% of the print work.` : 'No printer set in the POS; their share is set there.'}>
           <Select id="pos-printer" value={printer ?? ''} onChange={(e) => setPrinter(e.target.value)}>
@@ -567,6 +571,19 @@ function PrintDialog({ feed, update, onClose }: { feed: PosPrintFeed; update: bo
           </Select>
         </Field>
         {plan.printerShare ? <p className="small">Their share of the job: <b>{peso(plan.printerShare)}</b>, earned as the customer pays.</p> : null}
+        {hasArt ? (
+          <Field label="Who draws it" htmlFor="pos-artist" hint={feed.illustrator ? `In the POS: ${feed.illustrator.name}, ${feed.illustratorPct ?? 0}% of the illustration.` : 'No illustrator set in the POS; their share is set there.'}>
+            <Select id="pos-artist" value={artist} onChange={(e) => setArtist(e.target.value)}>
+              <option value="">No one (the studio keeps it)</option>
+              {(members ?? []).map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : null}
+        {plan.illustratorShare ? <p className="small">The illustrator’s share: <b>{peso(plan.illustratorShare)}</b>, earned as the customer pays.</p> : null}
         <h3>Payments</h3>
         {feed.payments.length ? (
           <ul className="pos-lines">

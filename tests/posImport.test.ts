@@ -210,6 +210,23 @@ const print = (over: Partial<PosPrintFeed> = {}): PosPrintFeed => ({
   ...over,
 });
 
+describe('sticker illustration from JoshWorks POS', () => {
+  it('the illustrator earns their exact share next to the printer, or both when one person does both', async () => {
+    const { ian, ownerId } = await setup();
+    const feed = print({ illustrator: { memberId: 'p-ian', name: 'Ian', email: 'ian@example.com' }, illustratorPct: 50, illustratorShare: 19_500 });
+    const both = planPrintImport(feed, ian.id, ian.id);
+    expect(both.split).toEqual([{ memberId: ian.id, pct: exactPct(17_000 + 19_500, feed.total) }]);
+    expect(both.studioKeeps).toBe(feed.total - 17_000 - 19_500 - 12_000 - 12_500);
+
+    const split = planPrintImport(feed, ownerId, ian.id);
+    expect(split.split.map((x) => x.memberId)).toEqual([ownerId, ian.id]);
+    const { jobId } = await applyPrintImport(feed, ownerId, ian.id);
+    const money = (await db.jobMoney.get(jobId))!;
+    expect(sharesOfNet(feed.total, money.split)).toEqual(new Map([[ownerId, 17_000], [ian.id, 19_500]]));
+    expect((await db.jobs.get(jobId))?.designers).toEqual([ownerId, ian.id]);
+  });
+});
+
 describe('orders deleted in JoshWorks POS', () => {
   it('deleting the job takes what the import wrote: payments, expenses and earnings', async () => {
     const { ian } = await setup();

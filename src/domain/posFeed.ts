@@ -119,6 +119,10 @@ export interface PosPrintFeed {
   printer: { memberId: string; name: string; email: string } | null;
   printerPct: number;
   printerShare: Cents;
+  /** Who drew the sticker art and their share of the illustration lines, when the order has them. */
+  illustrator?: { memberId: string; name: string; email: string } | null;
+  illustratorPct?: number;
+  illustratorShare?: Cents;
   lines: { label: string; qty: number; unitPrice: Cents; amount: Cents }[];
   subtotal: Cents;
   /** A service coupon's discount off the print work; total is after it, and printerShare is of the work after it. */
@@ -418,17 +422,23 @@ export interface PrintPlan {
   status: JobStatus;
   split: SplitShare[];
   printerShare: Cents;
+  illustratorShare: Cents;
   payments: PlannedPayment[];
   expenses: PlannedExpense[];
-  /** What the studio keeps: the total less the printer's share and the costs. */
+  /** What the studio keeps: the total less the printer's and illustrator's shares and the costs. */
   studioKeeps: Cents;
 }
 
 /** A print order as a Sticker Printing job: its payments, the printer's exact share, materials and courier as expenses. */
-export function planPrintImport(feed: PosPrintFeed, printerId: string | null): PrintPlan {
+export function planPrintImport(feed: PosPrintFeed, printerId: string | null, illustratorId: string | null = null): PrintPlan {
   const pre = posPrefix(feed);
   const date = feed.doneAt ? isoDate(feed.doneAt) : isoDate(feed.createdAt);
   const share = printerId && feed.total > 0 ? feed.printerShare : 0;
+  const artShare = illustratorId && feed.total > 0 ? (feed.illustratorShare ?? 0) : 0;
+  // One person can print and draw: their shares add up.
+  const shares = new Map<string, Cents>();
+  if (share > 0 && printerId) shares.set(printerId, share);
+  if (artShare > 0 && illustratorId) shares.set(illustratorId, (shares.get(illustratorId) ?? 0) + artShare);
   const single = feed.payments.length === 1 && feed.payments[0].amount >= feed.total;
   const payments: PlannedPayment[] = feed.payments
     .filter((p) => p.amount !== 0)
@@ -451,10 +461,11 @@ export function planPrintImport(feed: PosPrintFeed, printerId: string | null): P
     jobId: posJobId(feed),
     title,
     status,
-    split: share > 0 && printerId ? [{ memberId: printerId, pct: exactPct(share, feed.total) }] : [],
+    split: [...shares].map(([memberId, amount]) => ({ memberId, pct: exactPct(amount, feed.total) })),
     printerShare: share,
+    illustratorShare: artShare,
     payments,
     expenses,
-    studioKeeps: feed.total - share - sum(expenses.map((x) => x.amount)),
+    studioKeeps: feed.total - share - artShare - sum(expenses.map((x) => x.amount)),
   };
 }

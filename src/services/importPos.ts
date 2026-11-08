@@ -262,8 +262,9 @@ async function clientFor(c: { name: string; email: string; phone: string }, keep
 }
 
 /** Add or update a sticker printing job: the customer, the printer's exact share, every payment, materials and courier as expenses. */
-export async function applyPrintImport(feed: PosPrintFeed, printerId: string | null): Promise<{ jobId: string; created: boolean }> {
-  const plan = planPrintImport(feed, printerId);
+export async function applyPrintImport(feed: PosPrintFeed, printerId: string | null, illustratorId: string | null = null): Promise<{ jobId: string; created: boolean }> {
+  const plan = planPrintImport(feed, printerId, illustratorId);
+  const people = [...new Set([printerId, illustratorId].filter((x): x is string => !!x))];
   const id = plan.jobId;
   const { existing, number } = await jobNumberFor(id);
   const clientId = await clientFor(feed.customer, existing?.clientId ?? null, feed.status === 'done' ? 'completed' : 'active', feed.createdAt);
@@ -277,8 +278,8 @@ export async function applyPrintImport(feed: PosPrintFeed, printerId: string | n
     clientName: feed.customer.name,
     startDate: existing?.startDate || isoDate(feed.createdAt),
     dueDate: feed.dueDate,
-    designers: printerId ? [printerId] : (existing?.designers ?? []),
-    lead: printerId ?? existing?.lead ?? null,
+    designers: people.length ? people : (existing?.designers ?? []),
+    lead: printerId ?? illustratorId ?? existing?.lead ?? null,
     brief: `POS print order ${feed.number}: ${feed.lines.map((l) => `${l.qty} × ${l.label}`).join(', ')}.${feed.delivery.method === 'courier' ? ` Courier${feed.delivery.courier ? ` (${feed.delivery.courier})` : ''}${feed.delivery.tracking ? `, tracking ${feed.delivery.tracking}` : ''}.` : ' Pickup.'}${feed.notes ? ` ${feed.notes}` : ''} ${posStamp(feed)}`,
     source: 'JoshWorks POS',
     deleted: 0,
@@ -302,7 +303,7 @@ export async function applyPrintImport(feed: PosPrintFeed, printerId: string | n
     couponCode: feed.couponCode,
     deductionPct: 0,
     split: plan.split,
-    notes: `From JoshWorks POS. ${feed.printer ? `${feed.printer.name} prints it: ${feed.printerPct}% of the print work${feed.discount ? ' after the coupon' : ''}, ${peso(plan.printerShare)}.` : 'No printer set in the POS yet.'}${feed.couponCode ? ` Coupon ${feed.couponCode}: ${peso(feed.discount ?? 0)} off.` : ''}`,
+    notes: `From JoshWorks POS. ${feed.printer ? `${feed.printer.name} prints it: ${feed.printerPct}% of the print work${feed.discount ? ' after the coupon' : ''}, ${peso(plan.printerShare)}.` : 'No printer set in the POS yet.'}${feed.illustrator ? ` ${feed.illustrator.name} draws it: ${feed.illustratorPct ?? 0}% of the illustration, ${peso(plan.illustratorShare)}.` : ''}${feed.couponCode ? ` Coupon ${feed.couponCode}: ${peso(feed.discount ?? 0)} off.` : ''}`,
     deleted: 0,
   });
   await writePayments(id, clientId, plan.payments);
@@ -314,6 +315,12 @@ export async function applyPrintImport(feed: PosPrintFeed, printerId: string | n
   await recomputeEarnings([id]);
   await audit('import', 'job', id, `${existing ? 'Updated' : 'Added'} print order ${feed.number} (${feed.customer.name}) from JoshWorks POS: ${peso(feed.total)}`);
   return { jobId: id, created: !existing };
+}
+
+/** Default illustrator for a print order: the POS illustrator matched by email or name. */
+export async function printIllustrator(feed: PosPrintFeed): Promise<string | null> {
+  if (!feed.illustrator) return null;
+  return matchMember(feed.illustrator, alive(await db.members.toArray()))?.id ?? null;
 }
 
 /** Default printer for a print order: who it's set to already, else the POS printer matched by email or name. */
