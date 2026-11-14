@@ -33,6 +33,7 @@ export function suggestTemplate(templates: ContractTemplate[], o: { jobType?: Jo
     'Sticker Printing': 'tpl-merch',
     Campaign: 'tpl-event',
     Publication: 'tpl-workbook',
+    Academic: 'tpl-research',
     General: 'tpl-event',
     'Video Editing': 'tpl-motion',
     Motion: 'tpl-motion',

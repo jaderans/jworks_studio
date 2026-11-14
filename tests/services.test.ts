@@ -9,7 +9,9 @@ import { runSetup } from '../src/services/setup';
 import { catalogStatus, loadCatalog } from '../src/services/catalog';
 import { PRICE_CHANGES } from '../src/domain/packages';
 import { TEMPLATE_CHANGES } from '../src/domain/contractTemplates';
+import { questionsOf } from '../src/domain/questionnaire';
 import { toCents } from '../src/lib/money';
+import type { ContractTemplate } from '../src/db/types';
 import { applyReschedule, createPost, decideApproval, deletePost, movePost, previewReschedule, requestApproval, saveIdea, scheduleIdea, setStatus } from '../src/services/content';
 import { launchCampaign, blankCampaign, updateCampaign } from '../src/services/campaigns';
 import { newContract, newProposal, saveClient, savePackage } from '../src/services/clients';
@@ -222,6 +224,34 @@ describe('catalog versions', () => {
     expect(await loadCatalog()).toMatchObject({ added: 0, templates: 0, repriced: 0, updated: 0 });
   });
 
+  it('adds the academic commissions to a device on the November list, keeping what the studio edited', async () => {
+    await setup();
+    const academic = [
+      'Research or thesis brochure (trifold)', 'Proposal or title defense slides (up to 12)', 'Class report slides (up to 15)', 'Lecture slides for teachers (up to 30)',
+      'Slide template for a class, org or department', 'Reviewer or handout layout (up to 10 pages)', 'Capstone or thesis project logo', 'Thesis Defense Kit: slides, poster and brochure',
+    ];
+    const fresh = alive(await db.packages.toArray()).filter((p) => academic.includes(p.name));
+    expect(fresh).toHaveLength(academic.length);
+    await db.packages.bulkDelete(fresh.map((p) => p.id));
+    // The research template as version 2 shipped it, with the studio's own tagline, and its terms
+    // back from the cloud with their fields in another order (still unedited).
+    const research = (await db.contractTemplates.get('tpl-research'))!;
+    const v2 = Object.fromEntries(TEMPLATE_CHANGES.filter((c) => c.version === 3 && c.id === 'tpl-research').map((c) => [c.field, c.from])) as Partial<ContractTemplate>;
+    const reordered = v2.sections!.map(({ body, id, on, title }) => ({ body, id, on, title }));
+    await db.contractTemplates.put({ ...research, ...v2, sections: reordered, tagline: 'Our own tagline' });
+    await setSetting('money', { ...(await getSetting('money')), catalogVersion: 2 });
+    expect((await catalogStatus()).needs).toBe(true);
+
+    const r = await loadCatalog();
+    expect(r).toMatchObject({ added: academic.length, templates: 0, repriced: 0, updated: 1 });
+    const after = (await db.contractTemplates.get('tpl-research'))!;
+    expect(after.name).toBe('Academic & Thesis Visuals Agreement');
+    expect(after.tagline).toBe('Our own tagline');
+    expect(questionsOf(after.brief).find((q) => q.q === 'What do you need?')).toMatchObject({ kind: 'choice' });
+    expect(after.brief.join('\n')).toContain('Report/Class slides');
+    expect(after.sections.find((s) => s.id === 'timeline')?.body).toContain('package turnaround');
+  });
+
   it('suggests the right template, and government contracts start with no down payment', async () => {
     await setup();
     const tpls = alive(await db.contractTemplates.toArray());
@@ -230,6 +260,7 @@ describe('catalog versions', () => {
     expect(suggestTemplate(tpls, { jobType: 'Branding', student: true })?.id).toBe('tpl-branding-student');
     expect(suggestTemplate(tpls, { jobType: 'Campaign' })?.id).toBe('tpl-event-business');
     expect(suggestTemplate(tpls, { jobType: 'Video Editing' })?.id).toBe('tpl-motion');
+    expect(suggestTemplate(tpls, { jobType: 'Academic', student: true })?.id).toBe('tpl-research');
     expect((await newTemplateContract({ templateId: 'tpl-government' })).downPct).toBe(0);
     expect((await newTemplateContract({ templateId: 'tpl-branding-business' })).downPct).toBe((await getSetting('money')).downPct);
   });

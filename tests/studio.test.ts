@@ -13,6 +13,7 @@ import {
 } from '../src/domain/money';
 import { CATEGORIES, PRICE_CHANGES, SEED_PACKAGES } from '../src/domain/packages';
 import { SEED_TEMPLATES, STANDARD_TERMS, TEMPLATE_CHANGES } from '../src/domain/contractTemplates';
+import { JOB_TYPES, typeFromTracker } from '../src/domain/jobs';
 import { normalizeStage } from '../src/domain/clients';
 import { docTotals } from '../src/domain/pricing';
 import { runSetup } from '../src/services/setup';
@@ -158,6 +159,22 @@ describe('price list and contract templates', () => {
       expect(t.phases.length, t.id).toBeGreaterThan(0);
       expect(t.agreement.length, t.id).toBeGreaterThanOrEqual(6);
     }
+  });
+  it('prices academic commissions, with a defense kit cheaper than its parts', () => {
+    const r = (name: string) => SEED_PACKAGES.find((p) => p.category === 'Research & academic visuals' && p.name === name)!;
+    const kit = r('Thesis Defense Kit: slides, poster and brochure');
+    const parts = [r('Defense or presentation slides (up to 20)'), r('Research poster (A1 to 3 × 4 ft)'), r('Research or thesis brochure (trifold)')];
+    expect(kit.price).toBeLessThan(parts.reduce((a, p) => a + p.price, 0));
+    expect(kit.studentPrice!).toBeLessThan(parts.reduce((a, p) => a + (p.studentPrice ?? p.price), 0));
+    for (const n of ['Class report slides (up to 15)', 'Proposal or title defense slides (up to 12)', 'Slide template for a class, org or department', 'Reviewer or handout layout (up to 10 pages)', 'Capstone or thesis project logo']) {
+      expect(r(n).studentPrice, n).toBeGreaterThan(0);
+    }
+    // Teachers pay the school price.
+    expect(r('Lecture slides for teachers (up to 30)').studentPrice).toBeNull();
+    expect(JOB_TYPES).toContain('Academic');
+    expect(typeFromTracker('Thesis poster')).toBe('Academic');
+    expect(typeFromTracker('Capstone')).toBe('Academic');
+    expect(typeFromTracker('Publication')).toBe('Publication');
   });
   it('prices the November 2026 sections, and matches the POS sticker rates', () => {
     for (const c of ['Design retainer', 'Merch production', 'Packaging & labels', 'Illustration & mascots', 'Print & stationery design', 'Printing', 'Situation kits', 'Weddings & celebrations', 'Research & academic visuals', 'Government & LGU', 'Presentations & company profiles', 'Video']) {

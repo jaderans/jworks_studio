@@ -471,6 +471,21 @@ export const SEED_PACKAGES: CatalogSeed[] = [
   item(RESEARCH, 'other', 'Chart or figure redraw', 250, { student: 180, unit: 'piece', turnaround: '1–2 days' }),
   item(RESEARCH, 'other', 'Thesis cover or title page', 500, { student: 350, revisions: 2, turnaround: '1–2 days' }),
   item(RESEARCH, 'other', 'Colloquium program or abstract booklet (up to 16 pages)', 4500, { student: 3500, revisions: 2, turnaround: '7–10 days', includes: 'Cover; Program; Abstracts laid out; Print-ready PDF' }),
+  // Academic commissions (catalog version 3): brochures, other slides, reviewers, capstone logos and a defense kit.
+  item(RESEARCH, 'other', 'Research or thesis brochure (trifold)', 2500, { student: 1700, revisions: 2, turnaround: '4–6 days', includes: 'Six panels of your study; Charts and photos placed; QR code to the full paper; Print-ready PDF' }),
+  item(RESEARCH, 'other', 'Proposal or title defense slides (up to 12)', 1800, { student: 1200, revisions: 2, turnaround: '3–5 days', includes: 'Slide master; Up to 12 slides; Charts redrawn; PPTX + PDF' }),
+  item(RESEARCH, 'other', 'Class report slides (up to 15)', 1200, { student: 800, revisions: 2, turnaround: '2–3 days', includes: 'Designed from your outline; Up to 15 slides; Icons and simple charts; PPTX + PDF' }),
+  item(RESEARCH, 'other', 'Lecture slides for teachers (up to 30)', 3500, { revisions: 2, turnaround: '5–7 days', includes: 'Lesson slide template; Up to 30 slides; Diagrams redrawn; PowerPoint or Google Slides' }),
+  item(RESEARCH, 'other', 'Slide template for a class, org or department', 1800, { student: 1200, revisions: 2, turnaround: '3–5 days', includes: 'Master + 8 layouts; Your school or org colors; PowerPoint, Google Slides or Canva' }),
+  item(RESEARCH, 'other', 'Reviewer or handout layout (up to 10 pages)', 1500, { student: 1000, revisions: 2, turnaround: '3–5 days', includes: 'Clean layout of your notes; Headings, tables and diagrams; Print-ready PDF' }),
+  item(RESEARCH, 'other', 'Capstone or thesis project logo', 1200, { student: 800, revisions: 2, turnaround: '3–5 days', includes: '2 concepts; For your system, app or study; PNG + SVG' }),
+  item(RESEARCH, 'other', 'Thesis Defense Kit: slides, poster and brochure', 5800, {
+    student: 3900,
+    revisions: 2,
+    turnaround: '7–10 days',
+    tagline: 'One look across everything for the defense.',
+    includes: 'Defense slides (up to 20); Research poster (A1 to 3 × 4 ft); Trifold research brochure',
+  }),
   addon(RESEARCH, 'Extra slide', 100, { unit: 'piece' }),
 
   // ----- Academic workbook -----
@@ -626,8 +641,10 @@ export const SEED_PACKAGES: CatalogSeed[] = [
  * 2 = November 2026: twelve new sections (retainer, merch production, packaging, illustration, stationery,
  *     printing, situation kits, celebrations, research, government, presentations, video), 8 more
  *     templates, and the sticker design prices of the POS rate card.
+ * 3 = academic commissions: brochures, report, proposal and lecture slides, slide templates, reviewers,
+ *     capstone logos and a thesis defense kit; the research template becomes Academic & Thesis Visuals.
  */
-export const CATALOG_VERSION = 2;
+export const CATALOG_VERSION = 3;
 
 /** Prices changed by a catalog version. A device takes the new price only where the old one is still in place, so edits stay. */
 export const PRICE_CHANGES: { version: number; id: string; from: number; to: number }[] = [

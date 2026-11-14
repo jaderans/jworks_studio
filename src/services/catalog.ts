@@ -25,7 +25,10 @@ export async function catalogNeedsUpdate(): Promise<boolean> {
   return (await catalogStatus()).needs;
 }
 
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+/** JSON with object keys sorted: a template synced through the cloud can come back with its fields in another order. */
+const canonical = (v: unknown): string =>
+  JSON.stringify(v, (_k, x: unknown) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))) : x));
+const same = (a: unknown, b: unknown) => canonical(a) === canonical(b);
 
 /** Add the current catalog and templates. Existing items keep any edits; only missing ones are added. */
 export async function loadCatalog(opts: { archiveOld?: boolean } = {}): Promise<{ added: number; templates: number; archived: number; repriced: number; updated: number }> {

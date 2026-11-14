@@ -420,12 +420,6 @@ const MOTION_NOW = {
   categories: ['Motion graphics', 'Animated storybook', 'Video', ...ADD],
 };
 
-/** Template details a catalog version changes. A device takes the new value only where the old one is still in place, so edits stay. */
-export const TEMPLATE_CHANGES: { version: number; id: string; field: 'tagline' | 'covers' | 'categories'; from: string | string[]; to: string | string[] }[] = [
-  { version: 2, id: 'tpl-motion', field: 'tagline', from: MOTION_V1.tagline, to: MOTION_NOW.tagline },
-  { version: 2, id: 'tpl-motion', field: 'covers', from: MOTION_V1.covers, to: MOTION_NOW.covers },
-  { version: 2, id: 'tpl-motion', field: 'categories', from: MOTION_V1.categories, to: MOTION_NOW.categories },
-];
 
 /*
  * November 2026: eight more templates. Each keeps the eleven standard terms in
@@ -795,25 +789,58 @@ const CELEBRATION_AGREEMENT = [
   AGREE_CONSENT,
 ];
 
-// ----- Thesis & research visuals -----
-const RESEARCH_QUESTIONS = [
-  '> Tell us about your research so we can design it clearly. We design your content; the research stays yours.',
-  '## About the Research',
-  'What is the title, and which school, college and program is it for?',
-  'What do you need? :: Research poster | Conference poster | Infographic | Defense slides | Graphical abstract | Title page/Cover | Program/Booklet | Other:',
-  'When is your defense, colloquium or presentation?',
-  '## Format',
-  'What size or format? :: A1 | A0 | 3 × 4 ft tarpaulin | 36 × 48 in | A3 | 16:9 slides | Other:',
-  'Does your school or adviser require a template, logos or sections?',
-  'How many charts, tables or figures should we redraw?',
-  'Which file do you need? :: PowerPoint | Google Slides | Canva | PDF | Other:',
-  '## Content & Style',
-  'Is your content final? :: Final | Almost final | Still changing',
-  'Which colors or style? :: School colors | Clean & Academic | Modern & Minimalist | Colorful | Other:',
-  'Do you need it printed? :: Yes, please arrange it | No, we print it ourselves',
-  'Who approves the design (you, your group leader, your adviser), and how fast can they reply?',
-  LAST,
-];
+// ----- Academic & thesis visuals -----
+/** The template as shipped in catalog version 2, when it covered research only. */
+const RESEARCH_V2 = {
+  name: 'Thesis & Research Visuals Agreement',
+  tagline: 'Research posters, infographics & defense slides',
+  covers: 'Visual design for research — posters, infographics, defense and conference slides, graphical abstracts and programs — designed from the client’s own final content.',
+  briefTitle: 'Research Visuals Questionnaire',
+  brief: [
+    '> Tell us about your research so we can design it clearly. We design your content; the research stays yours.',
+    '## About the Research',
+    'What is the title, and which school, college and program is it for?',
+    'What do you need? :: Research poster | Conference poster | Infographic | Defense slides | Graphical abstract | Title page/Cover | Program/Booklet | Other:',
+    'When is your defense, colloquium or presentation?',
+    '## Format',
+    'What size or format? :: A1 | A0 | 3 × 4 ft tarpaulin | 36 × 48 in | A3 | 16:9 slides | Other:',
+    'Does your school or adviser require a template, logos or sections?',
+    'How many charts, tables or figures should we redraw?',
+    'Which file do you need? :: PowerPoint | Google Slides | Canva | PDF | Other:',
+    '## Content & Style',
+    'Is your content final? :: Final | Almost final | Still changing',
+    'Which colors or style? :: School colors | Clean & Academic | Modern & Minimalist | Colorful | Other:',
+    'Do you need it printed? :: Yes, please arrange it | No, we print it ourselves',
+    'Who approves the design (you, your group leader, your adviser), and how fast can they reply?',
+    LAST,
+  ],
+};
+/** Catalog version 3: every academic commission (brochures, class and lecture slides, reviewers, capstone logos). */
+const RESEARCH_NOW = {
+  name: 'Academic & Thesis Visuals Agreement',
+  tagline: 'Slides, posters & brochures for thesis, research and class',
+  covers: 'Visual design for academic work — thesis and research posters, brochures, infographics, defense, report and lecture slides, slide templates, reviewers, capstone logos and programs — designed from the client’s own final content.',
+  briefTitle: 'Academic Visuals Questionnaire',
+  brief: [
+    '> Tell us about your thesis, research or class work so we can design it clearly. We design your content; the work stays yours.',
+    '## About the Work',
+    'What is the title, and which school, college and program is it for?',
+    'What do you need? :: Defense slides | Report/Class slides | Lecture slides | Slide template | Research poster | Brochure | Infographic | Graphical abstract | Reviewer/Handout | Capstone logo | Title page/Cover | Program/Booklet | Other:',
+    'When is your defense, report or class presentation?',
+    '## Format',
+    'What size or format? :: A1 | A0 | 3 × 4 ft tarpaulin | 36 × 48 in | A3 | Trifold A4 | 16:9 slides | Other:',
+    'Does your school, teacher or adviser require a template, logos or sections?',
+    'About how many slides or pages?',
+    'How many charts, tables or figures should we redraw?',
+    'Which file do you need? :: PowerPoint | Google Slides | Canva | PDF | Other:',
+    '## Content & Style',
+    'Is your content final? :: Final | Almost final | Still changing',
+    'Which colors or style? :: School colors | Clean & Academic | Modern & Minimalist | Colorful | Other:',
+    'Do you need it printed? :: Yes, please arrange it | No, we print it ourselves',
+    'Who approves the design (you, your group leader, your teacher or adviser), and how fast can they reply?',
+    LAST,
+  ],
+};
 const RESEARCH_PHASES = [
   p('Content Review', 'We go through your final content and figures, and your school’s requirements.'),
   p('Layout Direction', 'We set the grid, colors and type, following any required template.'),
@@ -821,7 +848,8 @@ const RESEARCH_PHASES = [
   p('Revisions', 'You, your group or your adviser send written feedback within your rounds.'),
   p('Final Files', 'Print-ready and editable files are delivered in time for your defense or presentation.'),
 ];
-const RESEARCH_TERMS = termsWith({
+const researchTerms = (deadline: string) =>
+  termsWith({
   client: {
     body: [
       'The client provides the final content (text, data, figures, references and any required school template) and remains responsible for its accuracy, originality and citations.',
@@ -839,12 +867,16 @@ const RESEARCH_TERMS = termsWith({
   },
   timeline: {
     body: [
-      'The defense or presentation date is the deadline: the final content must arrive at least 5 working days before it (2 working days with the rush add-on).',
+      deadline,
       'Delays caused by late content or late feedback are not the designer’s responsibility.',
       'Final files are delivered via email or cloud storage; printing is quoted separately.',
     ],
   },
 });
+/** As shipped in catalog version 2. */
+const RESEARCH_TERMS_V2 = researchTerms('The defense or presentation date is the deadline: the final content must arrive at least 5 working days before it (2 working days with the rush add-on).');
+/** Class reports take 2–3 days, so the content deadline follows the package turnaround. */
+const RESEARCH_TERMS = researchTerms('The defense, report or class date is the deadline: the final content must arrive at least the package turnaround before it; sooner needs the rush add-on.');
 const RESEARCH_AGREEMENT = [
   AGREE_FIRST,
   'I agree to the selected package pricing and any additional add-on services.',
@@ -1314,16 +1346,16 @@ export const SEED_TEMPLATES: TemplateSeed[] = [
   {
     ...STD,
     id: 'tpl-research',
-    name: 'Thesis & Research Visuals Agreement',
-    tagline: 'Research posters, infographics & defense slides',
+    name: RESEARCH_NOW.name,
+    tagline: RESEARCH_NOW.tagline,
     subtitle: 'Student / Academic',
     frame: 'general',
     categories: ['Research & academic visuals', ...ADD],
     audience: 'any',
-    covers: 'Visual design for research — posters, infographics, defense and conference slides, graphical abstracts and programs — designed from the client’s own final content.',
+    covers: RESEARCH_NOW.covers,
     phases: RESEARCH_PHASES,
-    briefTitle: 'Research Visuals Questionnaire',
-    brief: RESEARCH_QUESTIONS,
+    briefTitle: RESEARCH_NOW.briefTitle,
+    brief: RESEARCH_NOW.brief,
     sections: RESEARCH_TERMS,
     agreement: RESEARCH_AGREEMENT,
     sort: 18,
@@ -1420,3 +1452,21 @@ export const CLIENT_FIELDS: TemplateField[] = CONTRACT_FIELD_GROUPS.flatMap((g) 
 
 /** Days an unsigned contract's prices hold (the payment terms say 14). */
 export const PRICES_HOLD_DAYS = 14;
+
+export interface TemplateChange {
+  version: number;
+  id: string;
+  field: 'name' | 'tagline' | 'covers' | 'categories' | 'briefTitle' | 'brief' | 'sections';
+  from: unknown;
+  to: unknown;
+}
+
+/** Template details a catalog version changes. A device takes the new value only where the old one is still in place, so edits stay. */
+export const TEMPLATE_CHANGES: TemplateChange[] = [
+  { version: 2, id: 'tpl-motion', field: 'tagline', from: MOTION_V1.tagline, to: MOTION_NOW.tagline },
+  { version: 2, id: 'tpl-motion', field: 'covers', from: MOTION_V1.covers, to: MOTION_NOW.covers },
+  { version: 2, id: 'tpl-motion', field: 'categories', from: MOTION_V1.categories, to: MOTION_NOW.categories },
+  // Version 3: the research template takes every academic commission.
+  ...(['name', 'tagline', 'covers', 'briefTitle', 'brief'] as const).map((field) => ({ version: 3, id: 'tpl-research', field, from: RESEARCH_V2[field], to: RESEARCH_NOW[field] })),
+  { version: 3, id: 'tpl-research', field: 'sections', from: RESEARCH_TERMS_V2, to: RESEARCH_TERMS },
+];

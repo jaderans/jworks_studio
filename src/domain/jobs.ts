@@ -3,7 +3,7 @@ import type { Job, JobProgress, JobStatus, JobType, JobView, Priority, Syncable 
 /** Jobs are the commission tracker's rows: one client commission each. */
 
 export const JOB_TYPES: JobType[] = [
-  'Branding', 'General', 'Merch', 'Publication', 'Campaign', 'Video Editing', 'Motion', '3D Model', 'Web', 'SMM / Retainer', 'Pop-up / Stickers', 'Sticker Printing', 'Training',
+  'Branding', 'General', 'Merch', 'Publication', 'Academic', 'Campaign', 'Video Editing', 'Motion', '3D Model', 'Web', 'SMM / Retainer', 'Pop-up / Stickers', 'Sticker Printing', 'Training',
 ];
 
 export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
@@ -51,6 +51,8 @@ export function typeFromTracker(text: string): JobType {
   if (t.includes('sticker') || t.includes('pop')) return 'Pop-up / Stickers';
   if (t.includes('video')) return 'Video Editing';
   if (t.includes('3d')) return '3D Model';
+  // Thesis, research, capstone and class work: slides, posters, brochures.
+  if (/academ|thesis|research|capstone|defen[cs]e/.test(t)) return 'Academic';
   return 'General';
 }
 
