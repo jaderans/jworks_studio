@@ -48,3 +48,21 @@ Apps Script keeps running the version you deployed. After any edit (or after **N
 ## Firebase sends no emails
 
 There is no sign-up confirmation and no password-reset email. Team logins (email + temporary password) are made in the app and sent through this mailer or Messenger; a forgotten password gets a new temporary one from Team → New password. See [CLOUD_SETUP.md](CLOUD_SETUP.md).
+
+## JoshWorks POS files in Google Drive
+
+The same script also keeps JoshWorks POS files in this account's Google Drive, in a **JoshWorks POS** folder it makes the first time it's needed:
+
+- **Custom stickers**: finished designs as PNGs, named with their number and name, like `CS01-Couple.png`, `CS02-CoupleSing.png` or `CS05-Barkada.png`. The POS customer screen shows each one with its number and name, and the order's status when an order in the POS has that design no.
+- **Booth photos** and **Customer screen ads**: for the POS photo booth and ads.
+
+The script only ever reads and writes inside those folders. The POS uses the same link and key as email, so there's nothing new to set up in the POS.
+
+### Updating the script (once, after an update like this one)
+
+1. In Studio: **Settings → Email → Copy the script** (it carries your key).
+2. In [script.google.com](https://script.google.com), open the JoshWorks mailer, select everything, paste over it, and save.
+3. Pick **authorize** and press **Run**, then allow the new permission (Google Drive).
+4. **Deploy → Manage deployments** → the pencil → Version: **New version** → **Deploy**. The web app URL stays the same.
+5. In the POS: **Settings → Customer screen → Check Drive now**. It makes the folders and copies any designs.
+
