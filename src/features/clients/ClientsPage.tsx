@@ -308,7 +308,7 @@ function NewClientDialog({ open, onClose }: { open: boolean; onClose: (id?: stri
         <Field label="Name (business, org or person)" htmlFor="nc-name" className="span-2">
           <TextInput id="nc-name" value={f.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Kape Ilonggo" />
         </Field>
-        <Field label="Kind" htmlFor="nc-kind" hint="Student orgs get student prices.">
+        <Field label="Kind" htmlFor="nc-kind" hint="Students, thesis groups and student orgs get student prices.">
           <Select id="nc-kind" value={f.kind} onChange={(e) => set({ kind: e.target.value as ClientKind })}>
             {CLIENT_KINDS.map((k) => (
               <option key={k.key} value={k.key}>
@@ -441,7 +441,7 @@ function ClientDialog({ id, onClose }: { id: string | null; onClose: () => void 
             <Field label="Name" htmlFor="cl-name">
               <TextInput id="cl-name" value={c.name} onChange={(e) => set('name', e.target.value)} />
             </Field>
-            <Field label="Kind" htmlFor="cl-kind" hint="Student orgs get student prices on quotes.">
+            <Field label="Kind" htmlFor="cl-kind" hint="Students, thesis groups and student orgs get student prices on quotes.">
               <Select id="cl-kind" value={c.kind ?? 'business'} onChange={(e) => set('kind', e.target.value as ClientKind)}>
                 {CLIENT_KINDS.map((k) => (
                   <option key={k.key} value={k.key}>

@@ -261,7 +261,7 @@ export interface Metric extends Syncable {
 export type ClientStage = 'inquiry' | 'quoted' | 'booked' | 'active' | 'completed' | 'lost';
 export type LegacyClientStage = 'lead' | 'discovery' | 'proposal' | 'contract' | 'onboarding' | 'strategy' | 'paused' | 'ended';
 
-export type ClientKind = 'business' | 'student-org' | 'school' | 'individual' | 'government';
+export type ClientKind = 'business' | 'student-org' | 'student' | 'school' | 'individual' | 'government';
 
 export interface Client extends Syncable {
   name: string;

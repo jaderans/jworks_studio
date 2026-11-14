@@ -86,6 +86,7 @@ export const stageLabel = (stage: ClientStage | LegacyClientStage | string | und
 export const CLIENT_KINDS: { key: ClientKind; label: string; audience: 'business' | 'student' }[] = [
   { key: 'business', label: 'Business', audience: 'business' },
   { key: 'student-org', label: 'Student organization', audience: 'student' },
+  { key: 'student', label: 'Student or thesis group', audience: 'student' },
   { key: 'school', label: 'School or university', audience: 'business' },
   { key: 'individual', label: 'Individual', audience: 'business' },
   { key: 'government', label: 'LGU or government office', audience: 'business' },

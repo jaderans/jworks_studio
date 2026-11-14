@@ -140,7 +140,7 @@ export function InquiryDialog({ open, kind, clientId, onClose, onCreated }: { op
             <Field label="Name or organization" htmlFor="iq-name">
               <TextInput id="iq-name" value={f.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. CICT Student Council" />
             </Field>
-            <Field label="Kind of client" htmlFor="iq-kind" hint="Student orgs get student prices.">
+            <Field label="Kind of client" htmlFor="iq-kind" hint="Students, thesis groups and student orgs get student prices.">
               <Select id="iq-kind" value={f.kind} onChange={(e) => set({ kind: e.target.value as ClientKind })}>
                 {CLIENT_KINDS.map((k) => (
                   <option key={k.key} value={k.key}>

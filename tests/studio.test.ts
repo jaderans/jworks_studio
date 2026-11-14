@@ -14,7 +14,7 @@ import {
 import { CATEGORIES, PRICE_CHANGES, SEED_PACKAGES } from '../src/domain/packages';
 import { SEED_TEMPLATES, STANDARD_TERMS, TEMPLATE_CHANGES } from '../src/domain/contractTemplates';
 import { JOB_TYPES, typeFromTracker } from '../src/domain/jobs';
-import { normalizeStage } from '../src/domain/clients';
+import { CLIENT_KINDS, normalizeStage } from '../src/domain/clients';
 import { docTotals } from '../src/domain/pricing';
 import { runSetup } from '../src/services/setup';
 import { applyTracker, previewTracker, DEFAULT_TRACKER_OPTIONS } from '../src/services/importTracker';
@@ -171,6 +171,8 @@ describe('price list and contract templates', () => {
     }
     // Teachers pay the school price.
     expect(r('Lecture slides for teachers (up to 30)').studentPrice).toBeNull();
+    // A thesis student or group (not an org) gets student prices too.
+    expect(CLIENT_KINDS.find((k) => k.key === 'student')).toMatchObject({ label: 'Student or thesis group', audience: 'student' });
     expect(JOB_TYPES).toContain('Academic');
     expect(typeFromTracker('Thesis poster')).toBe('Academic');
     expect(typeFromTracker('Capstone')).toBe('Academic');
