@@ -81,6 +81,20 @@ describe('contract schedule', () => {
     expect(planMilestones(branding.phases, '', '').every((x) => x.date === '')).toBe(true);
   });
 
+  it('says what every phase of the November 2026 templates delivers, and pays after acceptance for offices', () => {
+    for (const t of SEED_TEMPLATES.filter((x) => x.sort >= 13)) for (const m of planMilestones(t.phases, '', '')) expect(m.what, `${t.id}: ${m.title}`).not.toBe('');
+    const merch = SEED_TEMPLATES.find((t) => t.id === 'tpl-merch-production')!;
+    expect(planMilestones(merch.phases, '', '').map((m) => m.what)).toEqual([
+      'Order confirmed: items, quantities and price',
+      'Digital proof to approve',
+      'Pieces in production',
+      'Pieces checked, counted and packed',
+      'Finished pieces, after full payment',
+    ]);
+    const gov = SEED_TEMPLATES.find((t) => t.id === 'tpl-government')!;
+    expect(planMilestones(gov.phases, '', '', { payAfter: true }).at(-1)?.what).toBe('Final files, for inspection and acceptance');
+  });
+
   it('lists what the client receives from the chosen packages', () => {
     expect(deliverablesOf(items, pkgs)).toEqual(['3 logo concepts', 'PNG files']);
   });

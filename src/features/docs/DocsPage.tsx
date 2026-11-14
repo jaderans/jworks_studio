@@ -6,7 +6,7 @@ import { questionsOf } from '../../domain/questionnaire';
 import { FilterBar } from '../../components/FilterBar';
 import { useApp } from '../../app/AppContext';
 import { Badge, Button, EmptyState, IconButton, PageHeader, Segmented, Toggle } from '../../components/ui';
-import { Field, Select, TextArea, TextInput } from '../../components/form';
+import { Field, NumberInput, Select, TextArea, TextInput } from '../../components/form';
 import { Dialog } from '../../components/Dialog';
 import { priceText } from '../../components/PriceLines';
 import { useContractTemplates, usePackages } from '../../hooks/data';
@@ -169,7 +169,7 @@ function Templates() {
     <div className="stack loose">
       <PageHeader
         title="Contract templates"
-        subtitle="The v1.0 contract set and the ones you build. Edits here apply to new contracts; contracts already made keep their own terms."
+        subtitle="The studio’s contract set and the ones you build. Edits here apply to new contracts; contracts already made keep their own terms."
         actions={
           <Button variant="primary" onClick={() => setBuilding(blankTemplate())}>
             <Blocks size={18} /> Build a new contract
@@ -337,6 +337,9 @@ function TemplateEditor({ value, onClose, onCopy }: { value: ContractTemplate | 
               <option value="student">Student orgs</option>
               <option value="any">Either (by client)</option>
             </Select>
+          </Field>
+          <Field label="Down payment on signing" htmlFor="te-down" hint="Blank uses the studio’s usual down payment. 0 means the client pays after delivery (government offices).">
+            <NumberInput id="te-down" suffix="%" decimals={false} min={0} placeholder="Studio default" value={t.downPct ?? null} onChange={(v) => setT({ ...t, downPct: v === null ? undefined : Math.min(100, v) })} />
           </Field>
           <Field label="This agreement covers" htmlFor="te-cov" className="span-2">
             <TextArea id="te-cov" rows={2} value={t.covers} onChange={(e) => setT({ ...t, covers: e.target.value })} />

@@ -50,23 +50,38 @@ export function completionDate(start: string, items: readonly ProposalItem[], pa
   return start && days ? addDays(start, days) : '';
 }
 
-/** A short "what you receive" for a phase, from its title. */
-export function phaseReceives(title: string): string {
-  if (/brief|discovery|onboarding|planning|assessment|selection|content review|strategy/i.test(title)) return 'Kick-off: questionnaire answered and brief confirmed';
+/**
+ * A short "what you receive" for a phase, from its title. `payAfter` is for
+ * contracts paid after delivery (no down payment): the files go out for
+ * inspection and acceptance first.
+ */
+export function phaseReceives(title: string, opts: { payAfter?: boolean } = {}): string {
+  const last = opts.payAfter ? 'for inspection and acceptance' : 'after full payment';
+  if (/brief|discovery|onboarding|planning|assessment|selection|content review|strategy|consult/i.test(title)) return 'Kick-off: questionnaire answered and brief confirmed';
+  if (/order|quote/i.test(title)) return 'Order confirmed: items, quantities and price';
   if (/storyboard/i.test(title)) return 'Storyboard to approve';
+  if (/sketch/i.test(title)) return 'Sketches to approve';
+  if (/proof/i.test(title)) return 'Digital proof to approve';
+  if (/production run/i.test(title)) return 'Pieces in production';
+  if (/quality|packing/i.test(title)) return 'Pieces checked, counted and packed';
+  if (/outline|structure/i.test(title)) return 'Outline to approve';
+  if (/request/i.test(title)) return 'Your requests, through the agreed channel';
+  if (/line art|color/i.test(title)) return 'Artwork to review';
   if (/concept|direction|design|layout|production|cover|template/i.test(title)) return 'Designs to review';
   if (/revision|refine|review|critique/i.test(title)) return 'Revised designs (within your revision rounds)';
-  if (/final|handoff|hand-off|delivery|launch|certification|render|print/i.test(title)) return 'Final files, after full payment';
+  if (/recap/i.test(title)) return 'Monthly recap of the work';
+  if (/pickup/i.test(title)) return `Finished pieces, ${last}`;
+  if (/final|handoff|hand-off|delivery|launch|certification|render|print/i.test(title)) return `Final files, ${last}`;
   return '';
 }
 
 /** One milestone per phase, dated evenly between start and finish (undated when either is missing). */
-export function planMilestones(phases: readonly { title: string }[], start: string, end: string): Milestone[] {
+export function planMilestones(phases: readonly { title: string }[], start: string, end: string, opts: { payAfter?: boolean } = {}): Milestone[] {
   const span = start && end ? Math.max(0, daysFrom(start, end)) : 0;
   return phases.map((ph, i) => ({
     title: ph.title,
     date: start && end ? (i === phases.length - 1 ? end : addDays(start, Math.round(((i + 1) * span) / phases.length))) : '',
-    what: phaseReceives(ph.title),
+    what: phaseReceives(ph.title, opts),
   }));
 }
 

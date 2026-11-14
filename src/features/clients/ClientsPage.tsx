@@ -785,7 +785,7 @@ function ClientContent({ client }: { client: Client }) {
         <div className="card flush">
           <div className="list">
             {upcoming.map((p) => (
-              <button key={p.id} type="button" className="list-item click" style={{ border: 0, borderBottom: '1px solid var(--line)', background: 'none', textAlign: 'left', width: '100%' }} onClick={() => navigate(`/calendar?post=${p.id}`)}>
+              <button key={p.id} type="button" className="list-item click" onClick={() => navigate(`/calendar?post=${p.id}`)}>
                 <span className="main-text">
                   <b>{p.title}</b>
                   <span>{p.date ? fmtIsoWeekday(p.date) : 'No date'}</span>

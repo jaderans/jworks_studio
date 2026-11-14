@@ -310,7 +310,7 @@ export interface Package extends Syncable {
   tagline: string;
   /** For unit 'percent', the percent × 100 (25% → 2500). */
   price: Cents;
-  unit: 'month' | 'project' | 'piece' | 'hour' | 'percent' | 'participant';
+  unit: 'month' | 'project' | 'piece' | 'hour' | 'percent' | 'participant' | 'sqft';
   platforms: PlatformKey[];
   deliverables: Deliverable[];
   includes: string[];
@@ -466,6 +466,8 @@ export interface ContractTemplate extends Syncable {
   sort: number;
   /** Made in the contract builder: its parts, in print order. Without it, the classic layout prints. */
   blocks?: ContractBlock[];
+  /** Percent due on signing for contracts made from it; unset uses the studio default (0 = paid after delivery, as government offices pay). */
+  downPct?: number;
 }
 
 /** One part of a contract in the builder. Most print the template's own text (welcome, phases, questionnaire…). */

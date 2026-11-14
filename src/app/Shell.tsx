@@ -478,8 +478,7 @@ function ScopePicker({ open, onClose, ownName }: { open: boolean; onClose: () =>
     <button
       key={key}
       type="button"
-      className="list-item click"
-      style={{ border: 0, borderBottom: '1px solid var(--line)', background: app.scope === key ? 'var(--teal-soft)' : 'none', textAlign: 'left', width: '100%' }}
+      className={`list-item click${app.scope === key ? ' on' : ''}`}
       onClick={() => {
         app.setScope(key);
         onClose();
@@ -548,8 +547,7 @@ function UserPicker({ open, onClose }: { open: boolean; onClose: () => void }) {
             <button
               key={m.id}
               type="button"
-              className="list-item click"
-              style={{ border: 0, borderBottom: '1px solid var(--line)', background: m.id === app.member?.id ? 'var(--teal-soft)' : 'none', textAlign: 'left', width: '100%' }}
+              className={`list-item click${m.id === app.member?.id ? ' on' : ''}`}
               onClick={async () => {
                 const ok = await app.switchMember(m.id);
                 if (ok) {

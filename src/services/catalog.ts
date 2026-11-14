@@ -1,51 +1,82 @@
 import { alive, db } from '../db/db';
 import { audit, build, save } from '../db/write';
 import { getSetting, setSetting } from '../db/settings';
-import { CATALOG_VERSION, SEED_PACKAGES } from '../domain/packages';
-import { SEED_TEMPLATES } from '../domain/contractTemplates';
+import { CATALOG_VERSION, PRICE_CHANGES, SEED_PACKAGES } from '../domain/packages';
+import { SEED_TEMPLATES, TEMPLATE_CHANGES } from '../domain/contractTemplates';
 import { upgradeTemplate } from '../domain/contractTemplatesV1';
 import type { ContractTemplate, Package } from '../db/types';
 
 /**
  * The price list and contract templates. New installs get them during setup;
- * devices from the first version of the app load them once from Documents
- * (the old SMM-only packages are archived, never deleted, so old quotes still
- * open).
+ * other devices load each new catalog version once from Documents: missing
+ * items and templates are added, and a changed price or template detail is
+ * taken only where the old one is still in place, so the studio's edits stay.
+ * (Loading the first version archives the old SMM-only packages, never
+ * deleting them, so old quotes still open.)
  */
 
-export async function catalogNeedsUpdate(): Promise<boolean> {
-  const money = await getSetting('money');
-  return (money.catalogVersion ?? 0) < CATALOG_VERSION;
+/** The catalog version this device has loaded (0 = never) and whether a newer one is waiting. */
+export async function catalogStatus(): Promise<{ version: number; needs: boolean }> {
+  const version = (await getSetting('money')).catalogVersion ?? 0;
+  return { version, needs: version < CATALOG_VERSION };
 }
 
+export async function catalogNeedsUpdate(): Promise<boolean> {
+  return (await catalogStatus()).needs;
+}
+
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
 /** Add the current catalog and templates. Existing items keep any edits; only missing ones are added. */
-export async function loadCatalog(opts: { archiveOld?: boolean } = {}): Promise<{ added: number; templates: number; archived: number }> {
+export async function loadCatalog(opts: { archiveOld?: boolean } = {}): Promise<{ added: number; templates: number; archived: number; repriced: number; updated: number }> {
+  const from = (await getSetting('money')).catalogVersion ?? 0;
   let added = 0;
   let templates = 0;
   let archived = 0;
+  let repriced = 0;
+  let updated = 0;
   const existing = new Map((await db.packages.toArray()).map((p) => [p.id, p]));
   for (const seed of SEED_PACKAGES) {
     if (existing.has(seed.id)) continue;
     await db.packages.put(build<Package>(seed));
     added++;
   }
-  if (opts.archiveOld !== false) {
+  if (opts.archiveOld ?? from < 1) {
     for (const old of alive([...existing.values()]).filter((p) => p.id.startsWith('seed-pkg-') && p.active === 1)) {
       await save(db.packages, { ...old, active: 0 as const, notes: old.notes || 'Archived: replaced by the October 2026 price list.' });
       archived++;
     }
   }
-  const tpls = new Set((await db.contractTemplates.toArray()).map((t) => t.id));
+  // New prices from later versions, where the old price is still the one on this device.
+  for (const c of PRICE_CHANGES.filter((x) => x.version > from)) {
+    const p = existing.get(c.id);
+    if (!p || p.deleted === 1 || p.price !== c.from) continue;
+    await save(db.packages, { ...p, price: c.to });
+    repriced++;
+  }
+  const stored = new Map((await db.contractTemplates.toArray()).map((t) => [t.id, t]));
   for (const t of SEED_TEMPLATES) {
-    if (tpls.has(t.id)) continue;
+    if (stored.has(t.id)) continue;
     await db.contractTemplates.put(build<ContractTemplate>(t));
     templates++;
+  }
+  // Template details from later versions (e.g. Motion Graphics now offers Video), where unedited.
+  const pending = TEMPLATE_CHANGES.filter((x) => x.version > from);
+  for (const id of new Set(pending.map((x) => x.id))) {
+    const t = stored.get(id);
+    if (!t || t.deleted === 1) continue;
+    const patch: Partial<ContractTemplate> = {};
+    for (const c of pending.filter((x) => x.id === id)) if (same(t[c.field], c.from)) Object.assign(patch, { [c.field]: c.to });
+    if (!Object.keys(patch).length) continue;
+    await save(db.contractTemplates, { ...t, ...patch });
+    updated++;
   }
   const money = await getSetting('money');
   await setSetting('money', { ...money, catalogVersion: CATALOG_VERSION });
   if (added || templates) await audit('price', 'package', null, `Loaded the price list (${added} items) and ${templates} contract templates`);
+  if (repriced) await audit('price', 'package', null, `${repriced} price list items took the new prices of catalog version ${CATALOG_VERSION}`);
   await upgradeTemplates();
-  return { added, templates, archived };
+  return { added, templates, archived, repriced, updated };
 }
 
 /** 2 = the original questionnaires, the questionnaires for every commission type, and the October 2026 terms. */

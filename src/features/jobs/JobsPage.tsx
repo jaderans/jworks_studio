@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Route, Routes, useSearchParams } from 'react-router';
-import { AlertTriangle, Inbox, Plus, Zap } from 'lucide-react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router';
+import { AlertTriangle, ArrowRight, Check, Inbox, Plus, Zap } from 'lucide-react';
 import { useApp } from '../../app/AppContext';
 import { Badge, Button, EmptyState, PageHeader } from '../../components/ui';
 import { Select } from '../../components/form';
@@ -12,7 +12,7 @@ import { JOB_BOARD, JOB_STATUS_LABEL, JOB_TYPES, PRIORITY_LABEL, isOpen } from '
 import { jobBalance } from '../../domain/money';
 import { setJobStatus } from '../../services/jobs';
 import { peso } from '../../lib/money';
-import { addDays, mondayOf, todayISO } from '../../lib/time';
+import { addDays, fmtIsoDate, mondayOf, todayISO } from '../../lib/time';
 import { JobDialog } from './JobDialog';
 import { DueChip } from '../../components/DueChip';
 import { InquiryDialog } from './InquiryDialog';
@@ -35,8 +35,10 @@ export default function JobsPage() {
     }
     if (id || n) setParams({}, { replace: true });
   }, [params, setParams]);
+  // The board fills the screen instead of scrolling the page.
+  const onBoard = /^\/jobs\/?$/.test(useLocation().pathname);
   return (
-    <div className="page wide">
+    <div className={`page wide${onBoard ? ' board-fit' : ''}`}>
       <PageHeader
         title="Jobs"
         subtitle="Every commission from inquiry to delivered and paid. Drag a card to change its status."
@@ -119,11 +121,41 @@ export function JobCard({ job, onOpen, balance, draggable }: { job: JobView; onO
   );
 }
 
+/** Days a finished job stays on the board; older ones are under All jobs → Completed. */
+const DONE_DAYS = 14;
+
+/** A finished job on the board: one line with its number, title and whether it's paid. */
+function DoneRow({ job, onOpen, balance }: { job: JobView; onOpen: (id: string) => void; balance?: ReturnType<typeof jobBalance> }) {
+  return (
+    <button
+      type="button"
+      className="done-row"
+      title={[job.title, job.clientName, job.completedOn ? `Completed ${fmtIsoDate(job.completedOn)}` : ''].filter(Boolean).join(' · ')}
+      onClick={() => onOpen(job.id)}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('text/job', job.id);
+        e.dataTransfer.effectAllowed = 'move';
+      }}
+    >
+      <Check size={14} className="done-check" aria-hidden="true" />
+      <span className="mono tiny muted">{job.number}</span>
+      <span className="done-title">{job.title || 'Untitled job'}</span>
+      {balance && balance.total > 0 ? balance.balance > 0 ? <span className="tiny strong balance">{peso(balance.balance)} due</span> : <Badge tone="good">Paid</Badge> : null}
+    </button>
+  );
+}
+
+/**
+ * The job board fits the screen on a computer: columns with work share the
+ * width, empty ones fold into slim strips (still drop targets), a long column
+ * scrolls inside itself, and Completed is a short list of the last two weeks.
+ */
 function Board({ onOpen }: { onOpen: (id: string) => void }) {
   const jobs = useJobs();
   const balances = useBalances();
+  const navigate = useNavigate();
   const [over, setOver] = useState<JobStatus | null>(null);
-  const [showDone, setShowDone] = useState(false);
   if (!jobs) return null;
   if (jobs.length === 0)
     return (
@@ -131,51 +163,55 @@ function Board({ onOpen }: { onOpen: (id: string) => void }) {
         Add a new inquiry or job, or import your commission tracker in Settings → Import.
       </EmptyState>
     );
+  const since = addDays(todayISO(), -DONE_DAYS);
   const blocked = jobs.filter((j) => j.status === 'blocked');
   const columns: JobStatus[] = [...JOB_BOARD, ...(blocked.length ? (['blocked'] as JobStatus[]) : [])];
-  const recentDone = (j: JobView) => j.status !== 'completed' || showDone || (j.completedOn && j.completedOn >= addDays(todayISO(), -30));
+  const done = jobs.filter((j) => j.status === 'completed');
+  const recent = done.filter((j) => j.completedOn && j.completedOn >= since).sort((a, b) => (b.completedOn ?? '').localeCompare(a.completedOn ?? '') || b.number.localeCompare(a.number));
+  const lanes = columns.map((s) => ({
+    s,
+    list: s === 'completed' ? recent : jobs.filter((j) => j.status === s).sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999')),
+  }));
+  const cols = lanes.map(({ list }) => (list.length ? 'minmax(170px, 1fr)' : 'minmax(124px, 0.42fr)')).join(' ');
   return (
-    <div className="stack">
-      <div className="job-board" role="list">
-        {columns.map((s) => {
-          const list = jobs.filter((j) => j.status === s && recentDone(j)).sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999'));
-          return (
-            <section
-              key={s}
-              className={`job-col ${over === s ? 'over' : ''} st-${s}`}
-              role="listitem"
-              aria-label={JOB_STATUS_LABEL[s]}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setOver(s);
-              }}
-              onDragLeave={() => setOver(null)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setOver(null);
-                const id = e.dataTransfer.getData('text/job');
-                if (id) void setJobStatus(id, s);
-              }}
-            >
-              <header className="job-col-head">
-                <span className={`sdot job-${s}`} aria-hidden="true" />
-                <b>{JOB_STATUS_LABEL[s]}</b>
-                <span className="count">{list.length}</span>
-              </header>
-              <div className="job-col-body">
-                {list.map((j) => (
-                  <JobCard key={j.id} job={j} onOpen={onOpen} balance={balances?.get(j.id)} draggable />
-                ))}
-                {s === 'completed' && !showDone && jobs.some((j) => j.status === 'completed' && !recentDone(j)) ? (
-                  <Button size="sm" variant="ghost" onClick={() => setShowDone(true)}>
-                    Show older completed jobs
-                  </Button>
-                ) : null}
-              </div>
-            </section>
-          );
-        })}
-      </div>
+    <div className="job-board" role="list" style={{ '--board-cols': cols } as CSSProperties}>
+      {lanes.map(({ s, list }) => (
+        <section
+          key={s}
+          className={`job-col st-${s}${over === s ? ' over' : ''}${list.length ? '' : ' slim'}${s === 'completed' ? ' done' : ''}`}
+          role="listitem"
+          aria-label={JOB_STATUS_LABEL[s]}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setOver(s);
+          }}
+          onDragLeave={() => setOver(null)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setOver(null);
+            const id = e.dataTransfer.getData('text/job');
+            if (id) void setJobStatus(id, s);
+          }}
+        >
+          <header className="job-col-head" title={s === 'completed' ? `Finished in the last ${DONE_DAYS} days` : list.length ? undefined : `${JOB_STATUS_LABEL[s]}: nothing here; drop a card to move it`}>
+            <span className={`sdot job-${s}`} aria-hidden="true" />
+            <b className="ellipsis">{JOB_STATUS_LABEL[s]}</b>
+            <span className="count">{list.length}</span>
+          </header>
+          <div className="job-col-body">
+            {s === 'completed'
+              ? list.map((j) => <DoneRow key={j.id} job={j} onOpen={onOpen} balance={balances?.get(j.id)} />)
+              : list.map((j) => <JobCard key={j.id} job={j} onOpen={onOpen} balance={balances?.get(j.id)} draggable />)}
+          </div>
+          {s === 'completed' && done.length > recent.length ? (
+            <footer className="job-col-foot">
+              <button type="button" className="link-btn small" onClick={() => navigate('/jobs/list?status=completed')}>
+                {recent.length ? `See all ${done.length} completed` : `${done.length} older completed`} <ArrowRight size={14} aria-hidden="true" />
+              </button>
+            </footer>
+          ) : null}
+        </section>
+      ))}
     </div>
   );
 }
@@ -185,8 +221,13 @@ function List({ onOpen }: { onOpen: (id: string) => void }) {
   const jobs = useJobs();
   const balances = useBalances();
   const members = useMemberMap();
+  const [params] = useSearchParams();
   const [q, setQ] = useState('');
-  const [status, setStatus] = useState<'open' | 'all' | JobStatus>('open');
+  // The board's "See all completed" opens this list on Completed.
+  const [status, setStatus] = useState<'open' | 'all' | JobStatus>(() => {
+    const s = params.get('status');
+    return s && (s === 'all' || s in JOB_STATUS_LABEL) ? (s as JobStatus | 'all') : 'open';
+  });
   const [type, setType] = useState('');
   const [who, setWho] = useState('');
   if (!jobs) return null;

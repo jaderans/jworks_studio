@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, Search, Trash2 } from 'lucide-react';
+import { Check, Plus, Search, Trash2 } from 'lucide-react';
 import { Button, IconButton } from './ui';
 import { MoneyInput, NumberInput } from './form';
 import { Dialog } from './Dialog';
@@ -158,7 +158,13 @@ export function TotalsCard({ items, discountAmount = 0, discountLabel = 'Discoun
   );
 }
 
-/** Searchable price list, grouped by section, with business and student prices. */
+const sectionName = (p: Package) => p.category || (p.kind === 'addon' ? 'Add-ons' : 'Other');
+
+/**
+ * Searchable price list with business and student prices. On a computer the
+ * sections are a list down the side; on a phone they're chips. Rows take the
+ * card's colour, turn teal when pointed at, and keep a mark once added.
+ */
 export function CatalogPicker({
   open,
   onClose,
@@ -172,80 +178,121 @@ export function CatalogPicker({
   audience: PriceAudience;
   categories?: string[];
 }) {
-  const packages = (usePackages() ?? []).filter((p) => p.active === 1);
+  const all = usePackages();
+  const packages = useMemo(() => (all ?? []).filter((p) => p.active === 1), [all]);
   const [q, setQ] = useState('');
   const [cat, setCat] = useState<string>('');
-  const [added, setAdded] = useState(0);
+  // How many times each item was added since the picker opened.
+  const [added, setAdded] = useState<Record<string, number>>({});
+  const total = Object.values(added).reduce((a, n) => a + n, 0);
   const cats = useMemo(() => {
-    const present = [...new Set(packages.map((p) => p.category || (p.kind === 'addon' ? 'Add-ons' : 'Other')))];
+    const present = [...new Set(packages.map(sectionName))];
     const order = [...(categories ?? []), ...CATEGORIES];
     return present.sort((a, b) => (order.indexOf(a) + 1 || 999) - (order.indexOf(b) + 1 || 999));
   }, [packages, categories]);
-  const active = cat || (categories?.[0] && cats.includes(categories[0]) ? categories[0] : '');
+  const count = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of packages) m.set(sectionName(p), (m.get(sectionName(p)) ?? 0) + 1);
+    return m;
+  }, [packages]);
+  const active = cat === '*' ? '' : cat || (categories?.[0] && cats.includes(categories[0]) ? categories[0] : '');
   const needle = q.trim().toLowerCase();
   const shown = packages.filter((p) => {
-    const c = p.category || (p.kind === 'addon' ? 'Add-ons' : 'Other');
-    if (needle) return `${p.name} ${c} ${p.includes.join(' ')}`.toLowerCase().includes(needle);
+    const c = sectionName(p);
+    if (needle) return `${p.name} ${c} ${p.includes.join(' ')} ${p.tagline}`.toLowerCase().includes(needle);
     return !active || c === active;
   });
+  // "All" and search results are grouped under their section.
+  const groups = active && !needle ? [{ c: active, list: shown }] : cats.map((c) => ({ c, list: shown.filter((p) => sectionName(p) === c) })).filter((g) => g.list.length);
+  const close = () => {
+    setQ('');
+    setCat('');
+    setAdded({});
+    onClose();
+  };
+  const pick = (c: string) => setCat(c || '*');
   return (
     <Dialog
       open={open}
-      onClose={() => {
-        setQ('');
-        setCat('');
-        setAdded(0);
-        onClose();
-      }}
+      onClose={close}
       title="Add from the price list"
-      size="wide"
+      size="xwide"
       fullPhone
       footer={
-        <Button variant="primary" onClick={() => { setAdded(0); onClose(); }}>
-          {added ? `Done (${added} added)` : 'Done'}
+        <Button variant="primary" onClick={close}>
+          {total ? `Done (${total} added)` : 'Done'}
         </Button>
       }
     >
       <div className="search">
         <Search size={18} aria-hidden="true" />
-        <input className="input" type="search" aria-label="Search the price list" placeholder="Search: logo, shirt, yearbook, rush…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input" type="search" aria-label="Search the price list" placeholder="Search: logo, pins, menu board, yearbook, rush…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
       {needle ? null : (
-        <div className="chip-row scroll-x" role="group" aria-label="Sections">
-          <button type="button" className="chip" aria-pressed={!active} onClick={() => setCat('')}>
+        <div className="chip-row scroll-x catalog-chips" role="group" aria-label="Sections">
+          <button type="button" className="chip" aria-pressed={!active} onClick={() => pick('')}>
             All
           </button>
           {cats.map((c) => (
-            <button key={c} type="button" className="chip" aria-pressed={active === c} onClick={() => setCat(c)}>
+            <button key={c} type="button" className="chip" aria-pressed={active === c} onClick={() => pick(c)}>
               {c}
             </button>
           ))}
         </div>
       )}
-      <div className="list card flush">
-        {shown.length === 0 ? <p className="muted small" style={{ padding: 14 }}>Nothing matches.</p> : null}
-        {shown.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            className="list-item click catalog-row"
-            onClick={() => {
-              onPick(p);
-              setAdded((n) => n + 1);
-            }}
-          >
-            <span className="main-text">
-              <b>{p.name}</b>
-              <span>
-                {[p.category, p.turnaround, p.revisions ? `${p.revisions} revisions` : '', p.includes.slice(0, 3).join(' · ')].filter(Boolean).join(' · ')}
-              </span>
-            </span>
-            <span className="catalog-price">
-              <b>{priceText(p, audience)}</b>
-              {p.studentPrice && p.unit !== 'percent' ? <span className="tiny muted">{audience === 'student' ? `Business ${peso(p.price)}` : `Student ${peso(p.studentPrice)}`}</span> : null}
-            </span>
-          </button>
-        ))}
+      <div className={`catalog-body${needle ? ' searching' : ''}`}>
+        {needle ? null : (
+          <nav className="catalog-sections" aria-label="Price list sections">
+            <button type="button" className="catalog-tab" aria-pressed={!active} onClick={() => pick('')}>
+              <span className="grow">All</span>
+              <span className="tiny muted num">{packages.length}</span>
+            </button>
+            {cats.map((c) => (
+              <button key={c} type="button" className="catalog-tab" aria-pressed={active === c} onClick={() => pick(c)}>
+                <span className="grow">{c}</span>
+                <span className="tiny muted num">{count.get(c) ?? 0}</span>
+              </button>
+            ))}
+          </nav>
+        )}
+        <div className="list card flush catalog-list">
+          {shown.length === 0 ? <p className="muted small" style={{ padding: 14 }}>Nothing matches.</p> : null}
+          {groups.map((g) => (
+            <div key={g.c} role="group" aria-label={g.c}>
+              {groups.length > 1 ? <div className="catalog-group">{g.c}</div> : null}
+              {g.list.map((p) => {
+                const n = added[p.id] ?? 0;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={`list-item click catalog-row${n ? ' added' : ''}`}
+                    onClick={() => {
+                      onPick(p);
+                      setAdded((a) => ({ ...a, [p.id]: (a[p.id] ?? 0) + 1 }));
+                    }}
+                  >
+                    <span className="main-text">
+                      <b>{p.name}</b>
+                      <span>
+                        {[p.turnaround, p.revisions ? `${p.revisions} revisions` : '', (p.includes.length ? p.includes : [p.tagline]).slice(0, 3).join(' · ')].filter(Boolean).join(' · ')}
+                      </span>
+                    </span>
+                    {n ? (
+                      <span className="catalog-added">
+                        <Check size={13} aria-hidden="true" /> {n > 1 ? `×${n}` : 'Added'}
+                      </span>
+                    ) : null}
+                    <span className="catalog-price">
+                      <b>{priceText(p, audience)}</b>
+                      {p.studentPrice && p.unit !== 'percent' ? <span className="tiny muted">{audience === 'student' ? `Business ${peso(p.price)}` : `Student ${peso(p.studentPrice)}`}</span> : null}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
       </div>
     </Dialog>
   );

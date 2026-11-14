@@ -77,10 +77,40 @@ details.disclosure[open] > summary::before { transform: rotate(45deg); }
 .job-col-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px 6px; font-size: 0.86rem; position: sticky; top: 0; }
 .job-col-head .count { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 800; }
 .job-col-body { display: grid; gap: 8px; padding: 4px 10px 10px; align-content: start; }
+.job-col-foot { padding: 6px 12px 10px; border-top: 1px solid var(--line); }
+.job-col-foot .link-btn { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
+.job-col-foot .link-btn:hover { text-decoration: underline; }
+/* Completed: one line per finished job. */
+.job-col.done .job-col-body { gap: 4px; }
+.done-row { display: flex; align-items: center; gap: 7px; width: 100%; min-width: 0; min-height: 36px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; font-size: 0.85rem; text-align: left; cursor: pointer; }
+.done-row:hover { border-color: var(--teal); background: var(--hover); }
+.done-row:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+.done-row .done-check { flex: none; color: var(--good); }
+.done-row .mono { flex: none; }
+.done-row .done-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.done-row .balance { color: var(--warn); flex: none; }
+.done-row .badge { flex: none; }
 @media (max-width: 640px) {
   .job-board { grid-auto-columns: 86%; }
   /* Touch screens can't drag cards, so empty columns only take up a screen of swiping. */
-  .job-col:has(.job-col-body:empty) { display: none; }
+  .job-col.slim:not(:has(.job-col-foot)) { display: none; }
+}
+/* Computers: every column fits across the page (empty ones fold into slim strips) and the
+   board fills the screen, so the page never scrolls; a long column scrolls inside itself.
+   ("slim", not "empty": .empty is the empty-state message's class.) */
+@media (min-width: 900px) {
+  .job-board { grid-auto-flow: row; grid-template-columns: var(--board-cols, repeat(6, minmax(170px, 1fr))); }
+  .job-col.slim .job-col-head { padding-inline: 9px; gap: 6px; }
+}
+@media (min-width: 900px) and (min-height: 560px) {
+  .main:has(.board-fit) { display: flex; flex-direction: column; }
+  .main:has(.board-fit) > .section-tabs { flex: none; }
+  .page.board-fit { flex: 1 1 auto; min-height: 0; width: 100%; grid-template-rows: auto minmax(0, 1fr); padding-bottom: 16px; }
+  .board-fit .job-board { min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; padding-bottom: 0; }
+  .board-fit .job-col { min-height: 0; display: flex; flex-direction: column; }
+  .board-fit .job-col-head { flex: none; }
+  .board-fit .job-col-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+  .board-fit .job-col-foot { flex: none; }
 }
 
 .job-card { display: grid; gap: 6px; padding: 10px 11px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-align: left; cursor: pointer; min-width: 0; width: 100%; font: inherit; }
@@ -99,7 +129,7 @@ details.disclosure[open] > summary::before { transform: rotate(45deg); }
 .due-chip.bad { color: var(--bad); }
 
 .mini-row { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; min-height: 44px; padding: 8px 6px; border: 0; border-top: 1px solid var(--line); background: none; color: var(--ink); text-align: left; cursor: pointer; font: inherit; font-size: 0.88rem; border-radius: 8px; }
-.mini-row:hover { background: var(--surface-2); }
+.mini-row:hover { background: var(--hover); }
 
 .link-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto auto; gap: 6px; align-items: center; }
 .split-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -124,9 +154,29 @@ details.disclosure[open] > summary::before { transform: rotate(45deg); }
   .price-line .pl-price { flex: 1 1 120px; }
   .price-line .pl-pct { flex: 1 1 100%; order: 1; }
 }
+/* ---------- price list picker ---------- */
+.catalog-body { display: grid; gap: 12px; min-width: 0; }
+.catalog-sections { display: none; }
+/* clip, not hidden: the section headings can stick while the dialog scrolls. */
+.catalog-list { overflow: clip; }
+.catalog-group { position: sticky; top: 0; z-index: 1; padding: 8px 14px 6px; background: var(--surface-2); border-bottom: 1px solid var(--line); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .catalog-row { gap: 14px; }
 .catalog-row .main-text span { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+/* Rows take the card's colour; the one pointed at turns teal, so it's clear what a click adds. */
+.list-item.catalog-row:hover, .list-item.catalog-row:focus-visible { background: var(--teal-soft); }
+.catalog-row:hover .main-text b, .catalog-row:focus-visible .main-text b, .catalog-row:hover .catalog-price b, .catalog-row:focus-visible .catalog-price b { color: var(--teal); }
+.catalog-row.added { box-shadow: inset 3px 0 0 var(--teal); }
+.catalog-added { display: inline-flex; align-items: center; gap: 3px; flex: none; padding: 2px 8px; border-radius: 999px; background: var(--teal); color: var(--on-teal); font-size: 0.72rem; font-weight: 800; white-space: nowrap; }
 .catalog-price { display: grid; justify-items: end; text-align: right; white-space: nowrap; flex: none; }
+.catalog-tab { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 6px 10px; border: 0; border-radius: 10px; background: none; color: var(--ink-2); font: inherit; font-size: 0.86rem; font-weight: 700; line-height: 1.25; text-align: left; cursor: pointer; }
+.catalog-tab:hover { background: var(--hover); color: var(--ink); }
+.catalog-tab[aria-pressed='true'], .catalog-tab[aria-pressed='true'] .muted { background: var(--teal-soft); color: var(--teal); }
+/* Computers: the sections down the side instead of a long row of chips. */
+@media (min-width: 760px) {
+  .catalog-chips { display: none; }
+  .catalog-body:not(.searching) { grid-template-columns: 210px minmax(0, 1fr); align-items: start; }
+  .catalog-sections { display: grid; gap: 2px; position: sticky; top: 0; max-height: calc(100dvh - 250px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+}
 
 /* ---------- contract templates ---------- */
 .template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
@@ -135,6 +185,14 @@ details.disclosure[open] > summary::before { transform: rotate(45deg); }
 .template-card:hover { border-color: var(--teal); }
 .template-card.on { border-color: var(--teal); box-shadow: 0 0 0 2px var(--teal-soft); }
 .template-card.muted { opacity: 0.6; }
+.template-card:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+/* ---------- quotes, as cards like the contract templates ---------- */
+.quote-card { gap: 5px; padding-left: 16px; }
+.quote-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.quote-card .quote-client { font-size: 0.98rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.quote-card .quote-total { font-family: var(--f-display); font-size: 1.3rem; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.quote-card .quote-total small { font-family: var(--f-ui); font-size: 0.8rem; font-weight: 700; color: var(--muted); }
 
 /* ---------- payouts ---------- */
 .payout-card .kv-grid { grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr); }

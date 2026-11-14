@@ -18,7 +18,13 @@ import type { Contract, ContractTemplate, Job, ProposalItem } from '../db/types'
  */
 
 /** The template that fits a job type and client kind (falls back to the first). */
-export function suggestTemplate(templates: ContractTemplate[], o: { jobType?: Job['type']; student?: boolean }): ContractTemplate | undefined {
+export function suggestTemplate(templates: ContractTemplate[], o: { jobType?: Job['type']; student?: boolean; government?: boolean }): ContractTemplate | undefined {
+  const live = templates.filter((t) => t.active === 1 && t.deleted !== 1);
+  // Government offices pay after acceptance, so their own template comes first.
+  if (o.government) {
+    const gov = live.find((t) => t.id === 'tpl-government');
+    if (gov) return gov;
+  }
   const want = o.student ? 'student' : 'business';
   const byType: Record<string, string> = {
     Branding: 'tpl-branding',
@@ -36,8 +42,8 @@ export function suggestTemplate(templates: ContractTemplate[], o: { jobType?: Jo
     Training: 'tpl-training',
   };
   const prefix = o.jobType ? byType[o.jobType] : undefined;
-  const live = templates.filter((t) => t.active === 1 && t.deleted !== 1);
-  return (prefix && (live.find((t) => t.id.startsWith(prefix) && t.id.endsWith(want)) ?? live.find((t) => t.id.startsWith(prefix)))) || live[0];
+  // Exact ids, so "tpl-merch" never picks "tpl-merch-production" by accident.
+  return (prefix && (live.find((t) => t.id === `${prefix}-${want}`) ?? live.find((t) => t.id === prefix) ?? live.find((t) => t.id.startsWith(`${prefix}-`)))) || live[0];
 }
 
 /** A contract from a template, filled from the client, the job or the quote. */
@@ -95,9 +101,9 @@ export async function newTemplateContract(opts: { templateId: string; clientId?:
     discountAmount: jm?.discountAmount ?? quote?.discountAmount ?? 0,
     brief: nameQuestion && client?.name ? [{ q: nameQuestion.q, a: client.name }] : [],
     rush: job?.rush ?? false,
-    downPct: money.downPct,
+    downPct: tpl.downPct ?? money.downPct,
     jobId: job?.id ?? null,
-    milestones: planMilestones(tpl.phases, startDate, endDate),
+    milestones: planMilestones(tpl.phases, startDate, endDate, { payAfter: (tpl.downPct ?? money.downPct) === 0 }),
     useSignature: true,
   });
   await audit('create', 'contract', rec.id, `Drafted ${tpl.name} ${rec.number}${fields['client.name'] ? ` for ${fields['client.name']}` : ''}`);

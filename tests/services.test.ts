@@ -4,12 +4,16 @@ import { existsSync, readFileSync } from 'node:fs';
 import { alive, db } from '../src/db/db';
 import { ensureDevice } from '../src/db/local';
 import { setActor, setWriterDevice } from '../src/db/write';
-import { getSetting } from '../src/db/settings';
+import { getSetting, setSetting } from '../src/db/settings';
 import { runSetup } from '../src/services/setup';
+import { catalogStatus, loadCatalog } from '../src/services/catalog';
+import { PRICE_CHANGES } from '../src/domain/packages';
+import { TEMPLATE_CHANGES } from '../src/domain/contractTemplates';
+import { toCents } from '../src/lib/money';
 import { applyReschedule, createPost, decideApproval, deletePost, movePost, previewReschedule, requestApproval, saveIdea, scheduleIdea, setStatus } from '../src/services/content';
 import { launchCampaign, blankCampaign, updateCampaign } from '../src/services/campaigns';
 import { newContract, newProposal, saveClient, savePackage } from '../src/services/clients';
-import { deleteTemplate, discardTemplatePrices, newTemplateContract } from '../src/services/documents';
+import { deleteTemplate, discardTemplatePrices, newTemplateContract, suggestTemplate } from '../src/services/documents';
 import { exportAll, mergeBackup, parseBackup } from '../src/services/backup';
 import { applyPlanner, previewPlanner, type PlannerOptions } from '../src/services/importPlanner';
 import { CAMPAIGN_TEMPLATES, planTemplatePosts } from '../src/domain/campaignTemplates';
@@ -184,6 +188,50 @@ describe('contract templates: their own prices, and deleting one', () => {
     await discardTemplatePrices(kept.id);
     expect((await db.packages.get(draft.id))?.active).toBe(0);
     expect((await db.packages.get(mine.id))?.active).toBe(1);
+  });
+});
+
+describe('catalog versions', () => {
+  const NEW_SECTIONS = ['Design retainer', 'Merch production', 'Packaging & labels', 'Illustration & mascots', 'Print & stationery design', 'Printing', 'Situation kits', 'Weddings & celebrations', 'Research & academic visuals', 'Government & LGU', 'Presentations & company profiles', 'Video'];
+
+  it('brings a device on the October 2026 list up to date, keeping what the studio edited', async () => {
+    await setup();
+    // Turn this device back into one that loaded version 1.
+    const fresh = alive(await db.packages.toArray()).filter((p) => NEW_SECTIONS.includes(p.category ?? ''));
+    await db.packages.bulkDelete(fresh.map((p) => p.id));
+    const newTemplates = alive(await db.contractTemplates.toArray()).filter((t) => t.sort >= 13);
+    await db.contractTemplates.bulkDelete(newTemplates.map((t) => t.id));
+    for (const c of PRICE_CHANGES) await db.packages.update(c.id, { price: c.from });
+    const edited = PRICE_CHANGES[0];
+    await db.packages.update(edited.id, { price: toCents(300) });
+    const motion = (await db.contractTemplates.get('tpl-motion'))!;
+    await db.contractTemplates.put({ ...motion, ...Object.fromEntries(TEMPLATE_CHANGES.filter((c) => c.id === 'tpl-motion').map((c) => [c.field, c.from])) });
+    const someone = alive(await db.packages.toArray())[0];
+    await db.packages.put({ ...someone, id: 'seed-pkg-kept', active: 1 });
+    await setSetting('money', { ...(await getSetting('money')), catalogVersion: 1 });
+    expect(await catalogStatus()).toEqual({ version: 1, needs: true });
+
+    const r = await loadCatalog();
+    expect(r).toMatchObject({ added: fresh.length, templates: 8, archived: 0, repriced: PRICE_CHANGES.length - 1, updated: 1 });
+    expect((await db.packages.get(edited.id))?.price).toBe(toCents(300));
+    expect((await db.packages.get(PRICE_CHANGES[1].id))?.price).toBe(PRICE_CHANGES[1].to);
+    expect((await db.contractTemplates.get('tpl-motion'))?.categories).toContain('Video');
+    expect((await db.packages.get('seed-pkg-kept'))?.active).toBe(1);
+    expect((await catalogStatus()).needs).toBe(false);
+    // Loading again changes nothing.
+    expect(await loadCatalog()).toMatchObject({ added: 0, templates: 0, repriced: 0, updated: 0 });
+  });
+
+  it('suggests the right template, and government contracts start with no down payment', async () => {
+    await setup();
+    const tpls = alive(await db.contractTemplates.toArray());
+    expect(suggestTemplate(tpls, { government: true, jobType: 'Branding' })?.id).toBe('tpl-government');
+    expect(suggestTemplate(tpls, { jobType: 'Merch' })?.id).toBe('tpl-merch');
+    expect(suggestTemplate(tpls, { jobType: 'Branding', student: true })?.id).toBe('tpl-branding-student');
+    expect(suggestTemplate(tpls, { jobType: 'Campaign' })?.id).toBe('tpl-event-business');
+    expect(suggestTemplate(tpls, { jobType: 'Video Editing' })?.id).toBe('tpl-motion');
+    expect((await newTemplateContract({ templateId: 'tpl-government' })).downPct).toBe(0);
+    expect((await newTemplateContract({ templateId: 'tpl-branding-business' })).downPct).toBe((await getSetting('money')).downPct);
   });
 });
 

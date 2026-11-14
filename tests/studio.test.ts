@@ -11,8 +11,8 @@ import { excelDate, money, parseTracker, percent, trackerPayments, type TrackerI
 import {
   birReturns, duplicateNumbers, earningsForJob, invoiceTotals, jobBalance, nextBirReturn, nextDocNumber, parseDocNo, payoutSummary, sharesOfNet, unsplitJobs,
 } from '../src/domain/money';
-import { CATEGORIES, SEED_PACKAGES } from '../src/domain/packages';
-import { SEED_TEMPLATES } from '../src/domain/contractTemplates';
+import { CATEGORIES, PRICE_CHANGES, SEED_PACKAGES } from '../src/domain/packages';
+import { SEED_TEMPLATES, STANDARD_TERMS, TEMPLATE_CHANGES } from '../src/domain/contractTemplates';
 import { normalizeStage } from '../src/domain/clients';
 import { docTotals } from '../src/domain/pricing';
 import { runSetup } from '../src/services/setup';
@@ -147,14 +147,33 @@ describe('price list and contract templates', () => {
     }
   });
   it('every template points at real sections and has its terms', () => {
-    expect(SEED_TEMPLATES.length).toBe(13);
+    expect(SEED_TEMPLATES.length).toBe(21);
     const tplIds = SEED_TEMPLATES.map((t) => t.id);
     expect(new Set(tplIds).size).toBe(tplIds.length);
     for (const t of SEED_TEMPLATES) {
       for (const c of t.categories) expect(CATEGORIES, `${t.id} → ${c}`).toContain(c);
       expect(t.sections.length, t.id).toBeGreaterThanOrEqual(10);
+      // A template may reword a term, but keeps all eleven, in order, with their ids.
+      expect(t.sections.map((s) => s.id), t.id).toEqual(STANDARD_TERMS.map((s) => s.id));
       expect(t.phases.length, t.id).toBeGreaterThan(0);
+      expect(t.agreement.length, t.id).toBeGreaterThanOrEqual(6);
     }
+  });
+  it('prices the November 2026 sections, and matches the POS sticker rates', () => {
+    for (const c of ['Design retainer', 'Merch production', 'Packaging & labels', 'Illustration & mascots', 'Print & stationery design', 'Printing', 'Situation kits', 'Weddings & celebrations', 'Research & academic visuals', 'Government & LGU', 'Presentations & company profiles', 'Video']) {
+      expect(SEED_PACKAGES.filter((p) => p.category === c).length, c).toBeGreaterThanOrEqual(5);
+    }
+    expect(SEED_PACKAGES.find((p) => p.name === 'Sintra board menu board, 3 mm')).toMatchObject({ unit: 'sqft', category: 'Printing' });
+    expect(SEED_PACKAGES.find((p) => p.name.startsWith('Sticker labels A4: label paper'))).toMatchObject({ unit: 'piece', price: toCents(60) });
+    // The POS sticker illustration rate card: ₱100 / ₱220 a design, sets of 2, 5 and 10.
+    const merch = (name: string) => SEED_PACKAGES.find((p) => p.category === 'Merch' && p.name === name)?.price;
+    expect([merch('Sticker: small / simple'), merch('Sticker: detailed')]).toEqual([toCents(100), toCents(220)]);
+    expect([merch('Stickers: 2 designs (detailed)'), merch('Stickers: 5 designs (detailed)'), merch('Stickers: 10 designs (detailed)')]).toEqual([toCents(390), toCents(950), toCents(1700)]);
+    for (const p of SEED_PACKAGES.filter((x) => x.category === 'Design retainer' && x.kind !== 'addon')) expect(p, p.name).toMatchObject({ unit: 'month', minTermMonths: 3 });
+    // What a catalog upgrade changes to is what a new install gets.
+    for (const c of PRICE_CHANGES) expect(SEED_PACKAGES.find((p) => p.id === c.id)?.price, c.id).toBe(c.to);
+    for (const c of TEMPLATE_CHANGES) expect(SEED_TEMPLATES.find((t) => t.id === c.id)?.[c.field], `${c.id} ${c.field}`).toEqual(c.to);
+    expect(SEED_TEMPLATES.find((t) => t.id === 'tpl-government')?.downPct).toBe(0);
   });
   it('moves old SMM pipeline stages to the general ones', () => {
     expect(normalizeStage('lead')).toBe('inquiry');

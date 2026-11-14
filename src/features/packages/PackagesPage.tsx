@@ -187,6 +187,7 @@ export function PackageDialog({ value, onClose, onSaved }: { value: Partial<Pack
             <option value="piece">Piece</option>
             <option value="hour">Hour</option>
             <option value="participant">Participant</option>
+            <option value="sqft">Square foot (tarps, boards, signs)</option>
             <option value="percent">Percent of the package price</option>
           </Select>
         </Field>

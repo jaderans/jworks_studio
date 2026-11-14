@@ -166,7 +166,7 @@ function TemplatePicker({ value, onClose, onMade }: { value: { clientId: string 
     const student = CLIENT_KINDS.find((k) => k.key === client?.kind)?.audience === 'student';
     setClientId(cid);
     setJobId(value.jobId ?? '');
-    setTplId(suggestTemplate(templates, { jobType: job?.type, student })?.id ?? '');
+    setTplId(suggestTemplate(templates, { jobType: job?.type, student, government: client?.kind === 'government' })?.id ?? '');
     setInitFor(value);
   }
   if (!value && initFor) setInitFor(null);
@@ -299,9 +299,9 @@ function TemplateContractEditor({ id, onClose }: { id: string | null; onClose: (
   const replan = () => {
     const start = c.fields.startDate || todayISO();
     const end = completionDate(start, items, packages, c.rush) || c.fields.endDate;
-    setC({ ...c, fields: { ...c.fields, startDate: start, endDate: end }, milestones: planMilestones(tpl.phases, start, end) });
+    setC({ ...c, fields: { ...c.fields, startDate: start, endDate: end }, milestones: planMilestones(tpl.phases, start, end, { payAfter: c.downPct === 0 }) });
   };
-  const milestones = c.milestones ?? planMilestones(tpl.phases, c.fields.startDate ?? '', c.fields.endDate ?? '');
+  const milestones = c.milestones ?? planMilestones(tpl.phases, c.fields.startDate ?? '', c.fields.endDate ?? '', { payAfter: c.downPct === 0 });
   const setMilestones = (m: Milestone[]) => setC({ ...c, milestones: m });
   const setRush = (on: boolean) => {
     const rest = items.filter((i) => !isRushLine(i));

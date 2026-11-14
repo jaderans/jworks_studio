@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Briefcase, FileDown, FileSignature, Mail, Plus, Trash2 } from 'lucide-react';
+import { Briefcase, FileDown, FileSignature, Mail, Plus, Save, Trash2 } from 'lucide-react';
 import { useApp } from '../../app/AppContext';
 import { Badge, Button, EmptyState, PageHeader, Toggle } from '../../components/ui';
 import { Field, MoneyInput, Select, TextArea, TextInput } from '../../components/form';
 import { Dialog } from '../../components/Dialog';
 import { PriceLinesEditor } from '../../components/PriceLines';
-import { useClients, usePackages, useProposals, useSettingRows } from '../../hooks/data';
+import { useClients, useJobs, usePackages, useProposals, useSettingRows } from '../../hooks/data';
 import { settingValue } from '../../db/settings';
 import { CLIENT_KINDS } from '../../domain/clients';
 import { DISCOUNT_CODES, FOUNDING_OFFER } from '../../domain/packages';
@@ -18,17 +18,22 @@ import { deliverPdf, renderPdf } from '../../reports/pdf';
 import { quoteEmail } from '../../email/templates';
 import { sendEmail } from '../../email/send';
 import { peso } from '../../lib/money';
-import { addDays, fmtIsoDate, inPeriod, type Period } from '../../lib/time';
+import { addDays, fmtIsoDate, inPeriod, todayISO, type Period } from '../../lib/time';
 import { FilterBar, PeriodSelect } from '../../components/FilterBar';
 import { safeFileName } from '../../lib/files';
+import { CatalogBanner } from './CatalogBanner';
 import type { Proposal } from '../../db/types';
 
 const STATUS_TONE = { won: 'good', sent: 'yellow', lost: 'bad', draft: undefined } as const;
+const STATUS_LABEL: Record<Proposal['status'], string> = { draft: 'Draft', sent: 'Sent', won: 'Won', lost: 'Lost' };
 
 export function QuotesTab() {
   const [params, setParams] = useSearchParams();
   const proposals = useProposals();
   const clients = useClients() ?? [];
+  const jobs = useJobs();
+  const jobNumbers = new Map((jobs ?? []).map((j) => [j.id, j.number]));
+  const today = todayISO();
   const rates = settingValue(useSettingRows(), 'rates');
   const [open, setOpen] = useState<string | null>(null);
   const [q, setQ] = useState('');
@@ -70,6 +75,7 @@ export function QuotesTab() {
           </Button>
         }
       />
+      <CatalogBanner />
       {proposals.length ? (
         <FilterBar
           id="quotes"
@@ -96,34 +102,45 @@ export function QuotesTab() {
       ) : shown.length === 0 ? (
         <EmptyState title="Nothing matches" />
       ) : (
-        <div className="table-wrap">
-          <table className="table cards-on-phone">
-            <thead>
-              <tr>
-                <th>No.</th>
-                <th>Client</th>
-                <th>Date</th>
-                <th className="r">Total</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {shown.map((p) => {
-                const t = proposalTotals(p, rates);
-                return (
-                  <tr key={p.id} className="click" onClick={() => setOpen(p.id)}>
-                    <td data-label="No." className="mono">{p.number}</td>
-                    <td data-label="Client">{p.clientName || '—'}</td>
-                    <td data-label="Date" className="nowrap">{fmtIsoDate(p.date)}</td>
-                    <td data-label="Total" className="r num">{t.perMonth ? `${peso(t.perMonth)}/mo` : peso(t.invoice)}</td>
-                    <td data-label="Status">
-                      <Badge tone={STATUS_TONE[p.status]}>{p.status}</Badge>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="template-grid">
+          {shown.map((p) => {
+            const t = proposalTotals(p, rates);
+            const first = p.items.find((i) => i.base) ?? p.items[0];
+            const more = p.items.length - 1;
+            const open = p.status === 'draft' || p.status === 'sent';
+            const expired = open && !!p.validUntil && p.validUntil < today;
+            const jobNo = p.jobId ? jobNumbers.get(p.jobId) : undefined;
+            return (
+              <button key={p.id} type="button" className={`template-card quote-card${p.status === 'lost' ? ' muted' : ''}`} onClick={() => setOpen(p.id)}>
+                <span className="quote-card-top">
+                  <span className="mono tiny muted">{p.number}</span>
+                  <Badge tone={STATUS_TONE[p.status]}>{STATUS_LABEL[p.status]}</Badge>
+                </span>
+                <b className="quote-client">{p.clientName || 'No client yet'}</b>
+                <span className="tiny strong teal ellipsis">{first ? `${first.label}${more > 0 ? ` + ${more} more` : ''}` : 'No items yet'}</span>
+                <span className="quote-total">
+                  {t.perMonth ? (
+                    <>
+                      {peso(t.perMonth)}
+                      <small> / month</small>
+                    </>
+                  ) : (
+                    peso(t.invoice)
+                  )}
+                </span>
+                <span className="tiny muted">
+                  {fmtIsoDate(p.date)}
+                  {open ? (
+                    <>
+                      {' · '}
+                      {expired ? <span className="warn strong">Expired {fmtIsoDate(p.validUntil)}</span> : `Valid until ${fmtIsoDate(p.validUntil)}`}
+                    </>
+                  ) : null}
+                  {p.status === 'won' ? ` · ${jobNo ? `Job ${jobNo}` : 'No job yet'}` : null}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
       <QuoteDialog id={open} onClose={() => setOpen(null)} />
@@ -198,6 +215,17 @@ function QuoteDialog({ id, onClose }: { id: string | null; onClose: () => void }
             <Trash2 size={16} /> Delete
           </Button>
           <span className="grow" />
+          <Button
+            disabled={!!busy}
+            onClick={() =>
+              run('save', async () => {
+                app.toast(`Quote ${p.number} saved`, { tone: 'good' });
+                onClose();
+              })
+            }
+          >
+            <Save size={16} /> Save
+          </Button>
           <Button disabled={!!busy} onClick={() => run('pdf', async () => deliverPdf(await buildQuotePdf(p, { business, rates, packages, payMethods, money }), `${safeFileName(`${p.number} ${p.clientName}`)}.pdf`))}>
             <FileDown size={16} /> PDF
           </Button>

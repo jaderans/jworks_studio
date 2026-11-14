@@ -604,7 +604,7 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
         layout: gridLayout,
         margin: [0, 0, 0, 4],
       } as Content);
-    content.push({ text: 'Dates assume the down payment and complete materials arrive on the start date, and replies within the agreed time.', style: 'muted' });
+    content.push({ text: `Dates assume the ${down > 0 ? 'down payment' : 'purchase order'} and complete materials arrive on the start date, and replies within the agreed time.`, style: 'muted' });
   }
   return content;
   };
@@ -631,7 +631,9 @@ export async function buildTemplateContractPdf(c: Contract, tpl: ContractTemplat
             label('Payment Method:'),
             { text: f.paymentMethod || '' },
           ],
-          [label('Initial Payment Due:'), { text: `${peso(down)} (upon signing)` }, label('Final Payment Due:'), { text: `${peso(totals.net - down)} (before file delivery)` }],
+          down > 0
+            ? [label('Initial Payment Due:'), { text: `${peso(down)} (upon signing)` }, label('Final Payment Due:'), { text: `${peso(totals.net - down)} (before file delivery)` }]
+            : [label('Payment Due:'), { text: `${peso(totals.net)} (after delivery, inspection and acceptance)`, colSpan: 3 }, {}, {}],
           [
             label('Payment Received:'),
             {

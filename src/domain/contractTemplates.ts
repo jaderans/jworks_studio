@@ -11,7 +11,7 @@ export type TemplateSeed = Omit<ContractTemplate, keyof Syncable> & { id: string
 export const WELCOME =
   'JoshWorks is a graphic design studio based in Iloilo City, Philippines. With around seven years of design experience and a small team of specialists across branding, illustration, layout, motion, and web, we help businesses, schools, organizations, and creatives build clear, memorable visual identities.';
 export const WHAT_WE_DO =
-  'Branding & visual identity, social media management, merchandise design, motion graphics, event & publication campaigns, yearbook & publication layout, and design training.';
+  'Branding & visual identity, social media management, illustration & mascots, packaging, merchandise design & production, motion graphics & video, event & publication campaigns, yearbook & publication layout, presentations, and design training.';
 export const OUR_GOAL =
   'To deliver professional, original, human-made design that genuinely represents you. We treat every project as a partnership — we listen first, then craft. We use modern tools, including AI, only to support our process, never to replace the human creativity and craft at the heart of every project.';
 
@@ -408,6 +408,580 @@ const EVENT_PHASES = [
 const STD = { sections: STANDARD_TERMS, agreement: STANDARD_AGREEMENT, welcome: WELCOME, active: 1 as const, phasesNote: '' };
 const ADD = ['Add-ons', 'Ownership'];
 
+/** The Motion Graphics template as first shipped, and now that it also offers video editing. */
+const MOTION_V1 = {
+  tagline: 'Logo animation, motion branding & animated content',
+  covers: 'Logo animation, motion branding, and animated content — from quick logo reveals to full motion branding suites.',
+  categories: ['Motion graphics', 'Animated storybook', ...ADD],
+};
+const MOTION_NOW = {
+  tagline: 'Logo animation, motion branding, animation & video',
+  covers: 'Logo animation, motion branding, animated content and video editing — from quick logo reveals and reels to event highlights, AVPs and full motion branding suites.',
+  categories: ['Motion graphics', 'Animated storybook', 'Video', ...ADD],
+};
+
+/** Template details a catalog version changes. A device takes the new value only where the old one is still in place, so edits stay. */
+export const TEMPLATE_CHANGES: { version: number; id: string; field: 'tagline' | 'covers' | 'categories'; from: string | string[]; to: string | string[] }[] = [
+  { version: 2, id: 'tpl-motion', field: 'tagline', from: MOTION_V1.tagline, to: MOTION_NOW.tagline },
+  { version: 2, id: 'tpl-motion', field: 'covers', from: MOTION_V1.covers, to: MOTION_NOW.covers },
+  { version: 2, id: 'tpl-motion', field: 'categories', from: MOTION_V1.categories, to: MOTION_NOW.categories },
+];
+
+/*
+ * November 2026: eight more templates. Each keeps the eleven standard terms in
+ * the same order and ids; only the sections the work changes are reworded.
+ */
+
+/** The standard terms with some sections reworded (and retitled) for one kind of work. */
+function termsWith(changes: Record<string, { title?: string; body: string[] }>): ContractSection[] {
+  return STANDARD_TERMS.map((s) => {
+    const c = changes[s.id];
+    return c ? { ...s, title: c.title ?? s.title, body: lines(...c.body) } : { ...s };
+  });
+}
+
+const AGREE_FIRST = 'I have read, understood, and agree to all terms and conditions in this contract.';
+const AGREE_CONSENT = 'I consent to JoshWorks keeping my details for this project, and I accept electronic signatures on this agreement.';
+const NO_REPLY = 'If the client does not reply for 30 days, the project is put on hold; after 60 days it is closed, payments made are kept, and a restart fee applies to resume it.';
+
+// ----- Merch production -----
+const MERCH_MAKE_QUESTIONS = [
+  '> Tell us what to make. Tick what applies; blank lines can be filled in by hand.',
+  '## About the Order',
+  'What is your organization, business or event, and what is the merch for?',
+  'When do you need the finished pieces, and how will you get them? :: Pickup in Iloilo City | Courier | Other:',
+  '## Items',
+  'Which items should we make? :: Button pins | Enamel pins | Stickers | Acrylic keychains | Acrylic standees | ID laces | Shirts | Tote bags | Mugs/Tumblers | Ref magnets | Bookmarks/Postcards | Patches | Other:',
+  'How many of each, and in what sizes?',
+  'Which finishes do you want? :: Matte | Glossy | Holographic | Glitter | Clear | Not sure yet',
+  'How should they be packed? :: In bulk | One by one in sleeves | With backing cards | Gift-ready',
+  '## Artwork',
+  'Do you have print-ready artwork? :: Yes, we will send it | Please design it | Please fix ours for print',
+  'Do you own, or have permission to use, every logo, character and artwork? :: Yes | Not sure, please advise',
+  'Which colors must match exactly? (brand or Pantone colors, if any)',
+  'Do you want a physical sample before the full run? :: Yes | No',
+  APPROVER,
+  LAST,
+];
+const MERCH_MAKE_PHASES = [
+  p('Order & Quote', 'You tell us the items, quantities and sizes; we confirm the materials, minimum orders, prices and production time.'),
+  p('Artwork & Proof', 'We prepare the artwork (or check yours for print) and send a digital proof of every item for your written approval.'),
+  p('Production Run', 'Production starts once the proof is approved and the down payment is in. Partner-made items follow their factory’s schedule.'),
+  p('Quality Check & Packing', 'We check, count and pack every piece, then tell you the order is ready.'),
+  p('Pickup or Delivery', 'Once the balance is paid, pick up in Iloilo City or we ship by courier at your cost.'),
+];
+const MERCH_MAKE_TERMS = termsWith({
+  payment: {
+    body: [
+      'A 50% down payment is REQUIRED before production; production starts only after the down payment and the client’s written approval of the final proof.',
+      'The balance is paid before pickup or delivery of the finished pieces.',
+      'A balance still unpaid 7 days after the order is ready keeps it on hold and adds a late fee of 5% of the balance per week (up to 20%).',
+      'Finished pieces not picked up within 60 days of being ready may be disposed of, and payments made are kept.',
+      'The prices in this contract hold for 14 days; supplier price changes after that may be re-quoted.',
+    ],
+  },
+  cancellation: {
+    title: 'Order Cancellation and Changes',
+    body: [
+      'An order can’t be cancelled once production starts (after proof approval and the down payment); from then on the down payment is non-refundable.',
+      'Before production starts, an order can be cancelled; design work already done is billed.',
+      'Changing quantities, sizes or materials after proof approval is a new order and may change the price and the delivery date.',
+    ],
+  },
+  client: {
+    body: [
+      'The client sends the final artwork, text, quantities, sizes and colors in writing, or approves the artwork JoshWorks designs.',
+      'The client confirms they own, or have permission to use, every logo, character, photo and artwork sent for production. JoshWorks may decline copyrighted or trademarked designs without that permission.',
+      'All approvals and changes are made in writing through the agreed communication channel.',
+      'If the client does not reply for 30 days, the order is put on hold; after 60 days it is closed and payments made are kept.',
+    ],
+  },
+  ip: {
+    body: [
+      'Artwork the client supplies stays the client’s property; JoshWorks uses it only for this order.',
+      'Designs created by JoshWorks may be used by the client on the ordered items; other products or resale need the commercial-use or ownership add-on.',
+      'JoshWorks may photograph the finished pieces for its portfolio and social media unless an NDA is agreed.',
+    ],
+  },
+  revisions: {
+    title: 'Proofs and Revisions',
+    body: [
+      'Every order gets a digital proof (layout, size and colors) to approve in writing before production.',
+      'Revision rounds on artwork JoshWorks designs follow the package; extra rounds are charged (see Add-ons).',
+      'The approved proof is final: once approved, spelling, names, dates and quantities on it are the client’s responsibility.',
+      'A physical sample before the full run is available as an add-on.',
+    ],
+  },
+  timeline: {
+    title: 'Production and Delivery',
+    body: [
+      'Production time starts after proof approval and the down payment, and follows the turnaround of each item.',
+      'Items made by partner factories (such as enamel pins, ID laces and patches) depend on their schedules; JoshWorks tells the client right away about any delay.',
+      'Pickup is in Iloilo City; courier delivery is at the client’s cost. Once handed to the courier, delays and damage in transit are the courier’s, and JoshWorks helps file the claim.',
+      'Late approvals, missing artwork or unpaid balances move the delivery date.',
+    ],
+  },
+  files: {
+    title: 'Quality, Colors and Defects',
+    body: [
+      'Printed colors may differ slightly from screen colors; the approved proof is the reference.',
+      'Small differences in cut, color and finish between pieces and batches are normal in production.',
+      'Defective pieces must be reported within 3 days of pickup or delivery, with photos; JoshWorks remakes or refunds the defective pieces only.',
+      'Every order is counted before release; a short count is completed or refunded.',
+    ],
+  },
+});
+const MERCH_MAKE_AGREEMENT = [
+  AGREE_FIRST,
+  'I agree to the selected items, quantities and prices, and any add-ons.',
+  'I understand that production starts only after I approve the proof in writing and pay the down payment, and that the order can’t be cancelled after that.',
+  'I confirm I own, or have permission to use, all artwork, logos and characters I send for production.',
+  'I accept that printed colors may differ slightly from the screen, and that defects must be reported within 3 days of receiving the order.',
+  'I understand the balance is paid before pickup or delivery, and that courier fees are mine.',
+  'I acknowledge that unclaimed orders may be disposed of 60 days after they are ready.',
+  AGREE_CONSENT,
+];
+
+// ----- Packaging & labels -----
+const PACKAGING_QUESTIONS = [
+  '> Tell us about your product so we can design packaging that sells.',
+  '## About the Product',
+  'What is the product, and what is its name?',
+  'How many variants (flavors, scents, sizes) need packaging?',
+  'Where will it be sold? :: Sari-sari stores | Supermarkets | Pasalubong centers | Online shops | Cafés/Restaurants | Markets & bazaars | Other:',
+  'Who buys it? (age, lifestyle, price range)',
+  '## Packaging',
+  'What packaging do you need? :: Label/Sticker | Stand-up pouch | Box | Bottle/Jar wrap | Sachet | Paper bag | Hang tag | Sleeve | Other:',
+  'Do you have the sizes or the printer’s dieline? :: We have a dieline | We know the sizes | Please help us',
+  'How will it be printed? :: Sticker labels | Offset | Digital print | Not sure yet',
+  '## Label Details',
+  'Which details will you provide? :: Net weight/volume | Ingredients | Nutrition facts | Allergens | Manufacturer name & address | FDA LTO/CPR number | Barcode | Expiry/Lot code | Storage instructions | Other:',
+  '## Design Direction',
+  'Do you have a logo and brand colors? If yes, please attach.',
+  'What style/mood do you want? :: Premium & Elegant | Fun & Playful | Natural & Organic | Modern & Minimalist | Homemade & Local | Bold & Vibrant | Other:',
+  'Can you share 2–3 packaging designs you like? (links or photos)',
+  'How many pieces will you print first, and when do you need them?',
+  APPROVER,
+  LAST,
+];
+const PACKAGING_PHASES = [
+  p('Product Brief', 'We learn about your product, buyers and where it sells, and the packaging and printing you plan.'),
+  p('Dieline & Label Layout', 'We set up the dieline and place your required label details so everything fits and reads clearly.'),
+  p('Concept & Design', 'We design the front and every panel, shown on 3D mockups.'),
+  p('Revisions & Print Check', 'You send written feedback; we refine within your rounds and check the files against your printer’s specifications.'),
+  p('Print-Ready Handoff', 'Print-ready files with dielines and mockups are delivered once the balance is settled.'),
+];
+const PACKAGING_TERMS = termsWith({
+  client: {
+    body: [
+      'The client must provide clear, detailed instructions, product details, brand guidelines, and references at the start of the project.',
+      'The client supplies, and is responsible for the accuracy of, every product, legal and regulatory detail on the packaging (product name, net content, ingredients, nutrition facts, allergens, manufacturer details, FDA registration, barcodes, expiry and lot codes). JoshWorks lays them out as provided.',
+      'The client provides the printer’s dieline or specifications, or asks JoshWorks to prepare one (see Add-ons).',
+      'All feedback, approvals, and revision requests must be submitted in writing through the agreed communication channel.',
+      'Project timelines begin only once the down payment and complete project materials are received.',
+      NO_REPLY,
+    ],
+  },
+  files: {
+    body: [
+      'Deliverables are print-ready PDF files with dielines, plus PNG and JPEG mockups for selling online.',
+      'Editable source files (AI, PSD) are available as paid add-ons only.',
+      'A printed test sample is recommended before a full run; colors on screen may differ from print.',
+      'Printing and packaging production are not included unless stated and are quoted separately.',
+    ],
+  },
+});
+const PACKAGING_AGREEMENT = [...STANDARD_AGREEMENT.slice(0, 5), 'I am responsible for the accuracy of the product and regulatory details printed on my packaging.', ...STANDARD_AGREEMENT.slice(5)];
+
+// ----- Illustration & mascots -----
+const ILLUSTRATION_QUESTIONS = [
+  '> Tell us about the illustration or character so we can sketch the right idea.',
+  '## About the Artwork',
+  'What do you need? :: Spot illustration | Full illustration | Portrait | Character design | Mascot | Comic | Other:',
+  'What is it for? :: Personal/Gift | Social media | Merch for sale | Packaging | Book/Publication | Brand mascot | Other:',
+  'Describe the subject or scene. (who or what, doing what, where)',
+  '## Character Details',
+  'For a character or mascot: its name, personality, age, and what it stands for.',
+  'How many poses or expressions do you need?',
+  '## Style',
+  'What style do you prefer? :: Chibi/Cute | Cartoon | Anime/Manga | Semi-realistic | Flat vector | Watercolor/Painterly | Line art | Other:',
+  'What colors should we use or avoid?',
+  'What background do you want? :: None (transparent) | Simple color | Full scene',
+  'Can you share 2–3 references or artworks you like? (links or photos)',
+  '## Delivery',
+  'What size and format do you need? (for print or screen)',
+  'When do you need the final artwork?',
+  LAST,
+];
+const ILLUSTRATION_PHASES = [
+  p('Brief & References', 'You describe the subject, use and style; we confirm the sizes and the license you need.'),
+  p('Sketch', 'We send rough sketches of the pose and composition for your approval.'),
+  p('Line Art & Color', 'We draw the final line art and color the approved sketch.'),
+  p('Revisions', 'Written feedback and refinement within your package’s revision rounds.'),
+  p('Final Files', 'High-resolution files are delivered once the balance is settled, with the use rights in this agreement.'),
+];
+const ILLUSTRATION_TERMS = termsWith({
+  ip: {
+    title: 'Intellectual Property and Use',
+    body: [
+      'Upon full payment, the client may use the artwork for personal and non-commercial purposes (social media, gifts, personal prints).',
+      'Commercial use (products for sale, merchandise, advertising, packaging, or a mascot used for a business) needs the commercial-use license or the full IP ownership transfer (see Add-ons and Ownership).',
+      'The artist keeps the copyright and may show the work in the portfolio and on social media, unless an NDA or a buy-out is agreed.',
+      'The client may not resell the artwork, trace or edit it into new artwork, or use it to train AI models without written permission.',
+    ],
+  },
+  revisions: {
+    body: [
+      'Sketches are approved before line art and color; changing the pose, composition or character after the sketch is approved counts as a revision round or a change order.',
+      'One revision round is one consolidated, written list of changes.',
+      'Revisions are limited to the number specified in the selected package; additional rounds incur extra charges (see Add-ons).',
+      'A draft counts as approved if no written feedback arrives within 7 days of sending it.',
+    ],
+  },
+  files: {
+    body: [
+      'Standard deliverables are high-resolution PNG (transparent where possible) and JPEG, plus PDF for print.',
+      'Layered source files (PSD, Procreate, AI) are available as paid add-ons only.',
+      'Printing, merchandise and mascot costume production are not included unless stated and are quoted separately.',
+    ],
+  },
+});
+const ILLUSTRATION_AGREEMENT = [...STANDARD_AGREEMENT.slice(0, 7), 'I understand that personal use is included, and that commercial use needs the commercial-use license or the ownership add-on.', ...STANDARD_AGREEMENT.slice(7)];
+
+// ----- Design retainer -----
+const RETAINER_QUESTIONS = [
+  '> Help us set up your monthly design support.',
+  '## About You',
+  'What is your business or organization, and what do you do?',
+  'Do you have a brand kit (logo, colors, fonts, templates)? :: Yes, we will send it | Partly | No, please make one',
+  '## Monthly Requests',
+  'What designs do you usually need? :: Pubmats/Social posts | Stories | Flyers/Posters | Menus/Price lists | Tarpaulins | Presentations | Certificates | Other:',
+  'About how many designs do you need each month?',
+  'Which sizes or platforms? :: Facebook | Instagram | TikTok | Print (A4/A3) | Tarpaulin | Other:',
+  'How fast do you usually need a design? :: Same day | 1–2 days | 3–5 days | Weekly batch',
+  'Do you have busy seasons or big dates coming up?',
+  '## Working Together',
+  'How will you send requests? :: Messenger | Email | Google Form | Shared folder | Other:',
+  'Who sends the requests, and who approves the designs?',
+  LAST,
+];
+const RETAINER_PHASES = [
+  p('Onboarding', 'We collect your brand kit, set up templates, and agree on the request channel and turnaround.'),
+  p('Monthly Requests', 'You send requests through the agreed channel during the month, up to your monthly limit.'),
+  p('Design & Delivery', 'Each request is designed and delivered within the agreed turnaround.'),
+  p('Review', 'You approve or send written feedback; each request includes its revision rounds.'),
+  p('Monthly Recap', 'At month end we share what was made and plan the next month with you.'),
+];
+const RETAINER_TERMS = termsWith({
+  payment: {
+    body: [
+      'The monthly fee is paid in advance, on or before the agreed billing date each month; the first month starts once the first payment is received.',
+      'Requests are worked on only while the current month is paid; an unpaid month puts requests on hold.',
+      'A fee still unpaid 7 days after its billing date adds a late fee of 5% of the fee per week (up to 20%).',
+      'The monthly fee holds for the minimum term; any change after that is agreed in writing at least 30 days ahead.',
+    ],
+  },
+  cancellation: {
+    title: 'Term and Ending the Retainer',
+    body: [
+      'The retainer has a minimum term of 3 months.',
+      'After the minimum term, either party may end the retainer with 30 days’ written notice; requests in the last paid month are finished and delivered.',
+      'Ending during the minimum term means the remaining months of the minimum term are still due.',
+    ],
+  },
+  revisions: {
+    title: 'Requests and Revisions',
+    body: [
+      'A request is one finished design in one size; other sizes of the same design count as included resizes (per package) or as extra requests.',
+      'Requests beyond the monthly limit are billed at the extra-design rate on the price list.',
+      'Unused requests don’t carry over to the next month.',
+      'Each request includes the revision rounds in the package; a draft counts as approved if no written feedback arrives within 7 days.',
+    ],
+  },
+  timeline: {
+    title: 'Turnaround and Delivery',
+    body: [
+      'Each request is delivered within the package turnaround, counted in working days from a complete request (text, photos and size).',
+      'Requests are worked in the order received, unless the client marks one as a priority; same-day requests are rush add-ons.',
+      'Delays caused by late feedback, incomplete materials, or unpaid months are not the designer’s responsibility.',
+      'Final files are delivered via email or cloud storage; the client is responsible for downloading and backing them up.',
+    ],
+  },
+});
+const RETAINER_AGREEMENT = [
+  AGREE_FIRST,
+  'I agree to the monthly fee, the number of requests each month, and any add-ons.',
+  'I understand the fee is paid in advance each month, and that an unpaid month puts requests on hold.',
+  'I accept the 3-month minimum term and the 30-day written notice to end the retainer.',
+  'I understand that unused requests don’t carry over, and that extra requests are billed separately.',
+  'I agree to send complete requests in writing through the agreed channel, and that a draft counts as approved if I send no feedback within 7 days.',
+  'I understand that intellectual property rights remain with the designer for portfolio use unless otherwise agreed in writing.',
+  AGREE_CONSENT,
+];
+
+// ----- Weddings & celebrations -----
+const CELEBRATION_QUESTIONS = [
+  '> Congratulations! Tell us about your celebration so we can design pieces that feel like you.',
+  '## The Celebration',
+  'What are we celebrating? :: Wedding | Debut | Christening/Baptism | Birthday | Anniversary | Gender reveal | Other:',
+  'Names exactly as they should appear (celebrants, parents, sponsors).',
+  'Date, time and venue of the ceremony and the reception.',
+  'About how many guests?',
+  '## Theme & Style',
+  'What is your motif or color palette?',
+  'What style do you like? :: Classic & Elegant | Rustic | Modern & Minimalist | Filipiniana | Floral | Whimsical & Playful | Other:',
+  'Can you share 2–3 invitations or designs you like? (links or photos)',
+  '## What You Need',
+  'Which pieces do you need? :: E-vite | Printed invitation | Save-the-date | RSVP card | Entourage list | Monogram | Welcome sign | Seating chart | Program | Menu card | Souvenir tags | Thank-you cards | LED wall graphics | Other:',
+  'Printed or digital, and how many pieces?',
+  'Any paper or finish wishes? :: Textured cardstock | Vellum overlay | Envelope + wax seal | Ribbon | Not sure yet',
+  'When do you need everything ready?',
+  APPROVER,
+  LAST,
+];
+const CELEBRATION_PHASES = [
+  p('Consultation', 'We talk through your celebration, motif, guest count and the pieces you need.'),
+  p('Concept & Monogram', 'We set the look: colors, type, and the monogram or main motif.'),
+  p('Design Suite', 'We design the invitation and every piece in your package to match.'),
+  p('Proof & Revisions', 'You check every name, date and venue on the proof; we refine within your rounds.'),
+  p('Print & Release', 'Printed pieces are produced and packed, or digital files delivered, before your event.'),
+];
+const CELEBRATION_TERMS = termsWith({
+  cancellation: {
+    title: 'Postponement and Cancellation',
+    body: [
+      'If the celebration is postponed, the work continues on the new schedule.',
+      'If it is cancelled, the design work done so far is billed and the down payment is non-refundable; printing already done is charged in full.',
+    ],
+  },
+  client: {
+    body: [
+      'The client provides every name, date, time, venue and entourage detail in writing, spelled exactly as it should print.',
+      'Invitations should be ordered at least 8 weeks before a wedding and 4 weeks before other celebrations; later orders may need the rush add-on.',
+      'All feedback, approvals, and revision requests must be submitted in writing through the agreed communication channel.',
+      'Project timelines begin only once the down payment and complete details are received.',
+    ],
+  },
+  ip: {
+    body: [
+      'Upon full payment, the client may use the designs for their celebration, in print and online.',
+      'JoshWorks may show the work in its portfolio with names, faces, dates and venues removed or blurred, unless the client agrees otherwise.',
+      'Transfer of full ownership / IP is NOT included unless explicitly agreed in writing, and may carry an additional fee.',
+    ],
+  },
+  revisions: {
+    body: [
+      'One revision round is one consolidated, written list of changes.',
+      'Revisions are limited to the number specified in the selected package; additional rounds incur extra charges (see Add-ons).',
+      'The client proofreads every name, date and venue on the final proof; once it is approved, reprints for errors in approved details are charged.',
+      'Major concept changes after approval are treated as new projects or change orders.',
+    ],
+  },
+  timeline: {
+    body: [
+      'The event date is the deadline: JoshWorks schedules the work so printed pieces are ready before it, provided details and approvals arrive on time.',
+      'Late details or approvals may need the rush add-on, or printed pieces may become digital only.',
+      'Digital files are delivered via email or cloud storage; printed pieces are picked up in Iloilo City or sent by courier at the client’s cost.',
+    ],
+  },
+});
+const CELEBRATION_AGREEMENT = [
+  AGREE_FIRST,
+  'I agree to the selected package pricing and any additional add-on services.',
+  'I will send complete, correctly spelled details, and I will check every name, date and venue on the final proof.',
+  'I understand that printed pieces depend on my details and approvals arriving on time before the event date.',
+  'I understand and accept the payment terms requiring payment before final delivery, and that a cancelled celebration still pays for the work done.',
+  'I understand the revision limits and the charges for extra revisions and reprints.',
+  AGREE_CONSENT,
+];
+
+// ----- Thesis & research visuals -----
+const RESEARCH_QUESTIONS = [
+  '> Tell us about your research so we can design it clearly. We design your content; the research stays yours.',
+  '## About the Research',
+  'What is the title, and which school, college and program is it for?',
+  'What do you need? :: Research poster | Conference poster | Infographic | Defense slides | Graphical abstract | Title page/Cover | Program/Booklet | Other:',
+  'When is your defense, colloquium or presentation?',
+  '## Format',
+  'What size or format? :: A1 | A0 | 3 × 4 ft tarpaulin | 36 × 48 in | A3 | 16:9 slides | Other:',
+  'Does your school or adviser require a template, logos or sections?',
+  'How many charts, tables or figures should we redraw?',
+  'Which file do you need? :: PowerPoint | Google Slides | Canva | PDF | Other:',
+  '## Content & Style',
+  'Is your content final? :: Final | Almost final | Still changing',
+  'Which colors or style? :: School colors | Clean & Academic | Modern & Minimalist | Colorful | Other:',
+  'Do you need it printed? :: Yes, please arrange it | No, we print it ourselves',
+  'Who approves the design (you, your group leader, your adviser), and how fast can they reply?',
+  LAST,
+];
+const RESEARCH_PHASES = [
+  p('Content Review', 'We go through your final content and figures, and your school’s requirements.'),
+  p('Layout Direction', 'We set the grid, colors and type, following any required template.'),
+  p('Design', 'We lay out the poster, slides or infographic and redraw charts and figures for clarity.'),
+  p('Revisions', 'You, your group or your adviser send written feedback within your rounds.'),
+  p('Final Files', 'Print-ready and editable files are delivered in time for your defense or presentation.'),
+];
+const RESEARCH_TERMS = termsWith({
+  client: {
+    body: [
+      'The client provides the final content (text, data, figures, references and any required school template) and remains responsible for its accuracy, originality and citations.',
+      'JoshWorks designs and lays out the content it is given. It does not write, analyze, paraphrase or check the research itself.',
+      'The client follows their school’s and adviser’s rules on outside help with formatting and design.',
+      'All feedback and approvals are given in writing; timelines begin once the down payment and the final content arrive.',
+    ],
+  },
+  ip: {
+    body: [
+      'The research and its content remain the client’s.',
+      'The client may use the design (layout, graphics and templates) for this research, its presentations and its publications.',
+      'JoshWorks may show the design in its portfolio with the research content blurred, unless the client agrees otherwise or an NDA is signed.',
+    ],
+  },
+  timeline: {
+    body: [
+      'The defense or presentation date is the deadline: the final content must arrive at least 5 working days before it (2 working days with the rush add-on).',
+      'Delays caused by late content or late feedback are not the designer’s responsibility.',
+      'Final files are delivered via email or cloud storage; printing is quoted separately.',
+    ],
+  },
+});
+const RESEARCH_AGREEMENT = [
+  AGREE_FIRST,
+  'I agree to the selected package pricing and any additional add-on services.',
+  'I confirm the content I provide is my own (or my group’s) and correctly cited, and that JoshWorks only designs and lays it out.',
+  'I will follow my school’s rules on outside design help.',
+  'I understand and accept the payment terms requiring payment before final delivery.',
+  'I understand the revision limits and additional charges for extra revisions.',
+  AGREE_CONSENT,
+];
+
+// ----- Company profile & pitch deck -----
+const DECK_QUESTIONS = [
+  '> Tell us about your business and the story your profile or deck should tell.',
+  '## About the Business',
+  'What is your company, what do you do, and who are your clients?',
+  'What do you need? :: Company profile | Pitch deck (investors) | Sales deck | Capability statement | Presentation template | Product catalog | Annual report | Other:',
+  'Who will read or watch it, and what should they do after? (invest, buy, partner, hire)',
+  '## Content',
+  'How many pages or slides do you expect?',
+  'Is the content ready? :: Final text | Draft | Outline only | Please write it',
+  'What will you provide? :: Logo & brand guide | Photos | Product shots | Data & charts | Client logos | Testimonials | Other:',
+  '## Format & Style',
+  'Which format do you need? :: PowerPoint | Google Slides | Keynote | Canva | Printed booklet | PDF | Other:',
+  'What style/mood do you want? :: Professional & Corporate | Modern & Minimalist | Bold & Edgy | Elegant & Sophisticated | Friendly & Approachable | Other:',
+  'Can you share 2–3 decks or profiles you like? (links)',
+  'When do you need it? (meeting, pitch or launch date)',
+  APPROVER,
+  LAST,
+];
+const DECK_PHASES = [
+  p('Discovery & Outline', 'We learn your goal and audience, then outline the story page by page or slide by slide.'),
+  p('Content Structure', 'We organize your content (or write it, if added on) and plan the charts and visuals.'),
+  p('Design', 'We design the master layouts and every page or slide on your brand.'),
+  p('Revisions', 'Written feedback and refinement within your package’s revision rounds.'),
+  p('Handoff', 'You receive the final PDF and the editable file in the agreed format.'),
+];
+const DECK_TERMS = termsWith({
+  client: {
+    body: [
+      'The client must provide clear instructions, brand guidelines, and the content (text, figures, photos) at the start of the project.',
+      'The client is responsible for the accuracy of the company information, figures and claims in the document; copywriting is available as an add-on.',
+      'All feedback, approvals, and revision requests must be submitted in writing through the agreed communication channel.',
+      'Project timelines begin only once the down payment and complete project materials are received.',
+      NO_REPLY,
+    ],
+  },
+  files: {
+    body: [
+      'Decks and templates are delivered as a PDF plus an editable file in the agreed format (PowerPoint, Google Slides, Keynote or Canva).',
+      'Original design files (AI, INDD) for printed profiles are available as paid add-ons.',
+      'Fonts, stock photos and icons used are licensed for the client’s use of this document; extra licenses the client needs are billed at cost.',
+      'Printing is not included unless stated and is quoted separately.',
+    ],
+  },
+});
+
+// ----- Government & LGU -----
+const GOVERNMENT_QUESTIONS = [
+  '> For LGUs, government offices and public schools. Answer what applies; we will match your procurement documents.',
+  '## The Office & Project',
+  'Which office or LGU, and what is the project or program title?',
+  'What is the purchase request, PO or JO number, if any?',
+  'How is it being procured? :: Small Value Procurement | Shopping | Direct contracting | Negotiated procurement | Not sure yet | Other:',
+  '## Deliverables',
+  'What do you need? :: IEC materials | Tarpaulins/Streamers | Event branding | Tourism/Town map | Annual/Accomplishment report | Citizen’s Charter | Signage/Wayfinding | Social media cards | AVP/Video | Other:',
+  'How many of each, and in what sizes?',
+  'Which languages? :: English | Filipino | Hiligaynon | Kinaray-a | Other:',
+  'Which official logos must appear? :: Office seal | Bagong Pilipinas logo | Program/Project logo | Partner agency logos | Other:',
+  'Does your agency have branding or layout rules to follow?',
+  '## Schedule & Approvals',
+  'When is the event or the delivery date?',
+  'Who is the contact person, and who approves the designs?',
+  'Do you need printing, delivery or installation? :: Printing | Delivery | Installation | Design files only',
+  LAST,
+];
+const GOVERNMENT_PHASES = [
+  p('Purchase Order & Brief', 'We confirm the scope, quantities and schedule in your PR, PO or JO and receive the approved content.'),
+  p('Design Direction', 'We propose the look, following your office’s branding rules and required logos.'),
+  p('Production', 'We design every material in the order, in the languages required.'),
+  p('Review & Approval', 'Your approving official reviews in writing; we refine within the revision rounds.'),
+  p('Delivery, Inspection & Acceptance', 'We deliver the files or printed items for inspection and acceptance, then submit the documents for payment.'),
+];
+const GOVERNMENT_TERMS = termsWith({
+  payment: {
+    body: [
+      'Work starts once JoshWorks receives the signed Purchase Order, Job Order, contract or Notice to Proceed.',
+      'Payment follows the office’s process: delivery, inspection and acceptance, then payment by check or LDDAP-ADA, ideally within 30 days of acceptance.',
+      'Payments are subject to the taxes the office withholds by law; the office issues BIR Form 2307 (and 2306 where it applies) for each payment.',
+      'JoshWorks provides the documents the office needs for payment, such as its invoice and its PhilGEPS, DTI, business permit and BIR registration.',
+      'The prices in this contract hold until the “Prices valid until” date above, or for the period stated in the office’s request for quotation.',
+    ],
+  },
+  cancellation: {
+    body: [
+      'If the project is cancelled after work began, the office pays for the work done and accepted up to that point, as its rules allow.',
+      'Changes to the scope after the PO or JO are agreed in writing and may change the price and the delivery date.',
+    ],
+  },
+  client: {
+    title: 'Office Responsibilities',
+    body: [
+      'The office provides the approved content, the official logos (including its seal and the Bagong Pilipinas logo where required), and its branding rules at the start.',
+      'The office names one contact person and one approving official; all approvals are given in writing.',
+      'Timelines begin once the PO or JO and complete materials are received; late approvals or inspections move the delivery date.',
+    ],
+  },
+  ip: {
+    body: [
+      'Upon acceptance and payment, the office may use, print and reproduce the final designs for its public programs without limit.',
+      'Full transfer of copyright and the editable source files are included only when the PO or contract requires them (see Ownership).',
+      'JoshWorks may show the work in its portfolio after its public release, unless the office objects in writing.',
+    ],
+  },
+  nda: {
+    title: 'Confidentiality',
+    body: [
+      'JoshWorks keeps unreleased information, data and documents from the office confidential and uses them only for this project.',
+      'Under an active NDA, the designer will not display, share, or include the work in any public portfolio or promotional material.',
+    ],
+  },
+  timeline: {
+    body: [
+      'Delivery dates follow the PO or JO; delays caused by late materials, approvals or inspection are not the designer’s responsibility.',
+      'Final delivery is made via email, cloud storage, or delivery of printed items to the office; the office keeps its own copies of all delivered files.',
+    ],
+  },
+});
+const GOVERNMENT_AGREEMENT = [
+  'The office has read, understood, and agrees to the terms and conditions in this contract.',
+  'The office agrees to the selected items, prices and add-ons, as covered by its PO or JO.',
+  'The office understands that payment follows delivery, inspection and acceptance, within its processing time.',
+  'The office will provide approved content, official logos and written approvals on time.',
+  'The office understands the revision limits and the charges for extra revisions.',
+  'The office agrees that JoshWorks may show the released work in its portfolio unless it objects in writing.',
+  'The office accepts electronic signatures on this agreement.',
+];
+
 export const SEED_TEMPLATES: TemplateSeed[] = [
   {
     ...STD,
@@ -588,12 +1162,12 @@ export const SEED_TEMPLATES: TemplateSeed[] = [
     ...STD,
     id: 'tpl-motion',
     name: 'Motion Graphics Agreement',
-    tagline: 'Logo animation, motion branding & animated content',
+    tagline: MOTION_NOW.tagline,
     subtitle: 'Universal',
     frame: 'general',
-    categories: ['Motion graphics', 'Animated storybook', ...ADD],
+    categories: MOTION_NOW.categories,
     audience: 'any',
-    covers: 'Logo animation, motion branding, and animated content — from quick logo reveals to full motion branding suites.',
+    covers: MOTION_NOW.covers,
     phases: [
       p('Concept & Script', 'We define the idea, message, and timing of your animation.'),
       p('Storyboard', 'We map the scenes and key frames and send them for your approval before animating.'),
@@ -648,6 +1222,146 @@ export const SEED_TEMPLATES: TemplateSeed[] = [
     briefTitle: 'Training Questionnaire',
     brief: TRAINING_QUESTIONS,
     sort: 12,
+  },
+  // ----- November 2026 -----
+  {
+    ...STD,
+    id: 'tpl-merch-production',
+    name: 'Merch Production Agreement',
+    tagline: 'Pins, stickers, keychains & merch, designed and made for you',
+    subtitle: 'Universal (Business / Student)',
+    frame: 'merch',
+    categories: ['Merch production', ...ADD],
+    audience: 'any',
+    covers: 'Production of custom merchandise — button and enamel pins, stickers, acrylic keychains and standees, ID laces, shirts, totes, mugs and more — from an approved proof to finished, counted pieces, with artwork you send or we design.',
+    phases: MERCH_MAKE_PHASES,
+    phasesNote: 'Design fees for new artwork follow the Merch price list and are listed with the items.',
+    briefTitle: 'Merch Order Questionnaire',
+    brief: MERCH_MAKE_QUESTIONS,
+    sections: MERCH_MAKE_TERMS,
+    agreement: MERCH_MAKE_AGREEMENT,
+    sort: 13,
+  },
+  {
+    ...STD,
+    id: 'tpl-packaging',
+    name: 'Packaging & Label Design Agreement',
+    tagline: 'Labels, pouches, boxes & hang tags for your products',
+    subtitle: 'Business / MSME',
+    frame: 'logo',
+    categories: ['Packaging & labels', ...ADD],
+    audience: 'business',
+    covers: 'Label and packaging design for food, beauty and small-business products — from one product label to a full packaging line — print-ready with dielines, and printing on request.',
+    phases: PACKAGING_PHASES,
+    briefTitle: 'Packaging Questionnaire',
+    brief: PACKAGING_QUESTIONS,
+    sections: PACKAGING_TERMS,
+    agreement: PACKAGING_AGREEMENT,
+    sort: 14,
+  },
+  {
+    ...STD,
+    id: 'tpl-illustration',
+    name: 'Illustration & Mascot Agreement',
+    tagline: 'Commissioned illustrations, characters & mascots',
+    subtitle: 'Universal',
+    frame: 'general',
+    categories: ['Illustration & mascots', ...ADD],
+    audience: 'any',
+    covers: 'Original illustrations, portraits, and character and mascot design for people, brands, organizations and books — with personal and commercial use spelled out.',
+    phases: ILLUSTRATION_PHASES,
+    briefTitle: 'Illustration Questionnaire',
+    brief: ILLUSTRATION_QUESTIONS,
+    sections: ILLUSTRATION_TERMS,
+    agreement: ILLUSTRATION_AGREEMENT,
+    sort: 15,
+  },
+  {
+    ...STD,
+    id: 'tpl-retainer',
+    name: 'Monthly Design Retainer',
+    tagline: 'A set number of designs every month, with priority',
+    subtitle: 'Business / Organization',
+    frame: 'general',
+    categories: ['Design retainer', ...ADD],
+    audience: 'any',
+    covers: 'Ongoing monthly design support — pubmats, social graphics, flyers, menus and print layouts — up to a set number of requests a month, for clients who need steady design without social media management.',
+    phases: RETAINER_PHASES,
+    phasesNote: 'The cycle repeats every month of the retainer.',
+    briefTitle: 'Retainer Questionnaire',
+    brief: RETAINER_QUESTIONS,
+    sections: RETAINER_TERMS,
+    agreement: RETAINER_AGREEMENT,
+    sort: 16,
+  },
+  {
+    ...STD,
+    id: 'tpl-celebration',
+    name: 'Weddings & Celebrations Agreement',
+    tagline: 'Invitations, signage & keepsakes for life’s big days',
+    subtitle: 'Personal / Family events',
+    frame: 'general',
+    categories: ['Weddings & celebrations', ...ADD],
+    audience: 'any',
+    covers: 'Design and optional printing for weddings, debuts, christenings, birthdays and other celebrations — invitations, monograms, signage, programs, souvenir tags and e-vites.',
+    phases: CELEBRATION_PHASES,
+    briefTitle: 'Celebration Questionnaire',
+    brief: CELEBRATION_QUESTIONS,
+    sections: CELEBRATION_TERMS,
+    agreement: CELEBRATION_AGREEMENT,
+    sort: 17,
+  },
+  {
+    ...STD,
+    id: 'tpl-research',
+    name: 'Thesis & Research Visuals Agreement',
+    tagline: 'Research posters, infographics & defense slides',
+    subtitle: 'Student / Academic',
+    frame: 'general',
+    categories: ['Research & academic visuals', ...ADD],
+    audience: 'any',
+    covers: 'Visual design for research — posters, infographics, defense and conference slides, graphical abstracts and programs — designed from the client’s own final content.',
+    phases: RESEARCH_PHASES,
+    briefTitle: 'Research Visuals Questionnaire',
+    brief: RESEARCH_QUESTIONS,
+    sections: RESEARCH_TERMS,
+    agreement: RESEARCH_AGREEMENT,
+    sort: 18,
+  },
+  {
+    ...STD,
+    id: 'tpl-company-profile',
+    name: 'Company Profile & Pitch Deck Agreement',
+    tagline: 'Company profiles, pitch decks & presentation templates',
+    subtitle: 'Business / Commercial',
+    frame: 'general',
+    categories: ['Presentations & company profiles', ...ADD],
+    audience: 'business',
+    covers: 'Company profiles, pitch and sales decks, capability statements, catalogs and branded presentation templates that present the business clearly to clients, investors and partners.',
+    phases: DECK_PHASES,
+    briefTitle: 'Profile & Deck Questionnaire',
+    brief: DECK_QUESTIONS,
+    sections: DECK_TERMS,
+    sort: 19,
+  },
+  {
+    ...STD,
+    id: 'tpl-government',
+    name: 'Government & LGU Projects Agreement',
+    tagline: 'IEC materials, maps & event branding for public offices',
+    subtitle: 'Government / LGU',
+    frame: 'general',
+    categories: ['Government & LGU', ...ADD],
+    audience: 'business',
+    covers: 'Design for LGUs, government offices and public schools — IEC materials, tourism and town maps, event branding, reports, Citizen’s Charters and signage — following the office’s procurement and payment process.',
+    phases: GOVERNMENT_PHASES,
+    phasesNote: 'No down payment: the office pays after delivery, inspection and acceptance, as its rules require.',
+    downPct: 0,
+    briefTitle: 'Project Questionnaire',
+    brief: GOVERNMENT_QUESTIONS,
+    sections: GOVERNMENT_TERMS,
+    agreement: GOVERNMENT_AGREEMENT,
+    sort: 20,
   },
 ];
 

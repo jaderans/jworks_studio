@@ -262,7 +262,7 @@ function CampaignDetail({ id, onClose }: { id: string | null; onClose: () => voi
         <div className="card flush">
           <div className="list">
             {mine.map((p) => (
-              <button key={p.id} type="button" className="list-item click" style={{ border: 0, borderBottom: '1px solid var(--line)', background: 'none', textAlign: 'left', width: '100%' }} onClick={() => setPostOpen(p.id)}>
+              <button key={p.id} type="button" className="list-item click" onClick={() => setPostOpen(p.id)}>
                 <span className="main-text">
                   <b>{p.title}</b>
                   <span>
@@ -811,7 +811,7 @@ function Funnels() {
                 key={t.id}
                 type="button"
                 className="list-item click"
-                style={{ border: 0, borderBottom: '1px solid var(--line)', background: 'none', textAlign: 'left', width: '100%' }}
+               
                 onClick={async () => {
                   const f = await saveFunnel({ name: t.name, templateId: t.id, clientId: app.scope !== 'all' && app.scope !== 'own' ? app.scope : null });
                   setMaking(false);
