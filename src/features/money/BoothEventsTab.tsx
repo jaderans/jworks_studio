@@ -9,10 +9,11 @@ import { useJobs, useMembers } from '../../hooks/data';
 import { peso, sum } from '../../lib/money';
 import { fmtDateRange } from '../../lib/time';
 import {
-  defaultChoices, parsePosFile, payMethodFor, personKey, planEventImport, planOrderImport, planPrintImport, posImportState, posJobId, posKey, removedInPosFile,
-  type PeopleChoices, type PosEventFeed, type PosFeed, type PosImportState, type PosOrderFeed, type PosPrintFeed,
+  defaultChoices, parsePosFile, payMethodFor, personKey, planEventImport, planOrderImport, planPrintImport, planStickImport, posImportState, posJobId, posKey, removedInPosFile,
+  type PeopleChoices, type PosEventFeed, type PosFeed, type PosImportState, type PosOrderFeed, type PosPrintFeed, type PosStickFeed,
 } from '../../domain/posFeed';
-import { applyEventImport, applyOrderImport, applyPrintImport, expenseChoices, orderDesigner, printDesigner, printIllustrator, readDevicePosFeeds, rememberedPeople, removePosJob } from '../../services/importPos';
+import { applyEventImport, applyOrderImport, applyPrintImport, applyStickImport, expenseChoices, orderDesigner, printDesigner, printIllustrator, readDevicePosFeeds, rememberedPeople, removePosJob, stickMaker } from '../../services/importPos';
+import { usePosLive } from '../../services/posLive';
 
 const STATE_BADGE: Record<PosImportState, { tone: 'outline' | 'good' | 'warn'; label: string }> = {
   new: { tone: 'outline', label: 'Not in Studio' },
@@ -45,21 +46,25 @@ export function BoothEventsTab() {
     return () => window.removeEventListener('focus', onFocus);
   }, [load]);
 
+  // Live from the POS through the cloud (same Firebase project, owner signed in); the freshest wins.
+  const live = usePosLive();
   const feeds = useMemo(() => {
     const m = new Map<string, PosFeed>();
     for (const f of device?.feeds ?? []) m.set(posKey(f), f);
     for (const f of fromFile) m.set(posKey(f), f);
+    for (const f of live.feeds) m.set(posKey(f), f);
     return [...m.values()];
-  }, [device, fromFile]);
+  }, [device, fromFile, live.feeds]);
   if (!jobs || !device) return null;
   const jobById = new Map(jobs.map((j) => [j.id, j]));
   const stateOf = (f: PosFeed) => posImportState(f, jobById.get(posJobId(f)));
   const events = feeds.filter((f): f is PosEventFeed => f.type === 'event').sort((a, b) => b.startDate.localeCompare(a.startDate));
   const orders = feeds.filter((f): f is PosOrderFeed => f.type === 'order').sort((a, b) => b.createdAt - a.createdAt);
   const prints = feeds.filter((f): f is PosPrintFeed => f.type === 'print').sort((a, b) => b.createdAt - a.createdAt);
+  const sticks = feeds.filter((f): f is PosStickFeed => f.type === 'stick').sort((a, b) => b.createdAt - a.createdAt);
   // Deleted in the POS but still a job here. Sent again since, it's back in the lists above.
   const sent = new Set(feeds.map(posKey));
-  const gone = new Map([...device.removed, ...removedInFile].map((f) => [posKey(f), f]));
+  const gone = new Map([...device.removed, ...removedInFile, ...live.removed].map((f) => [posKey(f), f]));
   const deleted = [...gone.values()].filter((f) => !sent.has(posKey(f)) && jobById.has(posJobId(f)));
 
   const openFile = async (file: File | undefined) => {
@@ -124,6 +129,19 @@ export function BoothEventsTab() {
           </>
         }
       />
+      {live.state === 'live' ? (
+        <p className="muted small" role="status">
+          <Badge tone="good">Live</Badge> From {live.business || 'JoshWorks POS'} through the cloud: new and changed items show up here by themselves. Nothing goes into Studio until you add it.
+        </p>
+      ) : live.state === 'none' ? (
+        <Callout tone="info" title="No POS on this login yet">
+          To see the POS live here, connect JoshWorks POS to the same Firebase project (Settings → Cloud there) and sign in with this same owner login.
+        </Callout>
+      ) : live.state === 'denied' ? (
+        <Callout tone="warn" title="The cloud kept the POS data from Studio">
+          Paste the combined security rules (firebase/firestore.rules, the same file in both apps) in Firebase, and sign in here with the same owner login as the POS.
+        </Callout>
+      ) : null}
       {!feeds.length ? (
         <EmptyState icon={<Store size={44} />} title="Nothing from the POS yet">
           In JoshWorks POS on this device, open the event, then Report → <b>Send to Studio</b>; it shows up here. From another phone or laptop, use <b>Download Studio file</b> there and{' '}
@@ -301,6 +319,55 @@ export function BoothEventsTab() {
         </section>
       ) : null}
 
+      {sticks.length ? (
+        <section className="stack">
+          <h2>Couple-of-Stickers</h2>
+          <p className="muted small">The work only: who’s on each pack, the design files and the photos. They were paid at the booth, so the money is in that event’s job.</p>
+          <div className="table-wrap">
+            <table className="table cards-on-phone">
+              <thead>
+                <tr>
+                  <th>Order</th>
+                  <th className="r">Paid at the booth</th>
+                  <th>Status</th>
+                  <th>In Studio</th>
+                  <th className="r">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {sticks.map((f) => {
+                  const s = STATE_BADGE[stateOf(f)];
+                  return (
+                    <tr key={posKey(f)}>
+                      <td data-label="Order">
+                        <b>
+                          {f.number} · {f.nickname || f.customer.name || 'No name'}
+                        </b>
+                        <div className="muted small">
+                          {f.packs.map((p) => `${p.file}${p.people.length ? ` (${p.people.map((x) => x.name).filter(Boolean).join(', ')})` : ''}`).join(' · ')}
+                          {f.eventName ? ` · ${f.eventName}` : ''}
+                        </div>
+                      </td>
+                      <td className="r" data-label="Paid at the booth">
+                        {peso(f.paid)}
+                      </td>
+                      <td data-label="Status">{ORDER_LABEL[f.status] ?? f.status}</td>
+                      <td data-label="In Studio">
+                        <Badge tone={s.tone}>{s.label}</Badge>
+                      </td>
+                      <td className="r">{action(f)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
+
+      {importing?.type === 'stick' ? <StickDialog feed={importing} update={stateOf(importing) !== 'new'} onClose={() => setImporting(null)} /> : null}
       {importing?.type === 'event' ? <EventDialog feed={importing} update={stateOf(importing) !== 'new'} onClose={() => setImporting(null)} /> : null}
       {importing?.type === 'order' ? <OrderDialog feed={importing} update={stateOf(importing) !== 'new'} onClose={() => setImporting(null)} /> : null}
       {importing?.type === 'print' ? <PrintDialog feed={importing} update={stateOf(importing) !== 'new'} onClose={() => setImporting(null)} /> : null}
@@ -614,6 +681,82 @@ function PrintDialog({ feed, update, onClose }: { feed: PosPrintFeed; update: bo
         ) : (
           <p className="muted small">None. Add material costs per sheet to the POS rate card to see them here.</p>
         )}
+      </div>
+    </Dialog>
+  );
+}
+
+/** A Couple-of-Stickers order as a job: who makes it; nothing to pay here. */
+function StickDialog({ feed, update, onClose }: { feed: PosStickFeed; update: boolean; onClose: () => void }) {
+  const app = useApp();
+  const members = useMembers();
+  const [maker, setMaker] = useState<string | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void stickMaker(feed).then((m) => setMaker(m ?? ''));
+  }, [feed]);
+  const plan = planStickImport(feed);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const r = await applyStickImport(feed, maker || null);
+      app.toast(r.created ? `${plan.title} added as a job` : `${plan.title} updated`, { tone: 'good' });
+      onClose();
+    } catch (e) {
+      app.toast(e instanceof Error ? e.message : 'Couldn’t add it', { tone: 'bad' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={update ? `Update ${plan.title}` : `Add ${plan.title} as a job`}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={busy || maker === undefined} onClick={save}>
+            {update ? 'Update the job' : 'Add to Studio'}
+          </Button>
+        </>
+      }
+    >
+      <div className="stack">
+        <p>
+          For <b>{feed.nickname || feed.customer.name || 'a customer'}</b>
+          {feed.eventName ? <span className="muted"> · at {feed.eventName}</span> : null}
+        </p>
+        <ol className="stack tight" style={{ margin: 0, paddingLeft: 20 }}>
+          {feed.packs.map((p, i) => (
+            <li key={i}>
+              <b>{p.name}</b> · {p.making} · {p.file}.png
+              {p.people.length ? <div className="small">{p.people.map((x) => `${x.name || '?'}${x.who ? ` (${x.who})` : ''}`).join(', ')}</div> : null}
+              {p.minis.length || p.addOns.length ? (
+                <div className="muted small">
+                  {p.minis.length ? `Minis ${p.minis.join(', ')}` : ''}
+                  {p.addOns.length ? `${p.minis.length ? ' · ' : ''}+ ${p.addOns.join(', + ')}` : ''}
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+        <Callout tone="info">
+          Paid {peso(feed.paid)} at the booth ({feed.paidWith}). That money is in the booth event’s job, so this job has nothing to pay and no earnings.
+        </Callout>
+        {plan.links.length ? <p className="small">The photo{plan.links.length === 1 ? '' : 's'} to work from go on the job’s links.</p> : null}
+        <Field label="Who makes it" htmlFor="pos-maker">
+          <Select id="pos-maker" value={maker ?? ''} onChange={(e) => setMaker(e.target.value)}>
+            <option value="">No one yet</option>
+            {(members ?? []).map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
       </div>
     </Dialog>
   );

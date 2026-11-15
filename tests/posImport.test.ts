@@ -9,8 +9,8 @@ import { runSetup } from '../src/services/setup';
 import { saveMember } from '../src/services/team';
 import { payoutSummary, sharesOfNet } from '../src/domain/money';
 import { docTotals } from '../src/domain/pricing';
-import { defaultChoices, exactPct, parsePosFile, planEventImport, planPrintImport, posImportState, removedInPosFile, type PosEventFeed, type PosOrderFeed, type PosPrintFeed } from '../src/domain/posFeed';
-import { applyEventImport, applyOrderImport, applyPrintImport, printDesigner, readDevicePosFeeds, removePosJob } from '../src/services/importPos';
+import { defaultChoices, exactPct, isPosFeed, parsePosFile, planEventImport, planPrintImport, planStickImport, posImportState, removedInPosFile, type PosEventFeed, type PosOrderFeed, type PosPrintFeed, type PosStickFeed } from '../src/domain/posFeed';
+import { applyEventImport, applyOrderImport, applyPrintImport, applyStickImport, printDesigner, readDevicePosFeeds, removePosJob, stickMaker } from '../src/services/importPos';
 
 beforeEach(async () => {
   await db.delete();
@@ -299,5 +299,49 @@ describe('sticker printing from JoshWorks POS', () => {
     expect(plan.printerShare).toBe(0);
     expect(plan.studioKeeps).toBe(97_000 - 12_500 - 12_000);
     expect(planPrintImport(print({ status: 'quote', payments: [] }), null).status).toBe('inquiry');
+  });
+});
+
+describe('Couple-of-Stickers from JoshWorks POS', () => {
+  const stick = (over: Record<string, unknown> = {}) =>
+    ({
+      type: 'stick', v: 1, orderId: 'o1', number: 'BA-03', eventId: 'e1', eventName: 'Hilway', nickname: 'Kaye',
+      customer: { name: 'Kaye', email: 'kaye@example.com', phone: '', handle: '' }, maker: { memberId: 'p9', name: 'Ian Harvey Yap', email: 'ian@example.com' },
+      packs: [
+        { name: 'Couple Pack (live)', pack: 'C', singles: false, making: 'illustrating', designNo: 'CS03', file: 'CS03-Kaye-Mark', people: [{ name: 'Kaye', who: 'left' }, { name: 'Mark', who: 'right' }], minis: ['01', '02'], addOns: ['Pin'], note: '', photoUrl: 'https://drive/p3' },
+        { name: 'Solo Pack (live)', pack: 'S', singles: false, making: 'printing', designNo: 'CS04', file: 'CS04-John', people: [{ name: 'John', who: '' }], minis: [], addOns: [], note: 'cap', photoUrl: '' },
+      ],
+      addOns: [], status: 'in-progress', paid: 39000, paidWith: 'GCash (ref 5012)', receiptNo: 'A-0003', readyFrom: 1, readyTo: 2, photoUrl: 'https://drive/all', email: 'kaye@example.com', softCopy: true,
+      createdAt: Date.UTC(2026, 10, 15), doneAt: null, notes: '', ...over,
+    }) as PosStickFeed;
+
+  it('is read from the POS like the others, and planned as the work only', () => {
+    const f = stick();
+    expect(isPosFeed(f)).toBe(true);
+    expect(isPosFeed({ ...f, packs: undefined })).toBe(false);
+    const plan = planStickImport(f);
+    expect(plan).toMatchObject({ jobId: 'pos-stick-o1', title: 'Couple-of-Stickers 03 · Kaye', status: 'in-progress' });
+    expect(plan.brief).toContain('1. Couple Pack (live), illustrating: CS03-Kaye-Mark.png; Kaye (left), Mark (right); minis 01, 02; + Pin');
+    expect(plan.brief).toContain('2. Solo Pack (live), printing: CS04-John.png; John; cap');
+    expect(plan.brief).toContain('Paid ₱390 at the booth (GCash (ref 5012), A-0003): that money is in the booth event');
+    expect(plan.links).toEqual([{ label: 'Photo: Kaye', url: 'https://drive/all' }, { label: 'Photo: CS03-Kaye-Mark', url: 'https://drive/p3' }]);
+  });
+
+  it('becomes a job with nothing to pay and no earnings; made in the POS, it updates to completed', async () => {
+    const { ian } = await setup();
+    expect(await stickMaker(stick())).toBe(ian.id);
+    const r = await applyStickImport(stick(), ian.id);
+    expect(r).toEqual({ jobId: 'pos-stick-o1', created: true });
+    const job = await db.jobs.get('pos-stick-o1');
+    expect(job).toMatchObject({ type: 'Pop-up / Stickers', lead: ian.id, clientName: 'Kaye', source: 'JoshWorks POS' });
+    expect(await db.jobMoney.get('pos-stick-o1')).toMatchObject({ total: 0, split: [] });
+    expect(alive(await db.payments.where('jobId').equals('pos-stick-o1').toArray())).toHaveLength(0);
+    expect(alive(await db.earnings.toArray()).filter((e) => e.jobId === 'pos-stick-o1')).toHaveLength(0);
+    expect((await db.jobProgress.get('pos-stick-o1'))?.links.map((l) => l.url)).toEqual(['https://drive/all', 'https://drive/p3']);
+    expect(posImportState(stick(), job)).toBe('current');
+    const made = stick({ status: 'ready', doneAt: Date.UTC(2026, 10, 15, 8) });
+    expect(posImportState(made, job)).toBe('changed');
+    expect(await applyStickImport(made, ian.id)).toEqual({ jobId: 'pos-stick-o1', created: false });
+    expect(await db.jobProgress.get('pos-stick-o1')).toMatchObject({ status: 'completed', completedOn: '2026-11-15' });
   });
 });

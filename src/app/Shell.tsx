@@ -15,6 +15,7 @@ import { setLocal } from '../db/local';
 import { Dialog } from '../components/Dialog';
 import { Popover } from '../components/Popover';
 import { Badge, Button, Callout, Initials } from '../components/ui';
+import { usePosWaiting } from '../services/posLive';
 import { Field, TextInput } from '../components/form';
 import { ROLE_LABEL, makeOwner, restoreOwner } from '../services/team';
 import { normalizeStage, stageLabel } from '../domain/clients';
@@ -158,6 +159,8 @@ function Brand({ compact }: { compact?: boolean }) {
 
 export function Shell() {
   const app = useApp();
+  // JoshWorks POS items waiting to be added or updated (live through the cloud), for the owner.
+  const posWaiting = usePosWaiting();
   const [scopePicker, setScopePicker] = useState(false);
   const [userPicker, setUserPicker] = useState(false);
   const [more, setMore] = useState(false);
@@ -217,6 +220,11 @@ export function Shell() {
               <span className="nav-label short" aria-hidden="true">
                 {s.short ?? s.label}
               </span>
+              {s.id === 'money' && posWaiting ? (
+                <span className="nav-count" aria-label={`${posWaiting} from the POS to add or update`}>
+                  {posWaiting}
+                </span>
+              ) : null}
             </NavLink>
           ))}
         </nav>
@@ -311,6 +319,11 @@ export function Shell() {
               {tabs.map((t) => (
                 <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive: on }) => `section-tab${on ? ' active' : ''}`}>
                   {t.label}
+                  {t.to === '/money/pos' && posWaiting ? (
+                    <span className="nav-count" aria-label={`${posWaiting} to add or update`}>
+                      {posWaiting}
+                    </span>
+                  ) : null}
                 </NavLink>
               ))}
             </div>

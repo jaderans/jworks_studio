@@ -660,3 +660,8 @@ button.list-item { width: 100%; border: 0; border-bottom: 1px solid var(--line);
 /* Native selects render taller than inputs with the same padding; pin them to the input height. */
 .select { height: 44px; padding-block: 0; line-height: 1.2; }
 .table .select { height: 38px; }
+
+/* A count on a menu item or tab: things from JoshWorks POS waiting to be added. */
+.nav-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 6px; border-radius: 999px; background: var(--yellow, #f7d820); color: #2b2526; font-size: 11px; font-weight: 800; line-height: 1; }
+.nav-item { position: relative; }
+.shell:not([data-nav='full']) .nav-item .nav-count { position: absolute; top: 4px; right: 8px; margin: 0; }

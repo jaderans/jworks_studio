@@ -140,7 +140,50 @@ export interface PosPrintFeed {
   notes: string;
 }
 
-export type PosFeed = PosEventFeed | PosOrderFeed | PosPrintFeed;
+/**
+ * A Couple-of-Stickers order (JoshWorks POS → Orders): the work only. It was
+ * paid at the booth, so its money is in that booth event's job already and
+ * is never booked again here.
+ */
+export interface PosStickFeed {
+  type: 'stick';
+  v: 1;
+  orderId: string;
+  number: string;
+  eventId: string;
+  eventName: string;
+  nickname: string;
+  customer: { name: string; email: string; phone: string; handle: string };
+  maker: { memberId: string; name: string; email: string } | null;
+  packs: {
+    name: string;
+    pack: string;
+    singles: boolean;
+    making: 'printing' | 'illustrating';
+    designNo: string;
+    file: string;
+    people: { name: string; who: string }[];
+    minis: string[];
+    addOns: string[];
+    note: string;
+    photoUrl: string;
+  }[];
+  addOns: string[];
+  status: 'new' | 'in-progress' | 'ready' | 'picked-up' | 'cancelled';
+  paid: Cents;
+  paidWith: string;
+  receiptNo: string;
+  readyFrom: number;
+  readyTo: number;
+  photoUrl: string;
+  email: string;
+  softCopy: boolean;
+  createdAt: number;
+  doneAt: number | null;
+  notes: string;
+}
+
+export type PosFeed = PosEventFeed | PosOrderFeed | PosPrintFeed | PosStickFeed;
 
 const isNum = (x: unknown) => typeof x === 'number' && Number.isFinite(x);
 const isStr = (x: unknown) => typeof x === 'string';
@@ -151,6 +194,7 @@ export function isPosFeed(x: unknown): x is PosFeed {
   if (!f || typeof f !== 'object' || f.v !== 1) return false;
   if (f.type === 'event') return isStr(f.eventId) && isStr(f.name) && isNum(f.gross) && Array.isArray(f.methods) && Array.isArray(f.people);
   if (f.type === 'order' || f.type === 'print') return isStr(f.orderId) && isStr(f.number) && isNum(f.total) && Array.isArray(f.payments) && Array.isArray(f.lines);
+  if (f.type === 'stick') return isStr(f.orderId) && isStr(f.number) && isStr(f.nickname) && Array.isArray(f.packs);
   return false;
 }
 
@@ -174,8 +218,8 @@ export function removedInPosFile(text: string): PosFeed[] {
   return Array.isArray(removed) ? removed.filter(isPosFeed) : [];
 }
 
-export const posKey = (f: PosFeed) => (f.type === 'event' ? `event:${f.eventId}` : f.type === 'order' ? `order:${f.orderId}` : `print:${f.orderId}`);
-export const posJobId = (f: PosFeed) => (f.type === 'event' ? `pos-${f.eventId}` : f.type === 'order' ? `pos-order-${f.orderId}` : `pos-print-${f.orderId}`);
+export const posKey = (f: PosFeed) => (f.type === 'event' ? `event:${f.eventId}` : `${f.type}:${f.orderId}`);
+export const posJobId = (f: PosFeed) => (f.type === 'event' ? `pos-${f.eventId}` : `pos-${f.type}-${f.orderId}`);
 /** Every payment, expense and payout an import writes starts with this. */
 export const posPrefix = (f: PosFeed) => `${posJobId(f)}-`;
 
@@ -467,5 +511,59 @@ export function planPrintImport(feed: PosPrintFeed, printerId: string | null, il
     payments,
     expenses,
     studioKeeps: feed.total - share - artShare - sum(expenses.map((x) => x.amount)),
+  };
+}
+
+// ----- Couple-of-Stickers -----
+
+export interface StickPlan {
+  jobId: string;
+  title: string;
+  status: JobStatus;
+  /** What to make, pack by pack, for the job's brief. */
+  brief: string;
+  /** The reference photos, as links on the job. */
+  links: { label: string; url: string }[];
+}
+
+/** "Kaye (left), Mark (right)" */
+const peopleText = (ps: PosStickFeed['packs'][number]['people']) => ps.map((p) => `${p.name || '?'}${p.who ? ` (${p.who})` : ''}`).join(', ');
+
+/**
+ * A Couple-of-Stickers order as a Pop-up / Stickers job with nothing to pay:
+ * who's on each pack, its design file, the mini stickers, and the photos to
+ * work from. What they paid is said, not booked: it's in the booth event.
+ */
+export function planStickImport(feed: PosStickFeed): StickPlan {
+  const claim = feed.number.split('-').pop() ?? feed.number;
+  const packs = feed.packs.map(
+    (p, i) =>
+      `${i + 1}. ${p.name}${p.singles ? ' (singles)' : ''}, ${p.making}: ${p.file}.png` +
+      (p.people.length ? `; ${peopleText(p.people)}` : '') +
+      (p.minis.length ? `; minis ${p.minis.join(', ')}` : '') +
+      (p.addOns.length ? `; + ${p.addOns.join(', + ')}` : '') +
+      (p.note ? `; ${p.note}` : ''),
+  );
+  const brief = [
+    `Couple-of-Stickers ${claim} for ${feed.nickname || feed.customer.name || 'a customer'}${feed.eventName ? ` at ${feed.eventName}` : ''}.`,
+    ...packs,
+    feed.addOns.length ? `Also bought: ${feed.addOns.join(', ')}.` : '',
+    `Paid ${peso(feed.paid)} at the booth (${feed.paidWith}${feed.receiptNo ? `, ${feed.receiptNo}` : ''}): that money is in the booth event, not counted again here.`,
+    feed.softCopy && feed.email ? `Soft copy to ${feed.email}.` : '',
+    feed.notes,
+    posStamp(feed),
+  ]
+    .filter(Boolean)
+    .join('\n');
+  const links = [
+    ...(feed.photoUrl ? [{ label: `Photo: ${feed.nickname || 'everyone'}`, url: feed.photoUrl }] : []),
+    ...feed.packs.filter((p) => p.photoUrl).map((p) => ({ label: `Photo: ${p.file}`, url: p.photoUrl })),
+  ];
+  return {
+    jobId: posJobId(feed),
+    title: `Couple-of-Stickers ${claim} · ${feed.nickname || feed.customer.name || 'No name'}`.slice(0, 80),
+    status: ORDER_STATUS[feed.status] ?? 'not-started',
+    brief,
+    links,
   };
 }

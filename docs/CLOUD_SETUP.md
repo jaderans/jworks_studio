@@ -58,6 +58,17 @@ A login only works for the account the app made: someone who registers the same 
 
 **Changing someone's email** moves their access: the old address stops working, and the new one gets a fresh login to send. **To pause someone**, edit them and mark them inactive; their access stops right away and their work stays.
 
+## JoshWorks POS, live (one Firebase project for both apps)
+
+Studio and JoshWorks POS can share one Firebase project. Studio then shows the POS's booth events, commission orders, Couple-of-Stickers orders and print orders as they happen, on any device, with no POS file.
+
+1. **One project.** Paste the same firebaseConfig in both apps (here: **Settings → Cloud sync**; in the POS: **Settings → Cloud sync**).
+2. **One rules file.** `firebase/firestore.rules` is the same file in both apps. Studio's data lives under `camp/` and the POS's under `ws/`. Paste it once in **Firestore → Rules** and tap **Publish**. Don't paste an older rules file from either app: it would lock the other app out.
+3. **One owner login.** Sign in here with the same email as the POS owner. Use the email/password login, or Google with the same email. The POS needs that email verified, which it asks for when you first connect there.
+4. **The POS owner's laptop keeps it fresh.** It updates the feed by itself during events.
+
+**Money → Booth events** then shows a *Live* badge, and the menu counts what's new or changed in the POS. Nothing is added to the books until you tap **Add to Studio** or **Update**. Couple-of-Stickers orders come in as **work-only** jobs: who's on each pack with where they are in the photo, the design files, the mini stickers, and the reference photos as links. There's nothing to pay and no earnings, because they were paid at the booth and that money is in the event's job. Customers aren't shared between the apps.
+
 ## What syncs and what doesn't
 
 | Syncs to the team | Stays on the device |

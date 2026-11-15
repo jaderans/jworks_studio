@@ -4,8 +4,8 @@ import { audit, build, save } from '../db/write';
 import { getSetting } from '../db/settings';
 import { nextJobNumber } from '../domain/jobs';
 import {
-  isPosFeed, personKey, planEventImport, planOrderImport, planPrintImport, posJobId, posPrefix, posStamp, matchMember,
-  type PeopleChoices, type PosEventFeed, type PosFeed, type PosOrderFeed, type PosPrintFeed,
+  isPosFeed, personKey, planEventImport, planOrderImport, planPrintImport, planStickImport, posJobId, posPrefix, posStamp, matchMember,
+  type PeopleChoices, type PosEventFeed, type PosFeed, type PosOrderFeed, type PosPrintFeed, type PosStickFeed,
 } from '../domain/posFeed';
 import { recomputeEarnings } from './money';
 import { deleteJob } from './jobs';
@@ -329,4 +329,61 @@ export async function printDesigner(feed: PosPrintFeed): Promise<string | null> 
   if (existing?.lead) return existing.lead;
   if (!feed.printer) return null;
   return matchMember(feed.printer, alive(await db.members.toArray()))?.id ?? null;
+}
+
+/**
+ * Add or update a Couple-of-Stickers order as a job: the work only. Nothing to
+ * pay and no earnings here (it was paid at the booth; the booth event's job
+ * has the money and the team's shares).
+ */
+export async function applyStickImport(feed: PosStickFeed, makerId: string | null): Promise<{ jobId: string; created: boolean }> {
+  const plan = planStickImport(feed);
+  const id = plan.jobId;
+  const { existing, number } = await jobNumberFor(id);
+  const clientId = await clientFor(feed.customer, existing?.clientId ?? null, feed.status === 'picked-up' ? 'completed' : 'active', feed.createdAt);
+  await save(db.jobs, {
+    ...(existing ?? blankJob(id, number)),
+    number,
+    title: existing?.title || plan.title,
+    type: existing?.type ?? 'Pop-up / Stickers',
+    clientId,
+    clientName: feed.customer.name || feed.nickname,
+    startDate: existing?.startDate || isoDate(feed.createdAt),
+    dueDate: isoDate(feed.readyTo),
+    designers: makerId ? [makerId] : (existing?.designers ?? []),
+    lead: makerId ?? existing?.lead ?? null,
+    brief: plan.brief,
+    source: 'JoshWorks POS',
+    deleted: 0,
+  });
+  const prevProgress = await db.jobProgress.get(id);
+  const kept = (prevProgress?.links ?? []).filter((l) => !plan.links.some((x) => x.url === l.url));
+  await save(db.jobProgress, {
+    ...(prevProgress ?? blankProgress(id)),
+    status: plan.status,
+    completedOn: plan.status === 'completed' ? prevProgress?.completedOn || (feed.doneAt ? isoDate(feed.doneAt) : todayISO()) : '',
+    links: [...plan.links, ...kept],
+    deleted: 0,
+  });
+  const prevMoney = await db.jobMoney.get(id);
+  await save(db.jobMoney, {
+    ...(prevMoney ?? blankJobMoney(id, 0)),
+    total: 0,
+    items: feed.packs.map((p) => ({ packageId: null, label: `${p.name} · ${p.file}`, qty: 1, unitPrice: 0, unit: 'piece' as const, months: 1, base: true })),
+    deductionPct: 0,
+    split: [],
+    notes: `Paid ${peso(feed.paid)} at the booth (${feed.paidWith}): it's in the booth event's job, so nothing is due or earned here.`,
+    deleted: 0,
+  });
+  await recomputeEarnings([id]);
+  await audit('import', 'job', id, `${existing ? 'Updated' : 'Added'} Couple-of-Stickers ${feed.number} (${feed.nickname}) from JoshWorks POS as job ${number}`);
+  return { jobId: id, created: !existing };
+}
+
+/** Who makes it: who it's set to already, else the POS maker matched by email or name. */
+export async function stickMaker(feed: PosStickFeed): Promise<string | null> {
+  const existing = await db.jobs.get(posJobId(feed));
+  if (existing?.lead) return existing.lead;
+  if (!feed.maker) return null;
+  return matchMember(feed.maker, alive(await db.members.toArray()))?.id ?? null;
 }
