@@ -184,13 +184,13 @@ describe('price list and contract templates', () => {
     }
     expect(SEED_PACKAGES.find((p) => p.name === 'Sintra board menu board, 3 mm')).toMatchObject({ unit: 'sqft', category: 'Printing' });
     expect(SEED_PACKAGES.find((p) => p.name.startsWith('Sticker labels A4: label paper'))).toMatchObject({ unit: 'piece', price: toCents(60) });
-    // The POS sticker illustration rate card: ₱100 / ₱220 a design, sets of 2, 5 and 10.
+    // The POS sticker illustration rate card: ₱130 / ₱250 a design, sets of 2, 5 and 10.
     const merch = (name: string) => SEED_PACKAGES.find((p) => p.category === 'Merch' && p.name === name)?.price;
-    expect([merch('Sticker: small / simple'), merch('Sticker: detailed')]).toEqual([toCents(100), toCents(220)]);
-    expect([merch('Stickers: 2 designs (detailed)'), merch('Stickers: 5 designs (detailed)'), merch('Stickers: 10 designs (detailed)')]).toEqual([toCents(390), toCents(950), toCents(1700)]);
+    expect([merch('Sticker: small / simple'), merch('Sticker: detailed')]).toEqual([toCents(130), toCents(250)]);
+    expect([merch('Stickers: 2 designs (detailed)'), merch('Stickers: 5 designs (detailed)'), merch('Stickers: 10 designs (detailed)')]).toEqual([toCents(450), toCents(1100), toCents(2000)]);
     for (const p of SEED_PACKAGES.filter((x) => x.category === 'Design retainer' && x.kind !== 'addon')) expect(p, p.name).toMatchObject({ unit: 'month', minTermMonths: 3 });
     // What a catalog upgrade changes to is what a new install gets.
-    for (const c of PRICE_CHANGES) expect(SEED_PACKAGES.find((p) => p.id === c.id)?.price, c.id).toBe(c.to);
+    for (const id of new Set(PRICE_CHANGES.map((c) => c.id))) expect(SEED_PACKAGES.find((p) => p.id === id)?.price, id).toBe(PRICE_CHANGES.filter((c) => c.id === id).at(-1)!.to);
     for (const c of TEMPLATE_CHANGES) expect(SEED_TEMPLATES.find((t) => t.id === c.id)?.[c.field], `${c.id} ${c.field}`).toEqual(c.to);
     expect(SEED_TEMPLATES.find((t) => t.id === 'tpl-government')?.downPct).toBe(0);
   });

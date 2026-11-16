@@ -54,7 +54,8 @@ export async function loadCatalog(opts: { archiveOld?: boolean } = {}): Promise<
   for (const c of PRICE_CHANGES.filter((x) => x.version > from)) {
     const p = existing.get(c.id);
     if (!p || p.deleted === 1 || p.price !== c.from) continue;
-    await save(db.packages, { ...p, price: c.to });
+    // Later versions see this price, so one item can change twice (₱250 → ₱220 in version 2, back to ₱250 in 4).
+    existing.set(c.id, await save(db.packages, { ...p, price: c.to }));
     repriced++;
   }
   const stored = new Map((await db.contractTemplates.toArray()).map((t) => [t.id, t]));

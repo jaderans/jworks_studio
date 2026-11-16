@@ -43,6 +43,17 @@ Everything is in pesos. Owners and managers see all of it; designers see only th
 - A print order with **sticker illustration** brings who drew it: pick them in **Who draws it**, and they earn their exact share of the illustration next to the printer's share of the print work (one person can do both).
 - An order deleted in the POS leaves this list. If it was already added as a job, it shows under **Deleted in the POS**: **Delete from Studio** removes the job with the payments, expenses, payouts and earnings the import wrote (the client stays). Payments entered by hand in Studio stop this, so remove them first or mark the job Cancelled to keep them.
 
+## Sticker printing in Studio
+
+**Sticker printing** (in the sidebar) takes orders that don't come from a booth event, so they're processed and paid out in Studio. Orders taken at events stay in JoshWorks POS → Services and come in through Booth events (above).
+
+- **The rate card** is the POS's (Rate card; the owner saves it). **Use the POS's rate card** copies it when the POS is on the same device. Sticker illustration is ₱130 (simple) and ₱250 (detailed) a design; sets of 2, 5 and 10 save ₱20/₱50/₱150 and ₱50/₱150/₱500.
+- **Sticker sizes**: pick one from the size guide or **Custom size…** for the customer's own width × height. Counts are what fits inside the Cricut Print Then Cut area (A4: 7.2 × 10.62 in, inside the registration marks), 3 mm apart, with the sticker tried both ways round. With a size, **Order by → Sticker count** works out the sheets: 50 stickers of 2.3 × 1.7 in is 16 a sheet, so 4 sheets, 64 stickers, 14 spare.
+- **Each order is a Sticker Printing job** (COM-…): the customer becomes a client (matched by email, phone or name), the lines and the courier fee are the job's price, there's no 5% deduction, and the split is set so the printer earns their % of the print work and the illustrator their % of the illustration exactly. Payments are recorded with **Payment** on the card (the down payment first, then the balance), each with its receipt, and the shares are released as the customer pays, ready in Payouts. The courier fee (Transport) and materials (Printing, when the rate card has costs) are the job's expenses.
+- **Columns**: Quote and proof (Proof sent, Approved sets the ready-by date from the lead time) → Making → Ready → Picked up / Shipped, which asks for the balance first. They follow the job's status, so the job board agrees. The job's Money tab points back to the order: change the lines and shares there.
+- **Quote slip**: one page on the letterhead with the lines, the down payment, what's been paid and the payment QR codes.
+- A POS **service coupon** can go on an order like any Studio job.
+
 ## BIR (8% option)
 
 Money → BIR estimates the 8% income tax on receipts from the registration date (16 Nov 2026): 8% of the year's receipts above ₱250,000, less tax clients withheld (Form 2307) and tax paid in earlier quarters. It lists each 1701Q and the 1701A with its due date, flags paid jobs missing an invoice or a 2307, and watches the ₱3M non-VAT ceiling. The dashboard shows the next return due. It is a planning aid; check returns with an accountant before filing.

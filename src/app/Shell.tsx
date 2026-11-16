@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import {
   Briefcase, ChevronDown, Compass, ChevronsLeft, ChevronsRight, CloudUpload, Contact, FileSignature, History, LayoutGrid, Layers, ListChecks, Megaphone, Menu, Monitor,
-  Moon, RefreshCw, Settings, Sun, Users, Wallet, WifiOff, type LucideIcon,
+  Moon, Printer, RefreshCw, Settings, Sun, Users, Wallet, WifiOff, type LucideIcon,
 } from 'lucide-react';
 import mark from '../assets/brand/mark.png';
 import lockupLight from '../assets/brand/lockup-on-light.png';
@@ -62,6 +62,7 @@ export const SECTIONS: Section[] = [
       { to: '/jobs/workload', label: 'Workload' },
     ],
   },
+  { id: 'printing', label: 'Sticker printing', short: 'Printing', icon: Printer, perm: 'money', to: '/printing', match: ['/printing'] },
   { id: 'clients', label: 'Clients', icon: Contact, perm: 'clients', to: '/clients', match: ['/clients'] },
   {
     id: 'money',

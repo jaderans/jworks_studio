@@ -6,8 +6,9 @@ import { DEFAULT_RATES } from '../domain/pricing';
 import { DEFAULT_CONTRACT_SECTIONS } from '../domain/contract';
 import { DEFAULT_BIR, DEFAULT_MONEY, DEFAULT_PAY_METHODS } from '../domain/money';
 import { DEFAULT_RATE_CARD } from '../domain/rateCard';
+import { DEFAULT_PRINT_RATES } from '../domain/print';
 import type {
-  AiSettings, BirSettings, BrandVoice, BusinessSettings, CadenceSettings, ChecklistItem, ContractSection, EmailSettings, MoneySettings, RateCardSettings, RateSettings,
+  AiSettings, BirSettings, BrandVoice, BusinessSettings, CadenceSettings, ChecklistItem, ContractSection, EmailSettings, MoneySettings, PrintRates, RateCardSettings, RateSettings,
   SecuritySettings, SettingKey, SettingRow, StudioPayMethod,
 } from './types';
 
@@ -72,6 +73,7 @@ export interface SettingValues {
   payMethods: StudioPayMethod[];
   email: EmailSettings;
   rateCard: RateCardSettings;
+  printRates: PrintRates;
 }
 
 export const DEFAULTS: SettingValues = {
@@ -88,6 +90,7 @@ export const DEFAULTS: SettingValues = {
   payMethods: DEFAULT_PAY_METHODS,
   email: DEFAULT_EMAIL,
   rateCard: DEFAULT_RATE_CARD,
+  printRates: DEFAULT_PRINT_RATES,
 };
 
 function merge<K extends SettingKey>(key: K, value: unknown): SettingValues[K] {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { FileSignature, FileText, Minus, Plus, ReceiptText, Trash2, Wallet } from 'lucide-react';
 import { useApp } from '../../app/AppContext';
@@ -362,6 +362,14 @@ export function JobDialog({ id, onClose }: { id: string | null; onClose: () => v
           money ? (
             <div className="editor-grid">
               <div className="stack">
+                {money.print ? (
+                  <Callout title="A sticker printing order">
+                    Its price lines, delivery, coupon and the printer&rsquo;s and illustrator&rsquo;s shares come from the order. Change them there, or saving the order puts them back.{' '}
+                    <Link to={`/printing?order=${plan.id}`} onClick={onClose}>
+                      Open the order
+                    </Link>
+                  </Callout>
+                ) : null}
                 <section className="stack tight">
                   <h3>Price</h3>
                   <PriceLinesEditor items={items} onChange={(next) => setM({ items: next })} audience={audience} />

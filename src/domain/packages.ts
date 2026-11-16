@@ -213,15 +213,15 @@ export const SEED_PACKAGES: CatalogSeed[] = [
   addon(RET, 'Animated version of a design (5–10 s)', 800, { unit: 'piece' }),
 
   // ----- Merch, shirt and print design (design fees; printing quoted separately) -----
-  // Sticker design rates match the POS sticker illustration rate card.
-  item(MERCH, 'stickers', 'Sticker: small / simple', 100, { unit: 'piece' }),
-  item(MERCH, 'stickers', 'Sticker: detailed', 220, { unit: 'piece' }),
-  item(MERCH, 'stickers', 'Stickers: 2 designs (small)', 180),
-  item(MERCH, 'stickers', 'Stickers: 2 designs (detailed)', 390),
-  item(MERCH, 'stickers', 'Stickers: 5 designs (small)', 450),
-  item(MERCH, 'stickers', 'Stickers: 5 designs (detailed)', 950),
-  item(MERCH, 'stickers', 'Stickers: 10 designs (small)', 850),
-  item(MERCH, 'stickers', 'Stickers: 10 designs (detailed)', 1700),
+  // Sticker design rates match the POS sticker illustration rate card (November 2026: ₱130 simple, ₱250 detailed).
+  item(MERCH, 'stickers', 'Sticker: small / simple', 130, { unit: 'piece' }),
+  item(MERCH, 'stickers', 'Sticker: detailed', 250, { unit: 'piece' }),
+  item(MERCH, 'stickers', 'Stickers: 2 designs (small)', 240),
+  item(MERCH, 'stickers', 'Stickers: 2 designs (detailed)', 450),
+  item(MERCH, 'stickers', 'Stickers: 5 designs (small)', 600),
+  item(MERCH, 'stickers', 'Stickers: 5 designs (detailed)', 1100),
+  item(MERCH, 'stickers', 'Stickers: 10 designs (small)', 1150),
+  item(MERCH, 'stickers', 'Stickers: 10 designs (detailed)', 2000),
   item(MERCH, 'merch', 'ID lanyard (org-themed / custom pattern)', 500, { unit: 'piece' }),
   item(MERCH, 'merch', 'Button pin: simple', 100, { unit: 'piece' }),
   item(MERCH, 'merch', 'Button pin: detailed illustration', 250, { unit: 'piece' }),
@@ -643,8 +643,9 @@ export const SEED_PACKAGES: CatalogSeed[] = [
  *     templates, and the sticker design prices of the POS rate card.
  * 3 = academic commissions: brochures, report, proposal and lecture slides, slide templates, reviewers,
  *     capstone logos and a thesis defense kit; the research template becomes Academic & Thesis Visuals.
+ * 4 = November 2026 sticker illustration prices: ₱130 simple and ₱250 detailed a design, sets saving the same.
  */
-export const CATALOG_VERSION = 3;
+export const CATALOG_VERSION = 4;
 
 /** Prices changed by a catalog version. A device takes the new price only where the old one is still in place, so edits stay. */
 export const PRICE_CHANGES: { version: number; id: string; from: number; to: number }[] = [
@@ -652,6 +653,10 @@ export const PRICE_CHANGES: { version: number; id: string; from: number; to: num
   { version: 2, id: 'cat-merch-stickers-2-designs-detailed', from: toCents(450), to: toCents(390) },
   { version: 2, id: 'cat-merch-stickers-5-designs-detailed', from: toCents(1100), to: toCents(950) },
   { version: 2, id: 'cat-merch-stickers-10-designs-detailed', from: toCents(2000), to: toCents(1700) },
+  ...([
+    ['sticker-small-simple', 100, 130], ['stickers-2-designs-small', 180, 240], ['stickers-5-designs-small', 450, 600], ['stickers-10-designs-small', 850, 1150],
+    ['sticker-detailed', 220, 250], ['stickers-2-designs-detailed', 390, 450], ['stickers-5-designs-detailed', 950, 1100], ['stickers-10-designs-detailed', 1700, 2000],
+  ] as const).map(([id, from, to]) => ({ version: 4, id: `cat-merch-${id}`, from: toCents(from), to: toCents(to) })),
 ];
 
 /** Categories in price-list order. */

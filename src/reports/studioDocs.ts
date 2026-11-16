@@ -8,10 +8,11 @@ import { fillTemplate } from '../domain/contract';
 import { contractAudience, deliverablesOf, isRushLine } from '../domain/contractPlan';
 import { answerFor, parseQuestionnaire } from '../domain/questionnaire';
 import { blocksOf } from '../domain/contractBlocks';
+import { lineTotal, printTotals } from '../domain/print';
 import { peso } from '../lib/money';
 import { fmtDateTime, fmtIsoDate, fmtMonth, isoDate } from '../lib/time';
 import type {
-  BusinessSettings, Contract, ContractBlock, ContractBlockKind, ContractSection, ContractTemplate, Earning, Invoice, Member, MoneySettings, Package, Payment, Payout, PayoutAccount, Proposal, ProposalItem, RateSettings, StudioPayMethod,
+  BusinessSettings, Contract, ContractBlock, ContractBlockKind, ContractSection, ContractTemplate, Earning, Invoice, Member, MoneySettings, Package, Payment, Payout, PayoutAccount, PrintJob, PrintRates, Proposal, ProposalItem, RateSettings, StudioPayMethod,
 } from '../db/types';
 
 /**
@@ -819,3 +820,70 @@ export async function buildIncomeReportPdf(rows: MonthRow[], ctx: { business: Bu
 }
 
 export { LINE };
+
+// ----- sticker printing quote slip -----
+
+export interface PrintQuoteCtx {
+  business: BusinessSettings;
+  payMethods: StudioPayMethod[];
+  rates: PrintRates;
+  number: string;
+  clientName: string;
+  date: string;
+  dueDate: string;
+  paid: number;
+}
+
+/** One page for a sticker printing order: what's being made, the down payment to start, and where to pay. */
+export async function buildPrintQuotePdf(p: PrintJob, discountAmount: number, ctx: PrintQuoteCtx) {
+  const t = printTotals(p, discountAmount);
+  const balance = Math.max(0, t.total - ctx.paid);
+  const content: Content[] = [
+    { text: 'STICKER PRINTING QUOTE', style: 'docTitle' },
+    {
+      table: {
+        dontBreakRows: true,
+        widths: ['*', 100, 130],
+        body: [
+          [th('Prepared for'), th('Order no.'), th(ctx.dueDate ? 'Date · ready by' : 'Date')],
+          [
+            { stack: [{ text: ctx.clientName || '—', bold: true }, ...(p.contact ? [{ text: p.contact, color: MUTED, fontSize: 8.5 }] : [])] },
+            { text: ctx.number, bold: true },
+            { text: ctx.dueDate ? `${fmtIsoDate(ctx.date)} · ${fmtIsoDate(ctx.dueDate)}` : fmtIsoDate(ctx.date) },
+          ],
+        ] as TableCell[][],
+      },
+      layout: gridLayout,
+      margin: [0, 0, 0, 12],
+    } as Content,
+    sectionTitle('What we’ll make'),
+    table(
+      ['*', 'auto', 'auto', 'auto'],
+      [th('Item'), th('Qty', true), th('Price', true), th('Amount', true)],
+      p.lines.map((l) => [td(l.label), td(l.qty, true), td(peso(l.unitPrice, { decimals: 2 }), true), td(peso(lineTotal(l)), true)]),
+    ),
+    waterfall([
+      { label: 'Subtotal', value: peso(t.subtotal) },
+      ...(t.discount ? [{ label: 'Service coupon', value: `−${peso(t.discount)}`, kind: 'sub' as const }] : []),
+      ...(t.delivery ? [{ label: `Delivery${p.delivery.courier ? ` (${p.delivery.courier})` : ''}`, value: peso(t.delivery), kind: 'sub' as const }] : []),
+      { label: 'Total', value: peso(t.total), kind: 'final' },
+      { label: `${p.downPct}% down payment to start`, value: peso(t.down), kind: 'sub' as const },
+      ...(ctx.paid ? [{ label: 'Paid so far', value: peso(ctx.paid), kind: 'sub' as const }, { label: 'Balance', value: peso(balance), kind: 'total' as const }] : []),
+    ]),
+    sectionTitle('Good to know'),
+    {
+      ul: [
+        t.a4 ? `${t.a4} A4 sheet${t.a4 === 1 ? '' : 's'} (8.27 × 11.69 in). Stickers are cut inside the cutter’s area (${ctx.rates.cutArea.w} × ${ctx.rates.cutArea.h} in), ${ctx.rates.cutArea.gapMm} mm apart; sticker counts are estimates, and custom shapes can fit more or fewer.` : '',
+        `We print once the ${p.downPct}% down payment is in and you approve the proof. Ready in ${ctx.rates.leadDays.min}–${ctx.rates.leadDays.max} working days after that.`,
+        p.delivery.method === 'courier' ? `Shipped by ${p.delivery.courier || 'courier'} to ${p.delivery.address}, after the balance is paid.` : 'Pick up in Iloilo City; the balance is paid at pickup.',
+        `Minimum order: ${ctx.rates.minSheets} A4 sheets${p.lines.some((l) => l.kind === 'pack') ? `; ${ctx.rates.minPacks} packs per packaging design` : ''}.`,
+        'Prints can look slightly different from your screen, especially on holo, glitter and transparent stock.',
+        p.designNo ? `Design no. ${p.designNo}.` : '',
+      ].filter(Boolean),
+      fontSize: 8.5,
+    } as Content,
+  ];
+  if (p.notes.trim()) content.push(sectionTitle('Notes'), { text: p.notes.trim(), fontSize: 8.5 });
+  content.push(...paymentDetails(ctx.payMethods, ctx.business.paymentDetails));
+  return frame({ title: `Sticker printing ${ctx.number}`, business: ctx.business.name, footerNote: ctx.number, letterhead: { frame: 'merch', cover: true } }, content);
+}

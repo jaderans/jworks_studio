@@ -115,6 +115,8 @@ export interface PosPrintFeed {
   orderId: string;
   number: string;
   status: 'quote' | 'printing' | 'ready' | 'done' | 'cancelled';
+  /** The event the order was taken at (from POS 1.15.0). */
+  eventName?: string;
   customer: { name: string; email: string; phone: string; handle: string };
   printer: { memberId: string; name: string; email: string } | null;
   printerPct: number;

@@ -560,6 +560,132 @@ export interface JobMoney extends Syncable {
   /** A JoshWorks POS service coupon; discountAmount is what it takes off. */
   couponCode?: string;
   couponId?: string;
+  /** A sticker printing order made in Studio (Sticker printing): its lines, delivery and shares. The job's price comes from it. */
+  print?: PrintJob;
+}
+
+// ----- Sticker printing (the POS rate card, for orders that don't come from a booth event) -----
+
+/** One material on the printing rate card. */
+export interface PrintMaterial {
+  key: string;
+  group: 'Standard' | 'Premium' | 'Paper';
+  name: string;
+  /** Per A4 sheet, kiss cut included. */
+  price: Cents;
+  /** What one sheet costs the studio (paper, laminate, ink), booked as the job's materials. null = not set. */
+  cost: Cents | null;
+}
+export interface PrintCut {
+  key: string;
+  name: string;
+  /** Added to the sheet price. */
+  price: Cents;
+}
+export type PackSize = 'small' | 'medium' | 'large';
+/** A peel-off sheet size and how many are cut from one A4. */
+export interface PeelSize {
+  key: string;
+  name: string;
+  perA4: number;
+  pack: PackSize | null;
+}
+export interface PackOption {
+  key: string;
+  name: string;
+  small: Cents;
+  medium: Cents;
+  large: Cents;
+}
+/** A size on the size guide, in inches. How many fit on a sheet is worked out from the cut area. */
+export interface StickerPreset {
+  name: string;
+  w: number;
+  h: number;
+}
+/** Where the cutter can cut on one A4 (inches): Cricut's Print Then Cut leaves room for its registration marks. */
+export interface CutArea {
+  w: number;
+  h: number;
+  gapMm: number;
+}
+export interface IllustrationTier {
+  key: string;
+  name: string;
+  note: string;
+  /** One design. */
+  price: Cents;
+  /** Several designs ordered at once cost less. */
+  sets: { designs: number; price: Cents }[];
+}
+/** The sticker printing rate card (Settings key 'printRates'), the same as the POS's. */
+export interface PrintRates {
+  ratesVersion?: number;
+  materials: PrintMaterial[];
+  cuts: PrintCut[];
+  peelSizes: PeelSize[];
+  packs: PackOption[];
+  stickerSizes: StickerPreset[];
+  cutArea: CutArea;
+  minSheets: number;
+  minPacks: number;
+  /** Working days from approval. */
+  leadDays: { min: number; max: number };
+  /** Down payment to start, % of the total. */
+  downPct: number;
+  /** The printer's share of the print work (not the illustration or the delivery fee), %. */
+  printerPct: number;
+  illustration: { tiers: IllustrationTier[]; artistPct: number };
+}
+export interface PrintLine {
+  kind: 'sheets' | 'peel' | 'pack' | 'custom' | 'illustration';
+  label: string;
+  qty: number;
+  unitPrice: Cents;
+  unitCost: Cents | null;
+  /** A4 sheets this line prints. */
+  a4: number;
+  material?: string;
+  cut?: string;
+  size?: string;
+  /** Sticker sheets: the size in inches and how many stickers they asked for. */
+  w?: number;
+  h?: number;
+  stickers?: number;
+  pack?: string;
+  packSize?: PackSize;
+  tier?: string;
+  designs?: number;
+}
+export interface PrintDelivery {
+  method: 'pickup' | 'courier';
+  courier: string;
+  address: string;
+  /** Charged to the customer; the studio pays the courier. */
+  fee: Cents;
+  tracking: string;
+}
+/** A sticker printing order: quote and proof, the down payment, make it, then pickup or courier with the balance. */
+export interface PrintJob {
+  lines: PrintLine[];
+  delivery: PrintDelivery;
+  /** Mobile, email or @handle, as given. */
+  contact: string;
+  printerId: string | null;
+  printerPct: number;
+  illustratorId: string | null;
+  illustratorPct: number;
+  /** The custom sticker design's number, e.g. CS01. */
+  designNo: string;
+  /** Drive or Messenger link to the designs. */
+  files: string;
+  notes: string;
+  /** The rate card's down payment when the order was made, %. */
+  downPct: number;
+  proofAt: number | null;
+  approvedAt: number | null;
+  /** Picked up or shipped: the order is done. */
+  doneAt: number | null;
 }
 
 export type PayMethod = 'GCash' | 'Mari Bank' | 'Union Bank' | 'On Hand' | 'Bank transfer' | 'PayPal' | 'Wise' | 'Other';
@@ -847,7 +973,7 @@ export interface EmailSettings {
 
 export type SettingKey =
   | 'business' | 'voice' | 'cadence' | 'checklist' | 'rates' | 'ai' | 'contract' | 'security'
-  | 'money' | 'bir' | 'payMethods' | 'email' | 'rateCard';
+  | 'money' | 'bir' | 'payMethods' | 'email' | 'rateCard' | 'printRates';
 
 /** The studio profile & rate card sent to clients and agencies (Documents → Price list → Rate card). */
 export interface RateCardSettings {

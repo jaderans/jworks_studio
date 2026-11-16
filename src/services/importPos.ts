@@ -280,7 +280,7 @@ export async function applyPrintImport(feed: PosPrintFeed, printerId: string | n
     dueDate: feed.dueDate,
     designers: people.length ? people : (existing?.designers ?? []),
     lead: printerId ?? illustratorId ?? existing?.lead ?? null,
-    brief: `POS print order ${feed.number}: ${feed.lines.map((l) => `${l.qty} × ${l.label}`).join(', ')}.${feed.delivery.method === 'courier' ? ` Courier${feed.delivery.courier ? ` (${feed.delivery.courier})` : ''}${feed.delivery.tracking ? `, tracking ${feed.delivery.tracking}` : ''}.` : ' Pickup.'}${feed.notes ? ` ${feed.notes}` : ''} ${posStamp(feed)}`,
+    brief: `POS print order ${feed.number}${feed.eventName ? ` at ${feed.eventName}` : ''}: ${feed.lines.map((l) => `${l.qty} × ${l.label}`).join(', ')}.${feed.delivery.method === 'courier' ? ` Courier${feed.delivery.courier ? ` (${feed.delivery.courier})` : ''}${feed.delivery.tracking ? `, tracking ${feed.delivery.tracking}` : ''}.` : ' Pickup.'}${feed.notes ? ` ${feed.notes}` : ''} ${posStamp(feed)}`,
     source: 'JoshWorks POS',
     deleted: 0,
   });

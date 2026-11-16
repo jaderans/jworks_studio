@@ -203,8 +203,10 @@ describe('catalog versions', () => {
     await db.packages.bulkDelete(fresh.map((p) => p.id));
     const newTemplates = alive(await db.contractTemplates.toArray()).filter((t) => t.sort >= 13);
     await db.contractTemplates.bulkDelete(newTemplates.map((t) => t.id));
-    for (const c of PRICE_CHANGES) await db.packages.update(c.id, { price: c.from });
-    const edited = PRICE_CHANGES[0];
+    // Each item at its version 1 price (an item can change in more than one version).
+    const ids = [...new Set(PRICE_CHANGES.map((c) => c.id))];
+    for (const id of ids) await db.packages.update(id, { price: PRICE_CHANGES.find((c) => c.id === id)!.from });
+    const edited = PRICE_CHANGES.find((c) => c.version === 4 && c.id === 'cat-merch-sticker-small-simple')!;
     await db.packages.update(edited.id, { price: toCents(300) });
     const motion = (await db.contractTemplates.get('tpl-motion'))!;
     await db.contractTemplates.put({ ...motion, ...Object.fromEntries(TEMPLATE_CHANGES.filter((c) => c.id === 'tpl-motion').map((c) => [c.field, c.from])) });
@@ -214,9 +216,11 @@ describe('catalog versions', () => {
     expect(await catalogStatus()).toEqual({ version: 1, needs: true });
 
     const r = await loadCatalog();
-    expect(r).toMatchObject({ added: fresh.length, templates: 8, archived: 0, repriced: PRICE_CHANGES.length - 1, updated: 1 });
+    expect(r).toMatchObject({ added: fresh.length, templates: 8, archived: 0, repriced: PRICE_CHANGES.filter((c) => c.id !== edited.id).length, updated: 1 });
     expect((await db.packages.get(edited.id))?.price).toBe(toCents(300));
-    expect((await db.packages.get(PRICE_CHANGES[1].id))?.price).toBe(PRICE_CHANGES[1].to);
+    // ₱250 → ₱220 in version 2, then ₱250 again in version 4; every other item ends at its newest price.
+    expect((await db.packages.get('cat-merch-sticker-detailed'))?.price).toBe(toCents(250));
+    for (const id of ids.filter((x) => x !== edited.id)) expect((await db.packages.get(id))?.price, id).toBe(PRICE_CHANGES.filter((c) => c.id === id).at(-1)!.to);
     expect((await db.contractTemplates.get('tpl-motion'))?.categories).toContain('Video');
     expect((await db.packages.get('seed-pkg-kept'))?.active).toBe(1);
     expect((await catalogStatus()).needs).toBe(false);
@@ -315,5 +319,21 @@ describe.skipIf(!existsSync(REAL))('importing the real planner', () => {
     expect(again.posts + again.backlog).toBe(0);
     expect(again.alreadyThere).toBeGreaterThan(100);
     expect(alive(await db.posts.toArray())).toHaveLength(64);
+  });
+});
+
+describe('catalog version 4', () => {
+  it('gives a device on version 3 the November 2026 sticker illustration prices, keeping edited ones', async () => {
+    await setup();
+    const v4 = PRICE_CHANGES.filter((c) => c.version === 4);
+    for (const c of v4) await db.packages.update(c.id, { price: c.from });
+    await db.packages.update('cat-merch-stickers-10-designs-small', { price: toCents(800) });
+    await setSetting('money', { ...(await getSetting('money')), catalogVersion: 3 });
+    const r = await loadCatalog();
+    expect(r.repriced).toBe(v4.length - 1);
+    expect((await db.packages.get('cat-merch-sticker-small-simple'))?.price).toBe(toCents(130));
+    expect((await db.packages.get('cat-merch-sticker-detailed'))?.price).toBe(toCents(250));
+    expect((await db.packages.get('cat-merch-stickers-5-designs-small'))?.price).toBe(toCents(600));
+    expect((await db.packages.get('cat-merch-stickers-10-designs-small'))?.price).toBe(toCents(800));
   });
 });

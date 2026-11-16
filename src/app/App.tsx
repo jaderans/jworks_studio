@@ -28,6 +28,7 @@ const AssistantPage = lazy(() => import('../features/assistant/AssistantPage'));
 const ClientsPage = lazy(() => import('../features/clients/ClientsPage'));
 const JobsPage = lazy(() => import('../features/jobs/JobsPage'));
 const MoneyPage = lazy(() => import('../features/money/MoneyPage'));
+const PrintingPage = lazy(() => import('../features/printing/PrintingPage'));
 const DocsPage = lazy(() => import('../features/docs/DocsPage'));
 const MyPayPage = lazy(() => import('../features/mypay/MyPayPage'));
 const TeamPage = lazy(() => import('../features/team/TeamPage'));
@@ -134,6 +135,7 @@ function Gate() {
         <Route path="clients/*" element={<Guard perm="clients"><Lazy><ClientsPage /></Lazy></Guard>} />
         <Route path="jobs/*" element={<Guard perm="jobs"><Lazy><JobsPage /></Lazy></Guard>} />
         <Route path="money/*" element={<Guard perm="money"><Lazy><MoneyPage /></Lazy></Guard>} />
+        <Route path="printing" element={<Guard perm="money"><Lazy><PrintingPage /></Lazy></Guard>} />
         <Route path="docs/*" element={<Guard perm="money"><Lazy><DocsPage /></Lazy></Guard>} />
         <Route path="mypay" element={<Guard perm="mypay"><Lazy><MyPayPage /></Lazy></Guard>} />
         {/* Old links (bookmarks, older builds) land on the new pages. */}
