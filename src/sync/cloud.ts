@@ -1,7 +1,7 @@
 import { deleteApp, initializeApp, type FirebaseApp } from 'firebase/app';
 import {
   GoogleAuthProvider, browserLocalPersistence, browserPopupRedirectResolver, connectAuthEmulator, createUserWithEmailAndPassword, inMemoryPersistence, indexedDBLocalPersistence,
-  initializeAuth, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, signOut, updatePassword,
+  initializeAuth, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, signOut, updatePassword,
   type Auth, type User,
 } from 'firebase/auth';
 import {
@@ -176,6 +176,17 @@ export async function signInCloud(email: string, password: string): Promise<void
   await signInWithEmailAndPassword(auth, await loginEmailFor(email), password);
 }
 
+/**
+ * Firebase emails a link to choose a new password, for the login this email
+ * signs in with. With JoshWorks POS in the same Firebase project it's one
+ * login for both apps, so the new password works in both.
+ */
+export async function sendResetEmail(email: string): Promise<void> {
+  const { auth } = need();
+  if (!email.trim()) throw new Error('Type your email first.');
+  await sendPasswordResetEmail(auth, await loginEmailFor(email));
+}
+
 /** Sign in with Google. Google has already checked the email, so no confirmation email is needed. */
 export async function signInWithGoogle(loginHint?: string): Promise<void> {
   const { auth } = need();
@@ -199,8 +210,9 @@ export async function signOutCloud(): Promise<void> {
 export function friendlyError(e: unknown): string {
   const code = (e as { code?: string })?.code ?? '';
   const map: Record<string, string> = {
-    'auth/invalid-credential': 'That email and password don’t match.',
-    'auth/wrong-password': 'That password is not right.',
+    'auth/invalid-credential': 'That email and password don’t match. If you also use JoshWorks POS, it’s the same password as there. Forgot it? Tap “Email me a reset link”.',
+    'auth/wrong-password': 'That password is not right. If you also use JoshWorks POS, it’s the same password as there.',
+    'auth/missing-email': 'Type your email first.',
     'auth/user-not-found': 'No login with that email yet. Ask the owner to add you in Team.',
     'auth/requires-recent-login': 'For your safety, sign out and sign in again, then choose your password.',
     'auth/email-already-in-use': 'That email already has an account. Sign in instead.',
@@ -222,6 +234,24 @@ export function friendlyError(e: unknown): string {
 
 const isDenied = (e: unknown) => (e as { code?: string })?.code === 'permission-denied';
 
+/** Is this login's email confirmed? Checks again with Firebase (they may have just opened the link). */
+async function confirmed(user: User): Promise<boolean> {
+  if (user.emailVerified) return true;
+  await user.reload().catch(() => undefined);
+  if (!user.emailVerified) return false;
+  // The cloud reads the confirmation from a fresh token.
+  await user.getIdToken(true).catch(() => undefined);
+  return true;
+}
+
+let confirmSentTo = '';
+/** Send the confirmation email, once per login per session (Firebase limits how often). */
+async function askToConfirm(user: User): Promise<void> {
+  if (confirmSentTo === user.uid) return;
+  confirmSentTo = user.uid;
+  await sendEmailVerification(user).catch(() => undefined);
+}
+
 /** The owner member on this device (the account that sets up the workspace). */
 async function localOwnerId(): Promise<string | null> {
   const current = await getLocal<string | null>('currentMemberId', null);
@@ -237,7 +267,15 @@ async function resolveAccess(user: User): Promise<CloudAccess | null> {
   if (acc?.exists()) {
     const d = acc.data();
     // The owner made this email's login in the app: only that login gets in.
-    if (d.uid && d.uid !== user.uid) throw new Error(`${email} signs in with the login the owner made. Use the temporary password from the owner’s message, or ask them for a new one.`);
+    if (d.uid && d.uid !== user.uid)
+      throw new Error(
+        `${email} has a Studio login the owner made, with its own temporary password. Use that one, or ask the owner to tap “Fix sign-in” → “Use the same login as JoshWorks POS” for you.`,
+      );
+    // Access on the login they already have (their JoshWorks POS one): the cloud needs their email confirmed once.
+    if (!d.uid && !(await confirmed(user))) {
+      await askToConfirm(user);
+      throw new Error(`Confirm your email first: open the link we sent to ${email} (check Spam too), then tap Sync now. It’s once, and counts for JoshWorks POS too.`);
+    }
     return { role: d.role as AppRole, memberId: (d.memberId as string) ?? null, active: d.active !== false, mustChangePassword: d.mustChangePassword === true, email: typeof d.email === 'string' ? d.email : untagged(email) };
   }
   const wsRef = doc(fs, 'camp', cfg.ws);
@@ -252,6 +290,9 @@ async function resolveAccess(user: User): Promise<CloudAccess | null> {
     await setDoc(accRef, { role: 'owner', memberId: ownerId, active: true, email, updatedAt: Date.now() });
     const me = await db.members.get(ownerId);
     if (me && me.email !== email) await db.members.put({ ...me, email, updatedAt: Date.now(), _sync: 1 });
+    // A new workspace (a first cloud, or Studio moved to another Firebase project): everything goes up,
+    // not just what changed since, so the team's other devices get it all.
+    await uploadEverything();
     return { role: 'owner', memberId: ownerId, active: true };
   }
   if (ws?.exists() && ws.data().ownerUid === user.uid) {
@@ -638,6 +679,52 @@ export interface NewLogin {
   /** The account behind it: their email, or a +jw tagged copy once it has been renewed. */
   login: string;
   password: string;
+  /**
+   * Their email already had a login in this Firebase project (their JoshWorks
+   * POS one, when both apps share it): Studio uses that, with the same email
+   * and password. No new password to send.
+   */
+  existing?: boolean;
+}
+
+/**
+ * Studio access on the login this email already has in the Firebase project —
+ * their JoshWorks POS one when both apps share it — so it's one email and one
+ * password for both apps. Logins Studio made for them before stop working here.
+ * The cloud asks them to confirm their email once (the POS already did).
+ */
+export async function useOwnLogin(m: Member): Promise<void> {
+  const { fs, cfg } = need();
+  const email = m.email.trim().toLowerCase();
+  if (!email) throw new Error(`Add ${m.name}'s email first.`);
+  const access = collection(fs, 'camp', cfg.ws, 'access');
+  const older = await getDocs(query(access, where('memberId', '==', m.id)));
+  const batch = writeBatch(fs);
+  for (const d of older.docs) if (d.id !== email) batch.delete(d.ref);
+  // Replaced whole: no uid (any login with this confirmed email), no temporary password.
+  batch.set(doc(access, email), accessFields(m, email));
+  batch.delete(doc(fs, 'camp', cfg.ws, 'signin', email));
+  await batch.commit();
+}
+
+/**
+ * Send everything this device has to the cloud again; the cloud keeps whichever
+ * copy of each record is newer. For moving Studio to another Firebase project
+ * (only changes since the move would go otherwise), or repairing one that
+ * missed records. Returns how many records will go up.
+ */
+export async function uploadEverything(): Promise<number> {
+  let n = 0;
+  for (const t of SYNCED_TABLES) {
+    const table = syncedTable(t);
+    const rows = (await table.toArray()) as { _sync?: 0 | 1 }[];
+    const done = rows.filter((r) => r._sync !== 1);
+    if (!done.length) continue;
+    await table.bulkPut(done.map((r) => ({ ...r, _sync: 1 as const })));
+    n += done.length;
+  }
+  schedulePush(0);
+  return n;
 }
 
 /**
@@ -649,7 +736,7 @@ export interface NewLogin {
  * tagged copy of their email and the old one stops working. They still sign in
  * with their own email.
  */
-export async function createTeamLogin(m: Member): Promise<NewLogin> {
+export async function createTeamLogin(m: Member, opts: { studioOnly?: boolean } = {}): Promise<NewLogin> {
   const { fs, cfg } = need();
   const email = m.email.trim().toLowerCase();
   if (!email) throw new Error(`Add ${m.name}'s email first.`);
@@ -666,6 +753,12 @@ export async function createTeamLogin(m: Member): Promise<NewLogin> {
         uid = (await createUserWithEmailAndPassword(tmpAuth, login, password)).user.uid;
       } catch (e) {
         if ((e as { code?: string })?.code !== 'auth/email-already-in-use' || tries >= 3) throw e;
+        // The email already signs in to this Firebase project (JoshWorks POS shares it): use that login,
+        // never a second one with another password. Only "Studio-only password" makes a separate login.
+        if (!opts.studioOnly && login === email) {
+          await useOwnLogin(m);
+          return { email, login: email, password: '', existing: true };
+        }
         login = taggedLogin(email);
       }
     }

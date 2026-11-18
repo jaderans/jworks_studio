@@ -55,57 +55,90 @@ export default function TeamPage() {
     app.toast(ok ? 'Sign-in link copied. Pin it in your team chat: everyone signs in there with their email and password.' : 'Couldn’t copy the link.', { tone: ok ? 'good' : 'bad', ms: 9000 });
   };
 
-  /** A new temporary password (their first login, or a fresh one): the old one stops working. */
-  const newLogin = async (m: Member): Promise<LoginToSend> => {
+  /**
+   * Their login: a new temporary password, or — when their email already signs
+   * in to this Firebase project (JoshWorks POS shares it) — that same login,
+   * with nothing new to send (null).
+   */
+  const newLogin = async (m: Member, studioOnly = false): Promise<LoginToSend | null> => {
     const { createTeamLogin } = await import('../../sync/cloud');
-    const r = await createTeamLogin(m);
+    const r = await createTeamLogin(m, { studioOnly });
+    if (r.existing) return null;
     await setLocal(`login:${r.email}`, { password: r.password, at: Date.now() });
     return { member: m, email: r.email, password: r.password };
   };
+  const sameAsPos = (names: string[]) =>
+    app.toast(
+      `${names.join(', ')} already ${names.length === 1 ? 'has a login' : 'have logins'} in this Firebase project (from JoshWorks POS): they sign in to Studio with the same email and password. Forgot it? “Email me a reset link” on the sign-in screen.`,
+      { tone: 'good', ms: 12000 },
+    );
+  const [fixing, setFixing] = useState<Member | null>(null);
   const loginError = async (e: unknown) => {
     const { friendlyError } = await import('../../sync/cloud');
     app.toast(friendlyError(e), { tone: 'bad' });
   };
 
-  /** Make their login (email + temporary password) and show it to send. */
-  const makeLogin = async (m: Member) => {
+  /** Make their login (email + temporary password) and show it to send; or say they use their POS login. */
+  const makeLogin = async (m: Member, studioOnly = false) => {
     try {
-      const made = await newLogin(m);
+      const made = await newLogin(m, studioOnly);
       await loadAccess();
-      setLogin([made]);
+      if (made) setLogin([made]);
+      else sameAsPos([m.name]);
     } catch (e) {
       await loginError(e);
     }
   };
 
-  /** A fresh temporary password for someone who lost theirs or forgot their own. */
-  const renewLogin = async (m: Member) => {
-    const ok = await app.confirm({
-      title: `New password for ${m.name}?`,
-      message: `${m.name}’s current password stops working. They sign in with the new temporary one, then choose their own.`,
-      confirmLabel: 'Make a new password',
-    });
-    if (ok) await makeLogin(m);
-  };
+  /** Someone can't sign in: the dialog with the ways to fix it. */
+  const renewLogin = (m: Member) => setFixing(m);
 
-  /** Everyone but the owner gets a new temporary password, shown in one list. */
+  /**
+   * Everyone but the owner, sorted out at once: the same login as JoshWorks POS
+   * for those who have one in this Firebase project, a new temporary password
+   * (shown in one list) for the rest.
+   */
   const renewAll = async (people: Member[]) => {
     const ok = await app.confirm({
-      title: 'New passwords for everyone?',
-      message: `${people.map((m) => m.name).join(', ')} each get a new temporary password and their current one stops working. Anyone signed in signs in again with the new one, then chooses their own password.`,
-      confirmLabel: 'Make new passwords',
+      title: 'Reset everyone’s sign-in?',
+      message: `${people.map((m) => m.name).join(', ')}: anyone with a JoshWorks POS login signs in to Studio with that same email and password; everyone else gets a new temporary password to send. Logins Studio made before stop working.`,
+      confirmLabel: 'Reset sign-ins',
     });
     if (!ok) return;
     setRenewing(true);
     const made: LoginToSend[] = [];
+    const same: string[] = [];
     try {
-      for (const m of people) made.push(await newLogin(m));
+      for (const m of people) {
+        const r = await newLogin(m);
+        if (r) made.push(r);
+        else same.push(m.name);
+      }
     } catch (e) {
       await loginError(e);
     } finally {
       setRenewing(false);
       await loadAccess();
       if (made.length) setLogin(made);
+      if (same.length) sameAsPos(same);
+    }
+  };
+
+  /** The dialog's three ways. */
+  const fixWith = async (m: Member, how: 'pos' | 'email' | 'studio') => {
+    setFixing(null);
+    try {
+      const cloud = await import('../../sync/cloud');
+      if (how === 'pos') {
+        await cloud.useOwnLogin(m);
+        await loadAccess();
+        app.toast(`${m.name} signs in to Studio with the same email and password as in JoshWorks POS. The first time, they confirm their email from a link (once, for both apps).`, { tone: 'good', ms: 12000 });
+      } else if (how === 'email') {
+        await cloud.sendResetEmail(m.email);
+        app.toast(`A link to choose a new password is on its way to ${m.email} (tell them to check Spam). It’s one login for Studio and JoshWorks POS.`, { tone: 'good', ms: 12000 });
+      } else await makeLogin(m, true);
+    } catch (e) {
+      await loginError(e);
     }
   };
 
@@ -153,7 +186,7 @@ export default function TeamPage() {
             ) : null}
             {cloudOwner && withLogins.length ? (
               <Button onClick={() => renewAll(withLogins)} disabled={renewing}>
-                <KeyRound size={18} /> {renewing ? 'Making passwords…' : 'New passwords for everyone'}
+                <KeyRound size={18} /> {renewing ? 'Resetting sign-ins…' : 'Reset everyone’s sign-in'}
               </Button>
             ) : null}
             <Button variant="primary" onClick={() => setEditing({ appRole: 'manager', skills: [] })}>
@@ -232,12 +265,12 @@ export default function TeamPage() {
                   ) : acc.hasLogin || m.appRole === 'owner' ? (
                     <Badge tone="good">Signed in</Badge>
                   ) : (
-                    // From the old invite links: needs a login made here.
-                    <Badge tone="warn">Old invite</Badge>
+                    // Access on the login their email already has: their JoshWorks POS one (or an old invite).
+                    <Badge tone="teal">Same login as POS</Badge>
                   )
                 ) : null}
                 {cloudOwner && m.email && m.appRole !== 'owner' ? (
-                  !acc || !acc.hasLogin ? (
+                  !acc ? (
                     <Button size="sm" onClick={() => makeLogin(m)} aria-label={`Make ${m.name}’s login`}>
                       <KeyRound size={15} /> <span className="hide-phone">Make login</span>
                     </Button>
@@ -246,13 +279,13 @@ export default function TeamPage() {
                       <Button size="sm" onClick={() => sendLogin(m)} aria-label={`Send ${m.name}’s login`}>
                         <Send size={15} /> <span className="hide-phone">Send login</span>
                       </Button>
-                      <IconButton label={`New password for ${m.name}`} size="sm" plain onClick={() => renewLogin(m)}>
+                      <IconButton label={`Fix sign-in for ${m.name}`} size="sm" plain onClick={() => renewLogin(m)}>
                         <KeyRound size={16} />
                       </IconButton>
                     </>
                   ) : (
-                    <Button size="sm" onClick={() => renewLogin(m)} aria-label={`New password for ${m.name}`}>
-                      <KeyRound size={15} /> <span className="hide-phone">New password</span>
+                    <Button size="sm" onClick={() => renewLogin(m)} aria-label={`Fix sign-in for ${m.name}`}>
+                      <KeyRound size={15} /> <span className="hide-phone">Fix sign-in</span>
                     </Button>
                   )
                 ) : null}
@@ -287,6 +320,23 @@ export default function TeamPage() {
         }}
       />
       <LoginDialog value={login} onClose={() => setLogin(null)} />
+      {fixing ? (
+        <Dialog open onClose={() => setFixing(null)} title={`Fix ${fixing.name}’s sign-in`} footer={<Button onClick={() => setFixing(null)}>Cancel</Button>}>
+          <div className="stack">
+            <p className="small">Studio and JoshWorks POS share one Firebase project, so it’s best when {fixing.name} has one login for both: the same email and password.</p>
+            <Button variant="primary" onClick={() => void fixWith(fixing, 'pos')}>
+              Use the same login as JoshWorks POS
+            </Button>
+            <p className="tiny muted">They sign in here with the email and password they use in the POS. The first time, they confirm their email from a link.</p>
+            <Button onClick={() => void fixWith(fixing, 'email')}>Email them a reset link</Button>
+            <p className="tiny muted">Forgot the password? Firebase emails {fixing.email || 'them'} a link to choose a new one, for both apps.</p>
+            <Button variant="ghost" onClick={() => void fixWith(fixing, 'studio')}>
+              Make a Studio-only temporary password
+            </Button>
+            <p className="tiny muted">No email needed, but it’s a second login with its own password, for Studio only. Use it if the others don’t work.</p>
+          </div>
+        </Dialog>
+      ) : null}
     </div>
   );
 }

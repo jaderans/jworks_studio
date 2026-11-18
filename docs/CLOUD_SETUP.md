@@ -19,9 +19,15 @@ The `firebaseConfig` values aren't secret: they only say which project to talk t
 >
 > **October 2026 updates:** publish the rules once more. They add **team logins made by the owner** (email + temporary password, no email confirmation), **new passwords from the Team page** (the sign-in pointers in `signin`) and **client links** (Documents → Contracts → Client link). Client links let a client open one contract, answer the questionnaire and sign, and nothing else: no account, no other records, and only once before the link expires.
 
-## 2. No Firebase emails
+## 2. Firebase emails (only when sharing with the POS)
 
-Firebase sends nobody an email: there's no email confirmation and no "Forgot password" link. The owner makes every login in the app, and when someone loses or forgets a password the owner gives them a new temporary one (see below). Optional: **Project settings → General → Public-facing name** `JoshWorks Studio`.
+On its own, Studio needs no Firebase emails: the owner makes every login in the app, and when someone loses or forgets a password the owner gives them a new temporary one (see below).
+
+When Studio shares a Firebase project with JoshWorks POS (see *JoshWorks POS, live*), Firebase sends two kinds of email:
+- the **confirmation link** the POS asks for when someone first connects there;
+- a **reset link** when someone taps **Email me a reset link** on the sign-in screen, or the owner taps **Fix sign-in → Email them a reset link**.
+
+Tell the team to check Spam the first time. Optional: **Project settings → General → Public-facing name** `JoshWorks`.
 
 ## 3. Connect the owner's device
 
@@ -45,12 +51,31 @@ Everything already on this device uploads once you're signed in.
 
 **Optional: no link at all.** In **Settings → Cloud sync**, open *Optional: show Sign in at the app’s own address* and press **Copy for GitHub**. On GitHub, open the repository → **Settings → Secrets and variables → Actions → Variables → New repository variable**, name it `STUDIO_CLOUD` and paste the value. Then **Actions → Deploy to GitHub Pages → Run workflow**. From then on, `jaderans.github.io/jworks_studio` itself opens Sign in on a new device. The value is your Firebase project's public config, the same thing the sign-in link carries; the security rules and each person's password protect the data.
 
-The Team page shows where each person is: **No login yet** or **Old invite** (press **Make login**), **Temporary password** (press **Send login** to show it again on the device that made it), or **Signed in**.
+The Team page shows where each person is:
+- **No login yet**: press **Make login**.
+- **Temporary password**: press **Send login** to show it again on the device that made it.
+- **Signed in**.
+- **Same login as POS**: they sign in with their JoshWorks POS email and password.
 
-### New passwords
+### One login for Studio and the POS
 
-- **One person** lost their temporary password or forgot their own: press **New password** (the key) next to their name.
-- **Everyone at once**: **Team → New passwords for everyone**. You get one list with each person's email and new temporary password: **Copy the list** for yourself, then send each person **only their own** (Copy or Email on their row).
+When both apps share one Firebase project, they share one list of logins, and one email can have only one password. So a person who already signs in to the POS uses that **same email and password** in Studio. **Make login** finds their POS login and uses it, with nothing new to send. The first time, Studio may ask them to confirm their email from a link, once for both apps.
+
+### Can't sign in? Fix sign-in
+
+Next to their name, **Fix sign-in** (the key) offers three ways:
+- **Use the same login as JoshWorks POS** (best): they sign in with their POS email and password. Any older Studio-made login for them stops working.
+- **Email them a reset link**: Firebase emails a link to choose a new password, for both apps.
+- **Make a Studio-only temporary password**: no email needed. It's a second login with its own password, for Studio only; use it when the other two don't work.
+
+**Everyone at once**: **Team → Reset everyone's sign-in**. Anyone with a POS login uses it. Everyone else gets a new temporary password, all in one list: **Copy the list** for yourself, then send each person **only their own** (Copy or Email on their row).
+
+### Moved Studio to another Firebase project (for example the POS's)?
+
+1. On the device that has all your Studio work (usually your main laptop), sign in as the owner. Open **Settings → Cloud sync → Send everything from this device**. Older jobs, clients and payments don't move by themselves; this sends them, and the team's phones then load them.
+2. **Team → Reset everyone's sign-in** (or **Fix sign-in** per person). Logins made in the old project don't exist in the new one.
+
+### Studio-only temporary passwords
 
 Their old password stops working right away; anyone signed in on a phone is asked to sign in again with the new one, then chooses their own password. Behind the scenes Firebase doesn't let an app change someone else's password, so a new password is a fresh login on a tagged copy of their email (for example `kaye+jw4k7p@example.com`). They still sign in with their own email; the app finds the right login. The old logins stay unused under Firebase → Authentication → Users; you may delete them there, but you don't have to.
 
@@ -85,6 +110,8 @@ Nothing waits for the internet: changes save on the device first and upload when
 - **"Missing or insufficient permissions"**: the rules weren't published (or are the old ones), or this person's email isn't on the Team page with access.
 - **"This site isn't allowed to sign in yet"**: add `jaderans.github.io` under **Authentication → Settings → Authorized domains**.
 - **The Google window doesn't open**: allow pop-ups for the site, or sign in with email and password.
-- **Forgot the password**: the owner presses **New password** next to their name in Team and sends them the new temporary one.
+- **Forgot the password**: they tap **Email me a reset link** on the sign-in screen, or the owner presses **Fix sign-in** next to their name in Team.
+- **"That email and password don’t match" after moving Studio to the POS’s Firebase project**: their login is now the POS one. They use their POS password, or the owner presses **Fix sign-in → Use the same login as JoshWorks POS**.
+- **The team’s phones are missing jobs after a move**: on your main laptop, **Settings → Cloud sync → Send everything from this device**.
 - **"The owner made a new temporary password"**: sign in again (Settings → Cloud sync, or the team sign-in link) with your email and the new temporary password.
 - **Moving to a new phone**: open the team sign-in link (pinned in the team chat) and sign in.

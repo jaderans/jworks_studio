@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Cloud, Copy, Link2, LogOut, RefreshCw, Unplug } from 'lucide-react';
+import { Cloud, CloudUpload, Copy, Link2, LogOut, RefreshCw, Unplug } from 'lucide-react';
 import { Link } from 'react-router';
 import rulesText from '../../../firebase/firestore.rules?raw';
 import { useApp } from '../../app/AppContext';
@@ -164,6 +164,24 @@ export function CloudSection() {
                     <Link to="/team" className="btn sm">
                       Add the team
                     </Link>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={async () => {
+                        const ok = await app.confirm({
+                          title: 'Send everything from this device?',
+                          message:
+                            'Every job, client, payment and setting on this device goes to the cloud again, and the cloud keeps whichever copy of each is newer. Do it once on the device that has all your work, after moving Studio to another Firebase project, or when the team’s phones are missing things.',
+                          confirmLabel: 'Send everything',
+                        });
+                        if (!ok) return;
+                        const { uploadEverything } = await import('../../sync/cloud');
+                        const n = await uploadEverything();
+                        app.toast(`${n} record${n === 1 ? '' : 's'} on their way to the cloud. The team’s devices get them within a minute.`, { tone: 'good', ms: 9000 });
+                      }}
+                    >
+                      <CloudUpload size={16} /> Send everything from this device
+                    </Button>
                   </>
                 ) : null}
                 <Button

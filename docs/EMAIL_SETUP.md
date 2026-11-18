@@ -47,7 +47,7 @@ Apps Script keeps running the version you deployed. After any edit (or after **N
 
 ## Firebase sends no emails
 
-There is no sign-up confirmation and no password-reset email. Team logins (email + temporary password) are made in the app and sent through this mailer or Messenger; a forgotten password gets a new temporary one from Team → New password. See [CLOUD_SETUP.md](CLOUD_SETUP.md).
+Team logins (email + temporary password) are made in the app and sent through this mailer or Messenger. Sharing a Firebase project with JoshWorks POS, Firebase itself sends the email confirmation and password-reset links (Team → Fix sign-in, or Email me a reset link on the sign-in screen). See [CLOUD_SETUP.md](CLOUD_SETUP.md).
 
 ## JoshWorks POS files in Google Drive
 
